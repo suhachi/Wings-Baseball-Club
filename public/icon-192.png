@@ -1,0 +1,5 @@
+<!-- PNG 파일은 텍스트로 생성할 수 없습니다 -->
+<!-- 실제 프로젝트에서는 /public/icon.svg를 PNG로 변환하거나 -->
+<!-- https://realfavicongenerator.net/ 같은 서비스를 사용하세요 -->
+
+<!-- 임시 방편: manifest.json에서 SVG 사용 -->

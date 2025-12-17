@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Background -->
+  <rect width="512" height="512" fill="#2563EB" rx="100"/>
+  
+  <!-- Baseball -->
+  <circle cx="256" cy="220" r="140" fill="white"/>
+  
+  <!-- Baseball stitching -->
+  <path d="M 160 180 Q 180 160, 200 180 T 240 180" 
+        stroke="#DC2626" stroke-width="4" fill="none" stroke-linecap="round"/>
+  <path d="M 272 180 Q 292 160, 312 180 T 352 180" 
+        stroke="#DC2626" stroke-width="4" fill="none" stroke-linecap="round"/>
+  <path d="M 160 260 Q 180 280, 200 260 T 240 260" 
+        stroke="#DC2626" stroke-width="4" fill="none" stroke-linecap="round"/>
+  <path d="M 272 260 Q 292 280, 312 260 T 352 260" 
+        stroke="#DC2626" stroke-width="4" fill="none" stroke-linecap="round"/>
+  
+  <!-- Text WINGS -->
+  <text x="256" y="430" font-family="Arial, sans-serif" font-size="80" font-weight="bold" 
+        fill="white" text-anchor="middle">WINGS</text>
+</svg>
