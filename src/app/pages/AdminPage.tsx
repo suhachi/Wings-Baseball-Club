@@ -554,7 +554,7 @@ function NoticesTab({
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Filter only NOTICE type posts
-  const notices = posts.filter(p => p.type === 'NOTICE').sort((a, b) => b.createdAt.toDate().getTime() - a.createdAt.toDate().getTime());
+  const notices = posts.filter(p => p.type === 'NOTICE').sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 
   const handleCreateNotice = async () => {
     if (!title.trim() || !content.trim()) {
@@ -653,7 +653,7 @@ function NoticesTab({
             </div>
             <p className="text-gray-600 dark:text-gray-300 whitespace-pre-wrap">{notice.content}</p>
             <div className="mt-3 text-xs text-gray-400">
-              {formatDistanceToNow(notice.createdAt.toDate(), { addSuffix: true, locale: ko })}
+              {formatDistanceToNow(notice.createdAt, { addSuffix: true, locale: ko })}
             </div>
           </div>
         ))}

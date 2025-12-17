@@ -11,7 +11,6 @@ import {
   LogOut,
   ChevronRight,
   ExternalLink,
-  ArrowLeft,
   Moon,
   Sun,
 } from 'lucide-react';
@@ -24,7 +23,7 @@ interface SettingsPageProps {
   onBack?: () => void;
 }
 
-export const SettingsPage: React.FC<SettingsPageProps> = ({ onBack }) => {
+export const SettingsPage: React.FC<SettingsPageProps> = () => {
   const { logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const [pushEnabled, setPushEnabled] = React.useState(false);

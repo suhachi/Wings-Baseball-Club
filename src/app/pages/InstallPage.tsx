@@ -8,6 +8,7 @@ export const InstallPage: React.FC = () => {
     const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
     const [isInstalled, setIsInstalled] = useState(false);
     const [os, setOs] = useState<'ios' | 'android' | 'desktop'>('desktop');
+    const [showManualGuide, setShowManualGuide] = useState(false);
 
     useEffect(() => {
         // Detect OS
@@ -48,7 +49,7 @@ export const InstallPage: React.FC = () => {
 
     const handleInstallClick = async () => {
         if (!deferredPrompt) {
-            alert('설치 가능한 상태가 아니거나 이미 설치되어 있습니다.\n브라우저 메뉴의 "앱 설치"를 확인해주세요.');
+            setShowManualGuide(true);
             return;
         }
 
@@ -123,9 +124,39 @@ export const InstallPage: React.FC = () => {
                                 <Download className="w-5 h-5 mr-2" />
                                 앱 설치하기
                             </Button>
-                            <p className="text-xs text-gray-500">
-                                * 설치 버튼이 작동하지 않으면 브라우저 메뉴의 '앱 설치'를 이용해주세요.
-                            </p>
+
+                            {!showManualGuide && (
+                                <p className="text-xs text-gray-500">
+                                    * 설치 버튼이 작동하지 않으면 브라우저 메뉴의 '앱 설치'를 이용해주세요.
+                                </p>
+                            )}
+
+                            {/* Manual Install Guide for Android */}
+                            {showManualGuide && (
+                                <motion.div
+                                    initial={{ opacity: 0, height: 0 }}
+                                    animate={{ opacity: 1, height: 'auto' }}
+                                    className="bg-gray-50 dark:bg-gray-800 rounded-xl p-4 text-left border border-gray-200 dark:border-gray-700"
+                                >
+                                    <div className="flex items-start gap-3 mb-3">
+                                        <AlertCircle className="w-5 h-5 text-blue-600 mt-0.5 shrink-0" />
+                                        <div className="text-sm">
+                                            <strong>자동 설치가 준비되지 않았습니다.</strong><br />
+                                            브라우저 메뉴를 통해 직접 설치해주세요.
+                                        </div>
+                                    </div>
+                                    <ol className="space-y-3 text-sm text-gray-600 dark:text-gray-300 ml-1">
+                                        <li className="flex items-center gap-2">
+                                            <span className="w-6 h-6 bg-gray-200 dark:bg-gray-700 rounded-full flex items-center justify-center text-xs font-bold">1</span>
+                                            우측 상단의 <strong>메뉴(⋮)</strong> 버튼 클릭
+                                        </li>
+                                        <li className="flex items-center gap-2">
+                                            <span className="w-6 h-6 bg-gray-200 dark:bg-gray-700 rounded-full flex items-center justify-center text-xs font-bold">2</span>
+                                            <strong>'앱 설치'</strong> 또는 <strong>'홈 화면에 추가'</strong> 선택
+                                        </li>
+                                    </ol>
+                                </motion.div>
+                            )}
                         </div>
                     )}
 

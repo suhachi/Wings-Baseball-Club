@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
-import { MessageSquare, Heart, CalendarDays } from 'lucide-react';
+import { MessageSquare, Heart } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useData } from '../contexts/DataContext';
 import { formatDistanceToNow } from 'date-fns';

@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { MoreVertical, Trash2, Heart } from 'lucide-react';
+import { MoreVertical, Trash2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useData } from '../contexts/DataContext';
 import { toast } from 'sonner';
@@ -12,8 +12,8 @@ interface CommentListProps {
 }
 
 export const CommentList: React.FC<CommentListProps> = ({ postId }) => {
-  const { user, isAdmin } = useAuth();
-  const { comments, members, deleteComment } = useData();
+  const { user } = useAuth();
+  const { comments } = useData();
 
   const postComments = (comments[postId] || [])
     .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
@@ -34,7 +34,8 @@ export const CommentList: React.FC<CommentListProps> = ({ postId }) => {
             key={comment.id}
             comment={comment}
             index={index}
-            canDelete={user?.id === comment.authorId || isAdmin()}
+            // @ts-ignore
+            canDelete={user?.id === comment.authorId || user?.role === 'admin'}
           />
         ))}
       </AnimatePresence>
@@ -52,7 +53,6 @@ const CommentItem: React.FC<CommentItemProps> = ({ comment, index, canDelete }) 
   const { user } = useAuth();
   const { members, deleteComment } = useData();
   const [showMenu, setShowMenu] = useState(false);
-  const [liked, setLiked] = useState(comment.likes?.includes(user?.id || '') || false);
 
   const author = members.find(u => u.uid === comment.authorId);
 
@@ -68,17 +68,6 @@ const CommentItem: React.FC<CommentItemProps> = ({ comment, index, canDelete }) 
     }
   };
 
-  const handleLike = async () => {
-    if (!user) return;
-
-    try {
-      await toggleCommentLike(comment.postId, comment.id, user.id);
-      setLiked(!liked);
-    } catch (error) {
-      console.error('Error toggling like:', error);
-    }
-  };
-
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -90,7 +79,7 @@ const CommentItem: React.FC<CommentItemProps> = ({ comment, index, canDelete }) 
       {/* Avatar */}
       <div className="flex-shrink-0">
         <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-medium text-sm">
-          {author?.name?.charAt(0) || '?'}
+          {author?.realName?.charAt(0) || '?'}
         </div>
       </div>
 
@@ -100,7 +89,7 @@ const CommentItem: React.FC<CommentItemProps> = ({ comment, index, canDelete }) 
         <div className="flex items-start justify-between gap-2 mb-2">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
-              <span className="font-medium text-sm">{author?.name || '알 수 없음'}</span>
+              <span className="font-medium text-sm">{author?.realName || '알 수 없음'}</span>
               {author?.nickname && (
                 <span className="text-xs text-gray-500 dark:text-gray-400">
                   @{author.nickname}
@@ -117,6 +106,7 @@ const CommentItem: React.FC<CommentItemProps> = ({ comment, index, canDelete }) 
               <button
                 onClick={() => setShowMenu(!showMenu)}
                 className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                aria-label="More options"
               >
                 <MoreVertical className="w-4 h-4" />
               </button>
@@ -145,19 +135,7 @@ const CommentItem: React.FC<CommentItemProps> = ({ comment, index, canDelete }) 
           {comment.content}
         </p>
 
-        {/* Actions */}
-        <div className="flex items-center gap-4 mt-2">
-          <button
-            onClick={handleLike}
-            className={`flex items-center gap-1 text-xs transition-colors ${liked
-              ? 'text-red-600 dark:text-red-400'
-              : 'text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400'
-              }`}
-          >
-            <Heart className={`w-4 h-4 ${liked ? 'fill-current' : ''}`} />
-            <span>{comment.likes?.length || 0}</span>
-          </button>
-        </div>
+        {/* Actions - Removed as Like is not supported */}
       </div>
     </motion.div>
   );

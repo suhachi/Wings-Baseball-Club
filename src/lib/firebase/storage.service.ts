@@ -6,7 +6,6 @@ import {
   getDownloadURL,
   deleteObject,
   listAll,
-  UploadTask,
 } from 'firebase/storage';
 import { storage } from './config';
 
@@ -59,7 +58,7 @@ export async function uploadProfilePhoto(
  */
 export async function uploadAlbumMedia(
   file: File,
-  type: 'photo' | 'video',
+  _type: 'photo' | 'video',
   onProgress?: (progress: number) => void
 ): Promise<string> {
   try {
@@ -161,11 +160,11 @@ export async function listFiles(folderPath: string): Promise<string[]> {
   try {
     const folderRef = ref(storage, folderPath);
     const result = await listAll(folderRef);
-    
+
     const urls = await Promise.all(
       result.items.map((item) => getDownloadURL(item))
     );
-    
+
     return urls;
   } catch (error) {
     console.error('Error listing files:', error);

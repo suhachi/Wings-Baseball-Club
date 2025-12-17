@@ -120,7 +120,7 @@ function AppContent() {
     }
   };
 
-  const handleNavigate = (tab: 'home' | 'schedule' | 'boards' | 'album' | 'my', postId?: string) => {
+  const handleNavigate = (tab: 'home' | 'schedule' | 'boards' | 'album' | 'my') => {
     setActiveTab(tab);
     setCurrentPage(tab);
     // In a real app, you would also handle postId to show specific post details
@@ -179,7 +179,7 @@ function AppContent() {
         {currentPage === 'my-activity' && <MyActivityPage />}
         {currentPage === 'settings' && <SettingsPage onBack={() => handlePageChange('my')} />}
         {currentPage === 'notifications' && <NotificationPage onBack={() => handlePageChange('my')} />}
-        {currentPage === 'admin' && <AdminPage onBack={() => handlePageChange('home')} initialTab={adminInitialTab} />}
+        {currentPage === 'admin' && <AdminPage initialTab={adminInitialTab} />}
         {currentPage === 'finance' && <FinancePage onBack={() => handlePageChange('home')} />}
         {currentPage === 'game-record' && <GameRecordPage onBack={() => handlePageChange('home')} />}
       </main>

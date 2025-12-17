@@ -13,12 +13,10 @@ import {
   limit,
   serverTimestamp,
   Timestamp,
-  onSnapshot,
   addDoc,
 } from 'firebase/firestore';
 import { db } from './config';
 import {
-  UserDoc,
   PostDoc,
   CommentDoc,
   InviteCodeDoc,

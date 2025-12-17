@@ -4,7 +4,7 @@ import { Bell, MessageSquare, Calendar, Users, BarChart3, Trophy, Plus, Pin, Mes
 import { useData, PostType, Post } from '../contexts/DataContext';
 import { Card } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
-import { Button } from '../components/ui/button';
+// import { Button } from '../components/ui/button'; // Unused
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { CreatePostModal } from '../components/CreatePostModal';
 import { EditPostModal } from '../components/EditPostModal';

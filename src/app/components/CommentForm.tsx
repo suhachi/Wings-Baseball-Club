@@ -17,7 +17,7 @@ export const CommentForm: React.FC<CommentFormProps> = ({ postId }) => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!content.trim()) {
       toast.error('댓글 내용을 입력해주세요');
       return;
@@ -31,10 +31,7 @@ export const CommentForm: React.FC<CommentFormProps> = ({ postId }) => {
     setLoading(true);
 
     try {
-      await addComment({
-        postId,
-        content: content.trim(),
-      });
+      await addComment(postId, content.trim());
 
       setContent('');
       toast.success('댓글이 작성되었습니다');
@@ -52,7 +49,7 @@ export const CommentForm: React.FC<CommentFormProps> = ({ postId }) => {
         {/* Avatar */}
         <div className="flex-shrink-0">
           <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-medium text-sm">
-            {user?.name?.charAt(0) || '?'}
+            {user?.realName?.charAt(0) || '?'}
           </div>
         </div>
 
@@ -66,7 +63,7 @@ export const CommentForm: React.FC<CommentFormProps> = ({ postId }) => {
             rows={2}
             disabled={loading}
           />
-          
+
           <motion.button
             type="submit"
             disabled={loading || !content.trim()}

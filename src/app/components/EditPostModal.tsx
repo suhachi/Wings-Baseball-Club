@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { X, Calendar, FileText, BarChart3, Image as ImageIcon } from 'lucide-react';
+import { X, Calendar } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '../contexts/AuthContext';
-import { useData, Post, PostType } from '../contexts/DataContext';
+import { useData, Post } from '../contexts/DataContext';
 import { toast } from 'sonner';
 
 interface EditPostModalProps {
@@ -35,7 +35,9 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
   const [opponent, setOpponent] = useState(post.opponent || '');
 
   // Poll fields
-  const [choices, setChoices] = useState<string[]>(post.choices || ['', '']);
+  const [choices, setChoices] = useState<string[]>(
+    post.choices ? post.choices.map(c => c.label) : ['', '']
+  );
   const [multi, setMulti] = useState(post.multi || false);
   const [anonymous, setAnonymous] = useState(post.anonymous || false);
   const [closeDate, setCloseDate] = useState(
@@ -52,7 +54,7 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
       setStartTime(post.startAt ? new Date(post.startAt).toTimeString().slice(0, 5) : '');
       setPlace(post.place || '');
       setOpponent(post.opponent || '');
-      setChoices(post.choices || ['', '']);
+      setChoices(post.choices ? post.choices.map(c => c.label) : ['', '']);
       setMulti(post.multi || false);
       setAnonymous(post.anonymous || false);
       setCloseDate(post.voteCloseAt ? new Date(post.voteCloseAt).toISOString().split('T')[0] : '');
@@ -112,7 +114,12 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
           return;
         }
 
-        updates.choices = validChoices;
+        updates.choices = validChoices.map((label, index) => ({
+          id: `choice_${Date.now()}_${index}`,
+          label,
+          count: 0,
+          votes: []
+        }));
         updates.multi = multi;
         updates.anonymous = anonymous;
         if (closeDate) {
