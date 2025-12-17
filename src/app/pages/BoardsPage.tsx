@@ -15,7 +15,10 @@ import { ko } from 'date-fns/locale';
 
 import { toast } from 'sonner';
 
+import { useAuth } from '../contexts/AuthContext'; // Import Added
+
 export const BoardsPage: React.FC = () => {
+  const { user } = useAuth(); // Hook Added
   const { posts, deletePost } = useData();
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [createPostType, setCreatePostType] = useState<PostType>('free');
@@ -113,71 +116,80 @@ export const BoardsPage: React.FC = () => {
           </TabsContent>
         </Tabs>
 
-        {/* FAB - Create Post */}
-        <motion.button
-          whileTap={{ scale: 0.95 }}
-          className="fixed bottom-24 right-4 w-14 h-14 bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-full shadow-lg flex items-center justify-center z-40"
-          onClick={() => handleCreatePost('free')}
-        >
-          <Plus className="w-6 h-6" />
-        </motion.button>
+        {/* FAB - Create Post (Only for Active Members) */}
+        {user?.status !== 'pending' && (
+          <motion.button
+            whileTap={{ scale: 0.95 }}
+            className="fixed bottom-24 right-4 w-14 h-14 bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-full shadow-lg flex items-center justify-center z-40"
+            onClick={() => handleCreatePost('free')}
+          >
+            <Plus className="w-6 h-6" />
+          </motion.button>
+        )}
+
+        {/* Pending User Notice */}
+        {user?.status === 'pending' && (
+          <div className="fixed bottom-24 right-4 bg-gray-800 text-white text-xs px-3 py-2 rounded-full shadow-lg opacity-80 z-40">
+            가입 승인 대기중 (글쓰기 제한)
+          </div>
+        )}
+
+        {/* Create Post Modal */}
+        <CreatePostModal
+          isOpen={createModalOpen}
+          onClose={() => setCreateModalOpen(false)}
+          defaultType={createPostType}
+        />
+
+        {/* Edit Post Modal */}
+        {editingPost && (
+          <EditPostModal
+            post={editingPost}
+            isOpen={editingPost !== null}
+            onClose={() => setEditingPost(null)}
+          />
+        )}
+
+        {/* Post Detail Modal */}
+        {selectedPost && (
+          <PostDetailModal
+            post={selectedPost}
+            isOpen={selectedPost !== null}
+            onClose={() => setSelectedPost(null)}
+            onEdit={(post) => {
+              setSelectedPost(null);
+              setEditingPost(post);
+            }}
+            onDelete={async () => {
+              if (selectedPost) {
+                await deletePost(selectedPost.id);
+                toast.success('게시글이 삭제되었습니다');
+              }
+              setSelectedPost(null);
+            }}
+          />
+        )}
+
+        {/* Poll Vote Modal */}
+        {selectedPoll && (
+          <PollVoteModal
+            poll={selectedPoll}
+            isOpen={selectedPoll !== null}
+            onClose={() => setSelectedPoll(null)}
+            onEdit={() => {
+              setSelectedPoll(null);
+              setEditingPost(selectedPoll);
+            }}
+            onDelete={async () => {
+              if (selectedPoll) {
+                await deletePost(selectedPoll.id);
+                toast.success('투표가 삭제되었습니다');
+              }
+              setSelectedPoll(null);
+            }}
+          />
+        )}
       </div>
-
-      {/* Create Post Modal */}
-      <CreatePostModal
-        isOpen={createModalOpen}
-        onClose={() => setCreateModalOpen(false)}
-        defaultType={createPostType}
-      />
-
-      {/* Edit Post Modal */}
-      {editingPost && (
-        <EditPostModal
-          post={editingPost}
-          isOpen={editingPost !== null}
-          onClose={() => setEditingPost(null)}
-        />
-      )}
-
-      {/* Post Detail Modal */}
-      {selectedPost && (
-        <PostDetailModal
-          post={selectedPost}
-          isOpen={selectedPost !== null}
-          onClose={() => setSelectedPost(null)}
-          onEdit={(post) => {
-            setSelectedPost(null);
-            setEditingPost(post);
-          }}
-          onDelete={async () => {
-            if (selectedPost) {
-              await deletePost(selectedPost.id);
-              toast.success('게시글이 삭제되었습니다');
-            }
-            setSelectedPost(null);
-          }}
-        />
-      )}
-
-      {/* Poll Vote Modal */}
-      {selectedPoll && (
-        <PollVoteModal
-          poll={selectedPoll}
-          isOpen={selectedPoll !== null}
-          onClose={() => setSelectedPoll(null)}
-          onEdit={() => {
-            setSelectedPoll(null);
-            setEditingPost(selectedPoll);
-          }}
-          onDelete={async () => {
-            if (selectedPoll) {
-              await deletePost(selectedPoll.id);
-              toast.success('투표가 삭제되었습니다');
-            }
-            setSelectedPoll(null);
-          }}
-        />
-      )}
     </div>
   );
 };
@@ -300,7 +312,9 @@ const PostCard: React.FC<{ post: any; index: number; type: PostType; onPostClick
                       <div
                         className="h-full bg-gradient-to-r from-blue-500 to-blue-600 flex items-center px-2 text-xs text-white"
                         style={{
-                          width: `${Math.max((choice.count / 20) * 100, 10)}%`
+                          width: `${post.choices.reduce((acc: number, c: any) => acc + c.count, 0) > 0
+                            ? (choice.count / post.choices.reduce((acc: number, c: any) => acc + c.count, 0)) * 100
+                            : 0}%`
                         }}
                       >
                         {choice.label}

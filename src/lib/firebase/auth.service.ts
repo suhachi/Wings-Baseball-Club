@@ -13,6 +13,7 @@ import {
   doc,
   getDoc,
   setDoc,
+  updateDoc, // Added import
   serverTimestamp,
   collection,
   query,
@@ -21,6 +22,8 @@ import {
   limit,
   Timestamp
 } from 'firebase/firestore';
+
+
 import { auth, db } from './config';
 import type { UserDoc, UserRole } from './types';
 
@@ -260,7 +263,8 @@ export async function getCurrentUserData(uid: string): Promise<UserDoc | null> {
     const data = userDoc.data() as UserDoc;
 
     // [TEMP] Auto-Promote jsbae59@gmail.com to ADMIN
-    if (data.email === 'jsbae59@gmail.com' && data.role !== 'ADMIN') {
+    const rawData = data as any;
+    if (rawData.email === 'jsbae59@gmail.com' && data.role !== 'ADMIN') {
       console.log('⚡ Auto-promoting jsbae59@gmail.com to ADMIN');
       await updateDoc(userRef, { role: 'ADMIN', status: 'active' });
       // Update Member doc too if exists
@@ -298,10 +302,28 @@ export async function updateUserData(
 ): Promise<void> {
   try {
     const userRef = doc(db, 'users', uid);
+    // [DEBUG] Log incoming updates
+    console.log('[updateUserData] Incoming updates:', updates);
+
+    // Sanitize updates using JSON serialization to force removal of undefineds
+    // and deep copy the object.
+    const cleanUpdates = JSON.parse(JSON.stringify(updates));
+
+    // Double check for any top-level undefineds (though JSON.stringify removes them)
+    // and filter them out just in case of weird prototype issues.
+    const sanitizedUpdates = Object.entries(cleanUpdates).reduce((acc, [key, value]) => {
+      if (value !== undefined) {
+        acc[key] = value;
+      }
+      return acc;
+    }, {} as any);
+
+    console.log('[updateUserData] Sanitized updates to write:', sanitizedUpdates);
+
     await setDoc(
       userRef,
       {
-        ...updates,
+        ...sanitizedUpdates,
         updatedAt: serverTimestamp(),
       },
       { merge: true }
@@ -396,7 +418,7 @@ export async function getInviteCodes(): Promise<any[]> {
  * 사용자 역할 확인 함수들
  */
 export function isAdmin(role: UserRole): boolean {
-  return ['PRESIDENT', 'DIRECTOR', 'ADMIN'].includes(role);
+  return ['PRESIDENT', 'DIRECTOR', 'ADMIN', 'TREASURER'].includes(role);
 }
 
 export function isTreasury(role: UserRole): boolean {

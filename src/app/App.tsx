@@ -13,22 +13,33 @@ import { SchedulePage } from './pages/SchedulePage';
 import { BoardsPage } from './pages/BoardsPage';
 import { AlbumPage } from './pages/AlbumPage';
 import { MyPage } from './pages/MyPage';
+import { MyActivityPage } from './pages/MyActivityPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { NotificationPage } from './pages/NotificationPage';
 import { AdminPage } from './pages/AdminPage';
 import { FinancePage } from './pages/FinancePage';
 import { GameRecordPage } from './pages/GameRecordPage';
-import { ApprovalPendingPage } from './pages/ApprovalPendingPage';
+import { InstallPage } from './pages/InstallPage'; // Added
 import { Loader2 } from 'lucide-react';
 
-type PageType = 'home' | 'schedule' | 'boards' | 'album' | 'my' | 'settings' | 'notifications' | 'admin' | 'finance' | 'game-record';
+type PageType = 'home' | 'schedule' | 'boards' | 'album' | 'my' | 'settings' | 'notifications' | 'admin' | 'finance' | 'game-record' | 'my-activity' | 'install';
 
 function AppContent() {
+  // [DEBUG] Version Check
+  console.log('%c Wings PWA v1.3-debug loaded ', 'background: #222; color: #ff00ff');
+
   const { user, loading } = useAuth();
   const data = useData();
   const [activeTab, setActiveTab] = useState<'home' | 'schedule' | 'boards' | 'album' | 'my'>('home');
   const [currentPage, setCurrentPage] = useState<PageType>('home');
-  const [adminInitialTab, setAdminInitialTab] = useState<'members' | 'invites' | 'stats' | 'notices'>('members');
+  const [adminInitialTab, setAdminInitialTab] = useState<'members' | 'stats' | 'notices'>('members');
+
+  // Simple URL routing for install page
+  React.useEffect(() => {
+    if (window.location.pathname === '/install') {
+      setCurrentPage('install');
+    }
+  }, []);
 
   // Calculate unread notification count safely
   const unreadNotificationCount = data?.notifications ? data.notifications.filter((n) => !n.read).length : 0;
@@ -46,15 +57,15 @@ function AppContent() {
   }
 
   // If not logged in, show login page
-  if (!user) {
+  if (!user && currentPage !== 'install') { // Allow access to install page without login
     return <LoginPage />;
   }
 
-  // Global Gate: Check for Pending Status
-  // Allow ADMIN to bypass (just in case, though they should be active)
-  if (user.status === 'pending' && user.role !== 'ADMIN') {
-    return <ApprovalPendingPage />;
-  }
+  // Global Gate: Check for Pending Status - DISABLED as per new requirement
+  // Pending users can access the app but have limited permissions (e.g. read-only)
+  // if (user.status === 'pending' && user.role !== 'ADMIN') {
+  //   return <ApprovalPendingPage />;
+  // }
 
   // Get page title and back button config
   const getPageConfig = () => {
@@ -123,12 +134,16 @@ function AppContent() {
     }
   };
 
-  const handleNavigateToAdmin = (tab: 'members' | 'invites' | 'stats' | 'notices' = 'members') => {
+  const handleNavigateToAdmin = (tab: 'members' | 'stats' | 'notices' = 'members') => {
     setAdminInitialTab(tab);
     handlePageChange('admin');
   };
 
   const pageConfig = getPageConfig();
+
+  if (currentPage === 'install') {
+    return <InstallPage />;
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
@@ -158,8 +173,10 @@ function AppContent() {
             onNavigateToGameRecord={() => handlePageChange('game-record')}
             onNavigateToNoticeManage={() => handleNavigateToAdmin('notices')}
             onNavigateToScheduleManage={() => handleNavigate('schedule')}
+            onNavigateToMyActivity={() => handlePageChange('my-activity')}
           />
         )}
+        {currentPage === 'my-activity' && <MyActivityPage />}
         {currentPage === 'settings' && <SettingsPage onBack={() => handlePageChange('my')} />}
         {currentPage === 'notifications' && <NotificationPage onBack={() => handlePageChange('my')} />}
         {currentPage === 'admin' && <AdminPage onBack={() => handlePageChange('home')} initialTab={adminInitialTab} />}

@@ -122,7 +122,7 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+        <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center">
           {/* Backdrop */}
           <motion.div
             initial={{ opacity: 0 }}
@@ -167,7 +167,7 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
                           }}
                           className="p-2 text-gray-500 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-full transition-colors"
                         >
-                          <Edit2 className="w-5 h-5" />
+                          <Edit className="w-5 h-5" />
                         </button>
                       )}
                       {canDelete && (
@@ -372,7 +372,13 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
 
                   <CommentList postId={post.id} />
 
-                  {user && <CommentForm postId={post.id} />}
+                  {/* Comment Form (Restricted) */}
+                  {user && user.status !== 'pending' && <CommentForm postId={post.id} />}
+                  {user && user.status === 'pending' && (
+                    <div className="p-4 bg-gray-100 dark:bg-gray-800 rounded-xl text-center text-sm text-gray-500">
+                      가입 승인 대기 중에는 댓글을 작성할 수 없습니다.
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

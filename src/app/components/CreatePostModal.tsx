@@ -157,7 +157,7 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+        <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center">
           {/* Backdrop */}
           <motion.div
             initial={{ opacity: 0 }}
@@ -173,7 +173,7 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 100 }}
             onClick={(e) => e.stopPropagation()}
-            className="bg-white dark:bg-gray-900 w-full max-w-lg h-[90vh] sm:h-auto sm:max-h-[85vh] overflow-hidden rounded-t-[20px] sm:rounded-2xl shadow-xl border border-gray-200 dark:border-gray-800 flex flex-col"
+            className="relative z-10 bg-white dark:bg-gray-900 w-full max-w-lg h-[90vh] sm:h-auto sm:max-h-[85vh] rounded-t-[20px] sm:rounded-2xl shadow-xl border border-gray-200 dark:border-gray-800 flex flex-col"
           >
             <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between shrink-0 bg-white dark:bg-gray-900">
               <h2 className="text-lg font-bold text-gray-900 dark:text-white">새 게시글 작성</h2>
@@ -187,7 +187,7 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
 
             {/* Content */}
             <div className="flex-1 overflow-y-auto px-6 py-4">
-              <form onSubmit={handleSubmit} className="space-y-4">
+              <form onSubmit={handleSubmit} className="space-y-4 pb-64">
                 {/* Post Type Selection */}
                 <div>
                   <label className="block text-sm font-medium mb-2">게시글 유형</label>

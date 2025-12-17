@@ -6,7 +6,8 @@
   "scripts": {
     "build": "vite build",
     "dev": "vite",
-    "export:code": "node scripts/export-code-to-md.mjs"
+    "export:code": "node scripts/export-code-to-md.mjs",
+    "type-check": "tsc --noEmit"
   },
   "dependencies": {
     "@emotion/react": "11.14.0",

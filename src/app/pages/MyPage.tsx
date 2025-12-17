@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { User, Settings, Bell, Shield, LogOut, ChevronRight, Crown, Star, Calendar, Trophy, MessageSquare, Edit } from 'lucide-react';
+import { User, Settings, Bell, Shield, LogOut, ChevronRight, Crown, Star, Calendar, Trophy, MessageSquare, Edit, Camera } from 'lucide-react';
 import { useAuth, UserRole } from '../contexts/AuthContext';
 import { useData, Post, Comment } from '../contexts/DataContext';
 import { Card } from '../components/ui/card';
@@ -18,6 +18,7 @@ interface MyPageProps {
   onNavigateToGameRecord?: () => void;
   onNavigateToNoticeManage?: () => void;
   onNavigateToScheduleManage?: () => void;
+  onNavigateToMyActivity?: () => void;
 }
 
 export const MyPage: React.FC<MyPageProps> = ({
@@ -26,7 +27,8 @@ export const MyPage: React.FC<MyPageProps> = ({
   onNavigateToFinance,
   onNavigateToGameRecord,
   onNavigateToNoticeManage,
-  onNavigateToScheduleManage
+  onNavigateToScheduleManage,
+  onNavigateToMyActivity
 }: MyPageProps) => {
   const { user, logout, isAdmin, isTreasury } = useAuth();
   const { posts, comments, attendanceRecords } = useData();
@@ -102,11 +104,22 @@ export const MyPage: React.FC<MyPageProps> = ({
             <Card className="p-6">
               <div className="flex items-start gap-4">
                 {/* Avatar */}
-                <div className="relative">
-                  <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-500 rounded-2xl flex items-center justify-center text-white text-2xl font-bold shadow-lg">
-                    {user.realName.charAt(0)}
+                <div
+                  className="relative cursor-pointer group"
+                  onClick={() => setEditModalOpen(true)}
+                >
+                  <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-500 rounded-2xl flex items-center justify-center text-white text-2xl font-bold shadow-lg overflow-hidden relative">
+                    {user.photoURL ? (
+                      <img src={user.photoURL} alt={user.realName} className="w-full h-full object-cover" />
+                    ) : (
+                      user.realName.charAt(0)
+                    )}
+                    {/* Hover/Click Hint Overlay */}
+                    <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                      <Camera className="w-6 h-6 text-white drop-shadow-md" />
+                    </div>
                   </div>
-                  <div className={`absolute -bottom-1 -right-1 w-8 h-8 ${roleInfo.color} rounded-full flex items-center justify-center text-white shadow-lg`}>
+                  <div className={`absolute -bottom-1 -right-1 w-8 h-8 ${roleInfo.color} rounded-full flex items-center justify-center text-white shadow-lg z-10`}>
                     <RoleIcon className="w-4 h-4" />
                   </div>
                 </div>
@@ -246,9 +259,9 @@ export const MyPage: React.FC<MyPageProps> = ({
 
           {/* General Menu */}
           <Card>
-            <MenuItem icon={MessageSquare} label="내 활동" onClick={() => toast.info('내 활동')} />
+            <MenuItem icon={MessageSquare} label="내 활동" onClick={() => onNavigateToMyActivity?.()} />
             <Separator />
-            <MenuItem icon={Bell} label="알림 설정" onClick={() => toast.info('알림 설정')} />
+            <MenuItem icon={Bell} label="알림 설정" onClick={() => onNavigateToSettings?.()} />
             <Separator />
             <MenuItem icon={Settings} label="설정" onClick={() => onNavigateToSettings?.()} />
             <Separator />

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
   Info,
   Mail,
@@ -38,9 +38,49 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onBack }) => {
     }
   };
 
-  const handlePushToggle = () => {
-    setPushEnabled(!pushEnabled);
-    toast.info('푸시 알림은 곧 지원될 예정입니다');
+  useEffect(() => {
+    // Check saved state
+    const saved = localStorage.getItem('wings_push_enabled');
+    if (saved === 'true') {
+      if (Notification.permission === 'granted') {
+        setPushEnabled(true);
+      } else {
+        localStorage.removeItem('wings_push_enabled');
+      }
+    }
+  }, []);
+
+  const handlePushToggle = async () => {
+    if (pushEnabled) {
+      // Turn off
+      setPushEnabled(false);
+      localStorage.setItem('wings_push_enabled', 'false');
+      toast.info('푸시 알림이 해제되었습니다');
+      return;
+    }
+
+    // Turn on
+    if (!('Notification' in window)) {
+      toast.error('이 브라우저는 푸시 알림을 지원하지 않습니다');
+      return;
+    }
+
+    try {
+      const permission = await Notification.requestPermission();
+      if (permission === 'granted') {
+        setPushEnabled(true);
+        localStorage.setItem('wings_push_enabled', 'true');
+        toast.success('푸시 알림이 설정되었습니다');
+
+        // TODO: Get FCM Token and save to user profile
+        // This requires 'messaging' from firebase config to be fully set up
+      } else {
+        toast.error('알림 권한이 거부되었습니다. 브라우저 설정에서 허용해주세요.');
+      }
+    } catch (error) {
+      console.error('Notification permission error:', error);
+      toast.error('알림 권한 요청 중 오류가 발생했습니다');
+    }
   };
 
   return (
@@ -160,14 +200,12 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onBack }) => {
                   {theme === 'dark' ? '켜짐' : '꺼짐'}
                 </span>
                 <div
-                  className={`w-11 h-6 rounded-full transition-colors ${
-                    theme === 'dark' ? 'bg-blue-500' : 'bg-gray-300'
-                  }`}
+                  className={`w-11 h-6 rounded-full transition-colors ${theme === 'dark' ? 'bg-blue-500' : 'bg-gray-300'
+                    }`}
                 >
                   <div
-                    className={`w-5 h-5 bg-white rounded-full shadow transform transition-transform ${
-                      theme === 'dark' ? 'translate-x-6' : 'translate-x-0.5'
-                    } mt-0.5`}
+                    className={`w-5 h-5 bg-white rounded-full shadow transform transition-transform ${theme === 'dark' ? 'translate-x-6' : 'translate-x-0.5'
+                      } mt-0.5`}
                   />
                 </div>
               </div>
@@ -190,14 +228,12 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onBack }) => {
                   {pushEnabled ? '켜짐' : '꺼짐'}
                 </span>
                 <div
-                  className={`w-11 h-6 rounded-full transition-colors ${
-                    pushEnabled ? 'bg-blue-500' : 'bg-gray-300'
-                  }`}
+                  className={`w-11 h-6 rounded-full transition-colors ${pushEnabled ? 'bg-blue-500' : 'bg-gray-300'
+                    }`}
                 >
                   <div
-                    className={`w-5 h-5 bg-white rounded-full shadow transform transition-transform ${
-                      pushEnabled ? 'translate-x-6' : 'translate-x-0.5'
-                    } mt-0.5`}
+                    className={`w-5 h-5 bg-white rounded-full shadow transform transition-transform ${pushEnabled ? 'translate-x-6' : 'translate-x-0.5'
+                      } mt-0.5`}
                   />
                 </div>
               </div>

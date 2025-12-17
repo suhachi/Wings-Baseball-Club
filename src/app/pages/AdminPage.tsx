@@ -1,19 +1,28 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import {
-  Users,
-  Ticket,
-  BarChart3,
-  Shield,
-  UserPlus,
-  Activity,
-  Edit2,
   Trash2,
+  Edit2,
+  Search,
+  Users,
+  Calendar,
+  Filter,
+  Download,
+  Shield,
+  Trophy,
+  Megaphone,
+  Bell,
+  MessageSquare,
+  BarChart3,
   Check,
   X,
-  Plus,
-  Bell,
-  Send,
+  ChevronRight,
+  ChevronDown,
+  ChevronUp,
+  MoreHorizontal,
+  UserPlus,
+  Ticket,
+  Send
 } from 'lucide-react';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore'; // Import Firestore helpers directly for repair
 import { db } from '../../lib/firebase/config';
@@ -34,7 +43,7 @@ import { Badge } from '../components/ui/badge';
 import { toast } from 'sonner';
 import { formatDistanceToNow } from 'date-fns';
 import { ko } from 'date-fns/locale';
-import type { UserRole, PostDoc, InviteCodeDoc } from '../../lib/firebase/types';
+import type { UserRole, PostDoc } from '../../lib/firebase/types';
 
 type TabType = 'members' | 'stats' | 'notices';
 
@@ -49,12 +58,7 @@ interface Member {
   createdAt: Date;
 }
 
-interface InviteCode extends InviteCodeDoc {
-  id: string; // InviteCodeDoc has code as key, but sometimes we map id. Firestore service returns id same as code.
-}
-
 interface AdminPageProps {
-  onBack?: () => void;
   initialTab?: TabType;
 }
 
@@ -74,10 +78,10 @@ const roleColors: Record<UserRole, string> = {
   MEMBER: 'from-gray-500 to-gray-600',
 };
 
-export const AdminPage: React.FC<AdminPageProps> = ({ onBack, initialTab = 'members' }) => {
+export const AdminPage: React.FC<AdminPageProps> = ({ initialTab = 'members' }) => {
   const { user, isAdmin } = useAuth();
+  const { users, updateUserRole, updateUserStatus, posts, deletePost, updatePost } = useData();
   const { currentClubId } = useClub();
-  const { posts, members: activeMembers } = useData();
   const [activeTab, setActiveTab] = useState<TabType>(initialTab);
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
@@ -486,233 +490,7 @@ function MembersTab({ members, editingMember, setEditingMember, onUpdateMember, 
   );
 }
 
-// InvitesTab Component
-function InvitesTab(props: any) {
-  const {
-    inviteCodes,
-    showCreateInvite,
-    setShowCreateInvite,
-    onCreateInviteCode,
-    onDeleteInviteCode,
-    onUpdateInviteCode,
-  } = props;
-  const [newCode, setNewCode] = useState('');
-  const [newRole, setNewRole] = useState<UserRole>('MEMBER');
-  const [maxUses, setMaxUses] = useState(1);
 
-  // Edit States
-  const [editingCode, setEditingCode] = useState<string | null>(null);
-  const [editRole, setEditRole] = useState<UserRole>('MEMBER');
-  const [editMaxUses, setEditMaxUses] = useState(1);
-
-  const startEdit = (invite: InviteCode) => {
-    setEditingCode(invite.code);
-    setEditRole(invite.role);
-    setEditMaxUses(invite.maxUses);
-  };
-
-  const handleUpdate = () => {
-    if (!editingCode) return;
-    onUpdateInviteCode(editingCode, {
-      role: editRole,
-      maxUses: editMaxUses,
-    });
-    setEditingCode(null);
-  };
-
-  const handleCreate = () => {
-    if (!newCode.trim()) {
-      toast.error('초대 코드를 입력하세요');
-      return;
-    }
-    onCreateInviteCode({
-      code: newCode.trim().toUpperCase(),
-      role: newRole,
-      maxUses,
-    });
-    setNewCode('');
-    setNewRole('MEMBER');
-    setMaxUses(1);
-  };
-
-  return (
-    <div className="space-y-4">
-      {/* Create Button */}
-      <Button
-        onClick={() => setShowCreateInvite(!showCreateInvite)}
-        className="w-full"
-      >
-        <Plus className="w-4 h-4 mr-2" />
-        초대 코드 생성
-      </Button>
-
-      {/* Create Form */}
-      {showCreateInvite && (
-        <motion.div
-          initial={{ opacity: 0, height: 0 }}
-          animate={{ opacity: 1, height: 'auto' }}
-          className="bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 rounded-2xl p-4 space-y-4"
-        >
-          <div>
-            <Label>초대 코드</Label>
-            <Input
-              value={newCode}
-              onChange={(e) => setNewCode(e.target.value.toUpperCase())}
-              placeholder="예: WINGS2024"
-              className="uppercase"
-            />
-          </div>
-          <div>
-            <Label>역할</Label>
-            <select
-              value={newRole}
-              onChange={(e) => setNewRole(e.target.value as UserRole)}
-              className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-            >
-              <option value="MEMBER">일반</option>
-              <option value="ADMIN">관리자</option>
-              <option value="TREASURER">총무</option>
-              <option value="DIRECTOR">감독</option>
-              <option value="PRESIDENT">회장</option>
-            </select>
-          </div>
-          <div>
-            <Label>최대 사용 횟수</Label>
-            <Input
-              type="number"
-              value={maxUses}
-              onChange={(e) => setMaxUses(parseInt(e.target.value) || 1)}
-              min="1"
-            />
-          </div>
-          <Button onClick={handleCreate} className="w-full">
-            생성하기
-          </Button>
-        </motion.div>
-      )}
-
-      {/* Invite Codes List */}
-      <div className="space-y-3">
-        {inviteCodes.map((invite: InviteCode, index: number) => (
-          <motion.div
-            key={invite.id}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: index * 0.05 }}
-            className={`rounded-2xl p-4 ${invite.isUsed
-              ? 'bg-gray-100 dark:bg-gray-800'
-              : 'bg-white dark:bg-gray-900 shadow-sm'
-              }`}
-          >
-            <div className="flex items-start justify-between mb-2">
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-lg font-bold font-mono">
-                    {invite.code}
-                  </span>
-                  <span
-                    className={`px-2 py-0.5 text-xs font-medium rounded-full ${invite.isUsed
-                      ? 'bg-gray-300 text-gray-700'
-                      : 'bg-green-100 text-green-700'
-                      }`}
-                  >
-                    {invite.isUsed ? '사용됨' : '사용 가능'}
-                  </span>
-                  <span
-                    className={`ml-2 px-2 py-0.5 text-xs font-medium text-white bg-gradient-to-r ${roleColors[invite.role] || 'from-gray-400 to-gray-500'} rounded-full`}
-                  >
-                    {roleLabels[invite.role]}
-                  </span>
-                </div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  생성자: {invite.createdByName}
-                </p>
-                <p className="text-xs text-gray-500">
-                  {formatDistanceToNow(invite.createdAt, {
-                    addSuffix: true,
-                    locale: ko,
-                  })}
-                </p>
-              </div>
-              {!invite.isUsed && (
-                <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => startEdit(invite)}
-                  >
-                    <Edit2 className="w-4 h-4" />
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => onDeleteInviteCode(invite.code)}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
-                </div>
-              )}
-            </div>
-
-            {/* Edit Mode Form */}
-            {editingCode === invite.code && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                className="mt-4 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl space-y-3"
-              >
-                <div>
-                  <Label>역할 수정</Label>
-                  <select
-                    value={editRole}
-                    onChange={(e) => setEditRole(e.target.value as UserRole)}
-                    className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-                  >
-                    <option value="MEMBER">일반</option>
-                    <option value="ADMIN">관리자</option>
-                    <option value="TREASURER">총무</option>
-                    <option value="DIRECTOR">감독</option>
-                    <option value="PRESIDENT">회장</option>
-                  </select>
-                </div>
-                <div>
-                  <Label>최대 사용 횟수 수정</Label>
-                  <Input
-                    type="number"
-                    value={editMaxUses}
-                    onChange={(e) => setEditMaxUses(parseInt(e.target.value) || 1)}
-                    min="1"
-                  />
-                </div>
-                <div className="flex gap-2 justify-end">
-                  <Button size="sm" variant="outline" onClick={() => setEditingCode(null)}>취소</Button>
-                  <Button size="sm" onClick={handleUpdate}>저장</Button>
-                </div>
-              </motion.div>
-            )}
-
-            {invite.isUsed && invite.usedByName && (
-              <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  사용자: {invite.usedByName}
-                </p>
-                {invite.usedAt && (
-                  <p className="text-xs text-gray-500">
-                    사용일:{' '}
-                    {formatDistanceToNow(invite.usedAt, {
-                      addSuffix: true,
-                      locale: ko,
-                    })}
-                  </p>
-                )}
-              </div>
-            )}
-          </motion.div>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 // Stats Tab Component
 function StatsTab({ stats }: { stats: any }) {

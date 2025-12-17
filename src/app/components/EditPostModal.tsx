@@ -26,10 +26,10 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
   // Event fields
   const [eventType, setEventType] = useState<'PRACTICE' | 'GAME'>(post.eventType || 'PRACTICE');
   const [startDate, setStartDate] = useState(
-    post.startDate ? new Date(post.startDate).toISOString().split('T')[0] : ''
+    post.startAt ? new Date(post.startAt).toISOString().split('T')[0] : ''
   );
   const [startTime, setStartTime] = useState(
-    post.startDate ? new Date(post.startDate).toTimeString().slice(0, 5) : ''
+    post.startAt ? new Date(post.startAt).toTimeString().slice(0, 5) : ''
   );
   const [place, setPlace] = useState(post.place || '');
   const [opponent, setOpponent] = useState(post.opponent || '');
@@ -48,8 +48,8 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
       setTitle(post.title);
       setContent(post.content);
       setEventType(post.eventType || 'PRACTICE');
-      setStartDate(post.startDate ? new Date(post.startDate).toISOString().split('T')[0] : '');
-      setStartTime(post.startDate ? new Date(post.startDate).toTimeString().slice(0, 5) : '');
+      setStartDate(post.startAt ? new Date(post.startAt).toISOString().split('T')[0] : '');
+      setStartTime(post.startAt ? new Date(post.startAt).toTimeString().slice(0, 5) : '');
       setPlace(post.place || '');
       setOpponent(post.opponent || '');
       setChoices(post.choices || ['', '']);
@@ -96,7 +96,7 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
 
         const eventDateTime = new Date(`${startDate}T${startTime}`);
         updates.eventType = eventType;
-        updates.startDate = eventDateTime;
+        updates.startAt = eventDateTime;
         updates.place = place.trim();
         if (eventType === 'GAME' && opponent.trim()) {
           updates.opponent = opponent.trim();
@@ -151,7 +151,7 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+      <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center">
         {/* Backdrop */}
         <motion.div
           initial={{ opacity: 0 }}
@@ -168,7 +168,7 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
           exit={{ opacity: 0, y: '100%' }}
           transition={{ type: 'spring', damping: 25, stiffness: 300 }}
           onClick={(e) => e.stopPropagation()}
-          className="bg-white dark:bg-gray-900 w-full max-w-lg h-[90vh] sm:h-auto sm:max-h-[85vh] overflow-hidden rounded-t-[20px] sm:rounded-2xl shadow-xl border border-gray-200 dark:border-gray-800 flex flex-col"
+          className="relative z-10 bg-white dark:bg-gray-900 w-full max-w-lg h-[90vh] sm:h-auto sm:max-h-[85vh] rounded-t-[20px] sm:rounded-2xl shadow-xl border border-gray-200 dark:border-gray-800 flex flex-col"
         >
           <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between shrink-0 bg-white dark:bg-gray-900">
             <h2 className="text-lg font-bold text-gray-900 dark:text-white">게시글 수정</h2>
@@ -182,7 +182,7 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto">
-            <div className="p-6 space-y-4">
+            <div className="p-6 space-y-4 pb-64">
               {/* Title */}
               <div>
                 <label className="block text-sm font-medium mb-2">제목</label>
@@ -206,8 +206,8 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
                         type="button"
                         onClick={() => setEventType('PRACTICE')}
                         className={`flex-1 py-3 px-4 rounded-xl font-medium transition-colors ${eventType === 'PRACTICE'
-                            ? 'bg-blue-500 text-white'
-                            : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300'
+                          ? 'bg-blue-500 text-white'
+                          : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300'
                           }`}
                       >
                         연습
@@ -216,8 +216,8 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
                         type="button"
                         onClick={() => setEventType('GAME')}
                         className={`flex-1 py-3 px-4 rounded-xl font-medium transition-colors ${eventType === 'GAME'
-                            ? 'bg-blue-500 text-white'
-                            : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300'
+                          ? 'bg-blue-500 text-white'
+                          : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300'
                           }`}
                       >
                         경기

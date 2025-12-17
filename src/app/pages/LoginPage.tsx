@@ -2,8 +2,6 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Loader2,
-  Trophy,
-  CheckCircle2,
   Mail,
   ArrowLeft
 } from 'lucide-react';
@@ -13,22 +11,68 @@ import { Label } from '../components/ui/label';
 import { Button } from '../components/ui/button';
 import { toast } from 'sonner';
 import {
-  type InviteCodeData,
   checkUserExists
 } from '../../lib/firebase/auth.service';
+
+import {
+  isInAppBrowser,
+  getBreakoutUrl,
+  isAndroid,
+  isIOS
+} from '../../lib/utils/userAgent';
 
 type LoginStep = 'code' | 'method' | 'email-signup' | 'email-login' | 'additional-info';
 
 export const LoginPage: React.FC = () => {
   const {
-    checkInviteCode,
     registerWithEmail,
     createMsgAccount
   } = useAuth();
+  
+  // WebView Detection
+  if (isInAppBrowser()) {
+    return (
+      <div className="min-h-screen bg-white dark:bg-gray-900 flex flex-col items-center justify-center p-6 text-center">
+        <div className="w-24 h-24 bg-blue-100 rounded-full flex items-center justify-center mb-6">
+          <img src="/wingslogo.jpg" alt="Logo" className="w-20 h-20 rounded-full object-cover" />
+        </div>
+        <h1 className="text-2xl font-bold mb-4 text-gray-900 dark:text-white">
+          외부 브라우저로 열어주세요
+        </h1>
+        <p className="text-gray-600 dark:text-gray-300 mb-8 whitespace-pre-wrap">
+          구글 보안 정책으로 인해{'\n'}
+          카카오톡/인스타그램 등 인앱 브라우저에서는{'\n'}
+          로그인이 불가능합니다.
+        </p>
+
+        {isAndroid() ? (
+          <Button 
+            className="w-full h-14 text-lg font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-xl"
+            onClick={() => {
+              window.location.href = getBreakoutUrl();
+            }}
+          >
+            Chrome으로 열기
+          </Button>
+        ) : (
+          <div className="bg-gray-100 dark:bg-gray-800 p-4 rounded-xl text-left w-full text-sm space-y-2">
+            <p className="font-bold flex items-center gap-2">
+              <span className="w-6 h-6 bg-black text-white rounded-full flex items-center justify-center text-xs">1</span>
+              우측 하단/상단 점 3개 메뉴 클릭
+            </p>
+            <p className="font-bold flex items-center gap-2">
+              <span className="w-6 h-6 bg-black text-white rounded-full flex items-center justify-center text-xs">2</span>
+              '다른 브라우저로 열기' 선택
+            </p>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   const [step, setStep] = useState<LoginStep>('method'); // Start at Method Selection
   const [loading, setLoading] = useState(false);
-  const [inviteCode, setInviteCode] = useState(''); // Optional now
+  const [inviteCode] = useState(''); // Kept as empty string const for compatibility if needed, or remove completely. Let's remove setInviteCode usage.
   const [pendingGoogleUser, setPendingGoogleUser] = useState<any>(null);
 
   // Detail Form States
@@ -140,6 +184,9 @@ export const LoginPage: React.FC = () => {
           </motion.div>
           <h1 className="text-2xl font-bold text-white mb-2">WINGS</h1>
           <p className="text-blue-100 text-sm">야구동호회 커뮤니티</p>
+          <p className="text-[10px] text-blue-200/60 mt-2">
+            * 로그인 오류 시 Chrome/Safari 브라우저를 이용해주세요.
+          </p>
         </div>
 
         <div className="p-8">
@@ -295,18 +342,8 @@ export const LoginPage: React.FC = () => {
                     </div>
                   </div>
                   <div className="space-y-1 pt-2 border-t border-white/10">
-                    <Label className="text-white text-xs flex items-center gap-2">
-                      <Trophy className="w-3 h-3 text-yellow-400" />
-                      초대코드 (선택)
-                    </Label>
-                    <Input
-                      value={inviteCode}
-                      onChange={e => setInviteCode(e.target.value)}
-                      placeholder="있으신 경우 입력해주세요"
-                      className="bg-white/10 border-white/20 text-white placeholder:text-white/30"
-                    />
-                    <p className="text-[10px] text-blue-100/70">
-                      * 초대코드가 없으면 '가입 승인 대기' 상태로 시작됩니다.
+                    <p className="text-[10px] text-blue-100/70 text-center">
+                      * 가입 후 관리자 승인이 필요합니다.
                     </p>
                   </div>
                 </div>
@@ -358,18 +395,9 @@ export const LoginPage: React.FC = () => {
                     <Label className="text-white text-xs">닉네임 (선택)</Label>
                     <Input value={nickname} onChange={e => setNickname(e.target.value)} className="bg-white/10 border-white/20 text-white" />
                   </div>
-                  <div className="space-y-1 pt-2 border-t border-white/10">
-                    <Label className="text-white text-xs flex items-center gap-2">
-                      <Trophy className="w-3 h-3 text-yellow-400" />
-                      초대코드 (선택)
-                    </Label>
-                    <Input
-                      value={inviteCode}
-                      onChange={e => setInviteCode(e.target.value)}
-                      placeholder="있으신 경우 입력해주세요"
-                      className="bg-white/10 border-white/20 text-white placeholder:text-white/30"
-                    />
-                  </div>
+                  <p className="text-[10px] text-blue-100/70 text-center pt-2">
+                    * 가입 후 관리자 승인이 완료되면 이용 가능합니다.
+                  </p>
                 </div>
 
                 <Button

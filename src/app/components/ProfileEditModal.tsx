@@ -63,11 +63,17 @@ export const ProfileEditModal: React.FC<ProfileEditModalProps> = ({
     setLoading(true);
 
     try {
+      // Explicitly construct updates to prevent undefined values
+      const safeNickname = nickname.trim() || user.nickname || '';
+      const safePhone = phone.trim() || user.phone || '';
+      const safePosition = position || user.position || '';
+      const safeBackNumber = backNumber ? parseInt(backNumber) : (user.backNumber || null);
+
       const updates: any = {
-        nickname: nickname.trim() || user.nickname,
-        phone: phone.trim() || user.phone,
-        position: position || user.position,
-        backNumber: backNumber ? parseInt(backNumber) : user.backNumber,
+        nickname: safeNickname,
+        phone: safePhone,
+        position: safePosition,
+        backNumber: safeBackNumber,
       };
 
       // Upload photo if selected
@@ -76,6 +82,15 @@ export const ProfileEditModal: React.FC<ProfileEditModalProps> = ({
         updates.photoURL = photoURL;
       }
 
+      // Final safety check: remove any keys that are strictly undefined
+      // (Though the above logic ensures strict types, this is a double-check)
+      Object.keys(updates).forEach(key => {
+        if (updates[key] === undefined) {
+          delete updates[key];
+        }
+      });
+
+      console.log('[ProfileEditModal] Sending updates:', updates);
       await updateUser(updates);
       toast.success('프로필이 업데이트되었습니다');
       onClose();
@@ -91,26 +106,26 @@ export const ProfileEditModal: React.FC<ProfileEditModalProps> = ({
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
-        {/* Backdrop */}
+      <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center pointer-events-none">
+        {/* Backdrop - Click here closes modal */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="absolute inset-0 bg-black/50"
+          className="absolute inset-0 bg-black/50 pointer-events-auto"
           onClick={onClose}
         />
 
-        {/* Modal */}
+        {/* Modal - Clicks here do NOT bubble to backdrop due to structure, but we add stopPropagation for safety */}
         <motion.div
           initial={{ opacity: 0, y: '100%' }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: '100%' }}
           transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-          className="bg-white dark:bg-gray-900 w-full max-w-md rounded-t-[20px] sm:rounded-2xl p-6 shadow-xl border border-gray-200 dark:border-gray-800"
+          className="bg-white dark:bg-gray-900 w-full max-w-md max-h-[90vh] flex flex-col rounded-t-[20px] sm:rounded-2xl shadow-xl border border-gray-200 dark:border-gray-800 pointer-events-auto relative z-10"
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="flex justify-between items-center mb-6">
+          <div className="flex justify-between items-center p-6 border-b dark:border-gray-800">
             <h3 className="text-xl font-bold text-gray-900 dark:text-white">프로필 수정</h3>
             <button
               onClick={onClose}
@@ -130,7 +145,7 @@ export const ProfileEditModal: React.FC<ProfileEditModalProps> = ({
                     {photoPreview ? (
                       <img src={photoPreview} alt="Profile" className="w-full h-full object-cover" />
                     ) : (
-                      user.name.charAt(0)
+                      user.realName.charAt(0)
                     )}
                   </div>
                   <button
@@ -156,7 +171,7 @@ export const ProfileEditModal: React.FC<ProfileEditModalProps> = ({
                 <label className="block text-sm font-medium mb-2">이름</label>
                 <input
                   type="text"
-                  value={user.name}
+                  value={user.realName}
                   disabled
                   className="w-full px-4 py-3 border rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-500 cursor-not-allowed"
                 />
