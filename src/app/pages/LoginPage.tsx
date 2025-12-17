@@ -12,23 +12,24 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Button } from '../components/ui/button';
 import { toast } from 'sonner';
-import type { InviteCodeData } from '../../lib/firebase/auth.service';
+import {
+  type InviteCodeData,
+  checkUserExists
+} from '../../lib/firebase/auth.service';
 
-type LoginStep = 'code' | 'method' | 'email-signup' | 'email-login';
+type LoginStep = 'code' | 'method' | 'email-signup' | 'email-login' | 'additional-info';
 
 export const LoginPage: React.FC = () => {
   const {
     checkInviteCode,
-    // signInWithGoogle, // Not used if using inline dynamic import or we use handleGoogleLogin
     registerWithEmail,
-    // signInWithEmail, // Not used in signup flow
     createMsgAccount
   } = useAuth();
 
-  const [step, setStep] = useState<LoginStep>('code');
+  const [step, setStep] = useState<LoginStep>('method'); // Start at Method Selection
   const [loading, setLoading] = useState(false);
-  const [inviteCode, setInviteCode] = useState('');
-  const [inviteData, setInviteData] = useState<InviteCodeData | null>(null);
+  const [inviteCode, setInviteCode] = useState(''); // Optional now
+  const [pendingGoogleUser, setPendingGoogleUser] = useState<any>(null);
 
   // Detail Form States
   const [email, setEmail] = useState('');
@@ -39,21 +40,32 @@ export const LoginPage: React.FC = () => {
 
   const [error, setError] = useState('');
 
-  // 1. Verify Invite Code
-  const handleVerifyCode = async (e: React.FormEvent) => {
+  const handleAdditionalInfoSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inviteCode) return;
-    setLoading(true);
-    setError('');
+    if (!pendingGoogleUser) return;
 
+    if (!realName.trim() || !phone.trim()) {
+      toast.error('이름과 전화번호를 모두 입력해주세요.');
+      return;
+    }
+
+    setLoading(true);
     try {
-      const data = await checkInviteCode(inviteCode);
-      setInviteData(data);
-      setStep('method'); // Go to Method Selection
-      toast.success('초대 코드가 확인되었습니다.');
-    } catch (err: any) {
-      setError(err.message);
-      toast.error(err.message);
+      // Import dynamically to avoid circular dependency issues if any
+      const { createAccount } = await import('../../lib/firebase/auth.service');
+      // Pass inviteCode (can be empty string, createAccount handles it)
+      await createAccount(
+        pendingGoogleUser,
+        inviteCode || null,
+        realName,
+        nickname,
+        phone
+      );
+      toast.success('회원가입이 완료되었습니다! (관리자 승인 대기중)');
+      // App.tsx will redirect to Pending Page based on new status
+    } catch (error: any) {
+      console.error('Account creation failed:', error);
+      toast.error(error.message || '가입 처리에 실패했습니다.');
     } finally {
       setLoading(false);
     }
@@ -61,17 +73,30 @@ export const LoginPage: React.FC = () => {
 
   // 2-A. Google Sign In
   const handleGoogleLogin = async () => {
-    if (!inviteData) return;
     setLoading(true);
     setError('');
 
     try {
       const { loginWithGoogle } = await import('../../lib/firebase/auth.service');
-      const user = await loginWithGoogle();
-      await createMsgAccount(user, inviteCode, user.displayName || 'Member');
-      toast.success('구글 계정으로 가입되었습니다!');
+      // 1. Google Auth Login (gets firebase user)
+      const firebaseUser = await loginWithGoogle();
+
+      // 2. Check if user profile exists
+      const exists = await checkUserExists(firebaseUser.uid);
+
+      if (exists) {
+        // User exists -> Login success (Global AuthContext will pick it up)
+        toast.success(`환영합니다, ${firebaseUser.displayName}님!`);
+        // Navigation handled by App.tsx based on user state
+      } else {
+        // User does NOT exist -> Go to Additional Info Step
+        setPendingGoogleUser(firebaseUser);
+        setRealName(firebaseUser.displayName || ''); // Pre-fill name if available
+        setStep('additional-info');
+      }
     } catch (err: any) {
       setError(err.message);
+      toast.error('로그인에 실패했습니다.');
     } finally {
       setLoading(false);
     }
@@ -80,14 +105,13 @@ export const LoginPage: React.FC = () => {
   // 3. Email Sign Up
   const handleEmailSignup = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inviteData) return;
     setLoading(true);
 
     try {
       // 1. Create Auth User
       const user = await registerWithEmail(email, password, realName);
-      // 2. Create Firestore Doc & Link Invite
-      await createMsgAccount(user, inviteCode, realName, nickname, phone);
+      // 2. Create Firestore Doc & Link Invite (Optional)
+      await createMsgAccount(user, inviteCode || null, realName, nickname, phone);
       toast.success('가입이 완료되었습니다!');
       // Redirection happens automatically as user state updates
     } catch (err: any) {
@@ -121,37 +145,7 @@ export const LoginPage: React.FC = () => {
         <div className="p-8">
           <AnimatePresence mode="wait">
 
-            {/* STEP 1: INVITE CODE */}
-            {step === 'code' && (
-              <motion.form
-                key="step-code"
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -20 }}
-                onSubmit={handleVerifyCode}
-                className="space-y-6"
-              >
-                <div className="space-y-2">
-                  <Label className="text-white">초대코드 입력</Label>
-                  <Input
-                    value={inviteCode}
-                    onChange={(e) => setInviteCode(e.target.value)}
-                    placeholder="WINGS2024"
-                    className="bg-white/10 border-white/20 text-white placeholder:text-white/40 text-center text-lg tracking-widest uppercase h-14"
-                    autoFocus
-                  />
-                </div>
-                <Button
-                  type="submit"
-                  disabled={loading || !inviteCode}
-                  className="w-full h-12 bg-white text-blue-600 hover:bg-blue-50 font-bold"
-                >
-                  {loading ? <Loader2 className="animate-spin" /> : "확인"}
-                </Button>
-              </motion.form>
-            )}
-
-            {/* STEP 2: METHOD SELECTION */}
+            {/* STEP 2: METHOD SELECTION (Now Step 1) */}
             {step === 'method' && (
               <motion.div
                 key="step-method"
@@ -160,14 +154,6 @@ export const LoginPage: React.FC = () => {
                 exit={{ opacity: 0, x: -20 }}
                 className="space-y-4"
               >
-                <div className="bg-green-500/20 border border-green-500/30 rounded-xl p-4 flex items-center gap-3 mb-6">
-                  <CheckCircle2 className="w-5 h-5 text-green-300" />
-                  <div className="text-left">
-                    <p className="text-green-100 text-sm font-semibold">초대코드 확인됨</p>
-                    <p className="text-green-100/70 text-xs">Role: {inviteData?.role}</p>
-                  </div>
-                </div>
-
                 <div className="space-y-3">
                   <Button
                     variant="outline"
@@ -190,36 +176,102 @@ export const LoginPage: React.FC = () => {
 
                   <Button
                     variant="outline"
-                    onClick={() => setStep('email-signup')}
+                    onClick={() => setStep('email-login')}
                     className="w-full h-12 bg-transparent border-white/30 text-white hover:bg-white/10 flex items-center justify-center gap-2"
                   >
                     <Mail className="w-5 h-5" />
-                    이메일로 가입하기
+                    이메일로 로그인
                   </Button>
                 </div>
 
+                <div className="pt-4 border-t border-white/10 text-center">
+                  <button
+                    onClick={() => setStep('email-signup')}
+                    className="text-white/70 text-sm hover:text-white underline"
+                  >
+                    계정이 없으신가요? 이메일로 회원가입
+                  </button>
+                </div>
+              </motion.div>
+            )}
+
+            {/* STEP: EMAIL LOGIN */}
+            {step === 'email-login' && (
+              <motion.div
+                key="step-email-login"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                className="space-y-4"
+              >
+                <form
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    setLoading(true);
+                    try {
+                      const { loginWithEmail } = await import('../../lib/firebase/auth.service');
+                      await loginWithEmail(email, password);
+                      toast.success('로그인 성공!');
+                    } catch (err: any) {
+                      setError(err.message);
+                      toast.error('로그인 실패');
+                    } finally {
+                      setLoading(false);
+                    }
+                  }}
+                  className="space-y-4"
+                >
+                  <div className="space-y-2">
+                    <Label className="text-white">이메일</Label>
+                    <Input
+                      value={email}
+                      onChange={e => setEmail(e.target.value)}
+                      type="email"
+                      required
+                      className="bg-white/10 border-white/20 text-white"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-white">비밀번호</Label>
+                    <Input
+                      value={password}
+                      onChange={e => setPassword(e.target.value)}
+                      type="password"
+                      required
+                      className="bg-white/10 border-white/20 text-white"
+                    />
+                  </div>
+                  <Button
+                    type="submit"
+                    disabled={loading}
+                    className="w-full h-12 bg-white text-blue-600 hover:bg-blue-50 font-bold"
+                  >
+                    {loading ? <Loader2 className="animate-spin" /> : "로그인"}
+                  </Button>
+                </form>
                 <Button
                   variant="ghost"
-                  size="sm"
-                  onClick={() => setStep('code')}
-                  className="w-full text-blue-200 mt-4 hover:text-white"
+                  onClick={() => setStep('method')}
+                  className="w-full text-blue-200"
                 >
-                  초대코드 다시 입력하기
+                  <ArrowLeft className="w-4 h-4 mr-2" />
+                  뒤로 가기
                 </Button>
               </motion.div>
             )}
 
-            {/* STEP 3: EMAIL FORM */}
+
+            {/* STEP 3: EMAIL SIGNUP FORM */}
             {step === 'email-signup' && (
               <motion.form
-                key="step-email"
+                key="step-email-signup"
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -20 }}
                 onSubmit={handleEmailSignup}
                 className="space-y-4"
               >
-                <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+                <div className="space-y-3 max-h-[350px] overflow-y-auto pr-2 custom-scrollbar">
                   <div className="space-y-1">
                     <Label className="text-white text-xs">이메일</Label>
                     <Input value={email} onChange={e => setEmail(e.target.value)} type="email" required className="bg-white/10 border-white/20 text-white" />
@@ -234,13 +286,28 @@ export const LoginPage: React.FC = () => {
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <div className="space-y-1">
-                      <Label className="text-white text-xs">닉네임(선택)</Label>
+                      <Label className="text-white text-xs">닉네임</Label>
                       <Input value={nickname} onChange={e => setNickname(e.target.value)} className="bg-white/10 border-white/20 text-white" />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-white text-xs">연락처(선택)</Label>
+                      <Label className="text-white text-xs">연락처</Label>
                       <Input value={phone} onChange={e => setPhone(e.target.value)} className="bg-white/10 border-white/20 text-white" />
                     </div>
+                  </div>
+                  <div className="space-y-1 pt-2 border-t border-white/10">
+                    <Label className="text-white text-xs flex items-center gap-2">
+                      <Trophy className="w-3 h-3 text-yellow-400" />
+                      초대코드 (선택)
+                    </Label>
+                    <Input
+                      value={inviteCode}
+                      onChange={e => setInviteCode(e.target.value)}
+                      placeholder="있으신 경우 입력해주세요"
+                      className="bg-white/10 border-white/20 text-white placeholder:text-white/30"
+                    />
+                    <p className="text-[10px] text-blue-100/70">
+                      * 초대코드가 없으면 '가입 승인 대기' 상태로 시작됩니다.
+                    </p>
                   </div>
                 </div>
 
@@ -249,7 +316,7 @@ export const LoginPage: React.FC = () => {
                   disabled={loading}
                   className="w-full h-12 bg-white text-blue-600 hover:bg-blue-50 font-bold mt-4"
                 >
-                  {loading ? <Loader2 className="animate-spin" /> : "가입 완료"}
+                  {loading ? <Loader2 className="animate-spin" /> : "가입하기"}
                 </Button>
                 <Button
                   type="button"
@@ -259,6 +326,58 @@ export const LoginPage: React.FC = () => {
                 >
                   <ArrowLeft className="w-4 h-4 mr-2" />
                   뒤로 가기
+                </Button>
+              </motion.form>
+            )}
+
+            {/* STEP: ADDITIONAL INFO (For Google Signup) */}
+            {step === 'additional-info' && (
+              <motion.form
+                key="step-additional"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                onSubmit={handleAdditionalInfoSubmit}
+                className="space-y-4"
+              >
+                <div className="text-center mb-4">
+                  <h3 className="text-white font-bold text-lg">추가 정보 입력</h3>
+                  <p className="text-blue-100 text-xs">원활한 활동을 위해 추가 정보를 입력해주세요.</p>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <Label className="text-white text-xs">실명</Label>
+                    <Input value={realName} onChange={e => setRealName(e.target.value)} required className="bg-white/10 border-white/20 text-white" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-white text-xs">연락처</Label>
+                    <Input value={phone} onChange={e => setPhone(e.target.value)} required placeholder="010-0000-0000" className="bg-white/10 border-white/20 text-white" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-white text-xs">닉네임 (선택)</Label>
+                    <Input value={nickname} onChange={e => setNickname(e.target.value)} className="bg-white/10 border-white/20 text-white" />
+                  </div>
+                  <div className="space-y-1 pt-2 border-t border-white/10">
+                    <Label className="text-white text-xs flex items-center gap-2">
+                      <Trophy className="w-3 h-3 text-yellow-400" />
+                      초대코드 (선택)
+                    </Label>
+                    <Input
+                      value={inviteCode}
+                      onChange={e => setInviteCode(e.target.value)}
+                      placeholder="있으신 경우 입력해주세요"
+                      className="bg-white/10 border-white/20 text-white placeholder:text-white/30"
+                    />
+                  </div>
+                </div>
+
+                <Button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full h-12 bg-white text-blue-600 hover:bg-blue-50 font-bold mt-4"
+                >
+                  {loading ? <Loader2 className="animate-spin" /> : "가입 완료"}
                 </Button>
               </motion.form>
             )}
@@ -276,7 +395,10 @@ export const LoginPage: React.FC = () => {
             </motion.div>
           )}
         </div>
-      </motion.div>
-    </div>
+        <div className="mt-8 text-center text-xs text-gray-400">
+          &copy; 2024 Wings Baseball Club (v1.1)
+        </div>
+      </motion.div >
+    </div >
   );
 };

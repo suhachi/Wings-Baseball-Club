@@ -18,6 +18,7 @@ import { NotificationPage } from './pages/NotificationPage';
 import { AdminPage } from './pages/AdminPage';
 import { FinancePage } from './pages/FinancePage';
 import { GameRecordPage } from './pages/GameRecordPage';
+import { ApprovalPendingPage } from './pages/ApprovalPendingPage';
 import { Loader2 } from 'lucide-react';
 
 type PageType = 'home' | 'schedule' | 'boards' | 'album' | 'my' | 'settings' | 'notifications' | 'admin' | 'finance' | 'game-record';
@@ -47,6 +48,12 @@ function AppContent() {
   // If not logged in, show login page
   if (!user) {
     return <LoginPage />;
+  }
+
+  // Global Gate: Check for Pending Status
+  // Allow ADMIN to bypass (just in case, though they should be active)
+  if (user.status === 'pending' && user.role !== 'ADMIN') {
+    return <ApprovalPendingPage />;
   }
 
   // Get page title and back button config

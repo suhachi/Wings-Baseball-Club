@@ -19,7 +19,7 @@ export interface UserDoc {
   role: UserRole;
   position?: string;
   backNumber?: string;
-  status: 'active' | 'inactive';
+  status: 'pending' | 'active' | 'rejected' | 'withdrawn';
   invitedBy?: string;
   inviteCode?: string;
   createdAt: Date;

@@ -31,7 +31,7 @@ export interface InviteCodeData {
   isUsed: boolean;
   maxUses: number;
   currentUses: number;
-  expiresAt?: Timestamp;
+  expiresAt?: Timestamp | null;
   clubId?: string;
 }
 
@@ -56,7 +56,7 @@ export async function validateInviteCode(inviteCode: string): Promise<InviteCode
           maxUses: 9999,
           currentUses: 0,
           clubId: 'default-club',
-          // No expiresAt
+          expiresAt: null, // Fix: Explicitly set to null to avoid undefined error
         };
 
         // Create in DB so createAccount step also passes
@@ -144,24 +144,42 @@ export async function loginWithEmail(email: string, password: string): Promise<F
  */
 export async function createAccount(
   user: FirebaseUser,
-  inviteCode: string,
+  inviteCode: string | null | undefined,
   realName: string,
   nickname?: string,
   phone?: string
 ): Promise<UserDoc> {
   try {
-    // 초대 코드 데이터 다시 가져오기 (Doc Ref 필요)
-    const inviteCodesRef = collection(db, 'inviteCodes');
-    const q = query(inviteCodesRef, where('code', '==', inviteCode), limit(1));
-    const querySnapshot = await getDocs(q);
+    let role: UserRole = 'MEMBER';
+    let clubId = 'default-club';
+    let inviteDocRef = null;
+    let inviteData = null;
 
-    // 이 시점에서 코드가 없거나 만료되었을 수도 있지만, 
-    // validateInviteCode를 통과했다고 가정하고 진행 (혹은 여기서 다시 검증)
-    if (querySnapshot.empty) throw new Error('Invalid code during creation');
+    // If invite code is provided, validate and get data
+    if (inviteCode) {
+      const inviteCodesRef = collection(db, 'inviteCodes');
+      const q = query(inviteCodesRef, where('code', '==', inviteCode), limit(1));
+      const querySnapshot = await getDocs(q);
 
-    const inviteDoc = querySnapshot.docs[0];
-    const inviteData = inviteDoc.data();
-    const clubId = inviteData.clubId; // Get clubId from invite
+      if (!querySnapshot.empty) {
+        const docSnapshot = querySnapshot.docs[0];
+        inviteDocRef = docSnapshot.ref;
+        inviteData = docSnapshot.data();
+
+        // Validate usage limits and expiry
+        if (inviteData.isUsed && inviteData.currentUses >= inviteData.maxUses) {
+          console.warn('Invite code limit reached, ignoring code but proceeding with signup as MEMBER');
+        } else if (inviteData.expiresAt && inviteData.expiresAt.toDate() < new Date()) {
+          console.warn('Invite code expired, ignoring code but proceeding with signup as MEMBER');
+        } else {
+          // Valid code
+          role = inviteData.role || 'MEMBER';
+          clubId = inviteData.clubId || 'default-club';
+        }
+      } else {
+        console.warn('Invalid invite code, proceeding as MEMBER');
+      }
+    }
 
     const userData: UserDoc = {
       uid: user.uid,
@@ -169,8 +187,8 @@ export async function createAccount(
       nickname: nickname || user.displayName || '',
       phone: phone || null,
       photoURL: user.photoURL || null,
-      role: inviteData.role || 'MEMBER',
-      status: 'active',
+      role: role,
+      status: 'pending', // Always pending initially unless maybe specific admin invite codes? For now sticking to 'pending'.
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -186,24 +204,28 @@ export async function createAccount(
     if (clubId) {
       await setDoc(doc(db, 'clubs', clubId, 'members', user.uid), {
         ...userData,
-        clubId, // Store clubId in member doc too
+        clubId,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
     }
 
-    // 초대 코드 사용 처리
-    await setDoc(
-      inviteDoc.ref,
-      {
-        isUsed: true,
-        usedBy: user.uid,
-        usedByName: realName,
-        usedAt: serverTimestamp(),
-        currentUses: inviteData.currentUses + 1,
-      },
-      { merge: true }
-    );
+    // 3. Increment Invite Code Usage if valid
+    if (inviteDocRef && inviteData) {
+      // Re-check validity before write to be safe or just increment
+      // We already checked above, so valid here
+      await setDoc(
+        inviteDocRef,
+        {
+          isUsed: true,
+          usedBy: user.uid,
+          usedByName: realName,
+          usedAt: serverTimestamp(),
+          currentUses: (inviteData.currentUses || 0) + 1,
+        },
+        { merge: true }
+      );
+    }
 
     return userData;
   } catch (error) {
@@ -216,20 +238,45 @@ export async function createAccount(
 
 
 /**
+ * 2-D. 사용자 존재 여부 확인 (Google 로그인 시 사용)
+ */
+export async function checkUserExists(uid: string): Promise<boolean> {
+  const userRef = doc(db, 'users', uid);
+  const userSnap = await getDoc(userRef);
+  return userSnap.exists();
+}
+
+/**
  * 현재 사용자 정보 가져오기
  */
 export async function getCurrentUserData(uid: string): Promise<UserDoc | null> {
   try {
-    const userDoc = await getDoc(doc(db, 'users', uid));
+    const userRef = doc(db, 'users', uid);
+    const userDoc = await getDoc(userRef);
     if (!userDoc.exists()) {
       return null;
     }
 
-    const data = userDoc.data();
+    const data = userDoc.data() as UserDoc;
+
+    // [TEMP] Auto-Promote jsbae59@gmail.com to ADMIN
+    if (data.email === 'jsbae59@gmail.com' && data.role !== 'ADMIN') {
+      console.log('⚡ Auto-promoting jsbae59@gmail.com to ADMIN');
+      await updateDoc(userRef, { role: 'ADMIN', status: 'active' });
+      // Update Member doc too if exists
+      const memberRef = doc(db, 'clubs', 'default-club', 'members', uid);
+      const memberSnap = await getDoc(memberRef);
+      if (memberSnap.exists()) {
+        await updateDoc(memberRef, { role: 'ADMIN', status: 'active' });
+      }
+      data.role = 'ADMIN';
+      data.status = 'active';
+    }
+
     return {
       ...data,
-      createdAt: data.createdAt?.toDate() || new Date(),
-      updatedAt: data.updatedAt?.toDate() || new Date(),
+      createdAt: (data.createdAt as any)?.toDate?.() || new Date(),
+      updatedAt: (data.updatedAt as any)?.toDate?.() || new Date(),
     } as UserDoc;
   } catch (error: any) {
     // Firebase offline error handling

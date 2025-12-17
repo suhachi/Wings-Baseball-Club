@@ -30,7 +30,7 @@ export interface User {
   role: UserRole;
   position?: string;
   backNumber?: string;
-  status: 'active' | 'inactive';
+  status: 'pending' | 'active' | 'rejected' | 'withdrawn';
   createdAt: Date;
 }
 
@@ -43,8 +43,8 @@ interface AuthContextType {
   signInWithEmail: (email: string, pass: string) => Promise<void>;
   registerWithEmail: (email: string, pass: string, name: string) => Promise<FirebaseUser>;
 
-  // Account Creation (Linking Auth + Invite Code)
-  createMsgAccount: (firebaseUser: FirebaseUser, inviteCode: string, realName: string, nickname?: string, phone?: string) => Promise<void>;
+  // Account Creation (Linking Auth + Optional Invite Code)
+  createMsgAccount: (firebaseUser: FirebaseUser, inviteCode: string | null | undefined, realName: string, nickname?: string, phone?: string) => Promise<void>;
 
   // Utils
   checkInviteCode: (code: string) => Promise<InviteCodeData>;
@@ -130,10 +130,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  // Finalize account creation (link auth user with firestore user doc using invite code)
+  // Finalize account creation (link auth user with firestore user doc using optional invite code)
   const createMsgAccount = async (
     firebaseUser: FirebaseUser,
-    inviteCode: string,
+    inviteCode: string | null | undefined, // Changed to optional
     realName: string,
     nickname?: string,
     phone?: string

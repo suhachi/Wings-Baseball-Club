@@ -332,11 +332,16 @@ export async function createInviteCode(clubId: string, codeData: Omit<any, 'id' 
   try {
     // Standardizing on ROOT 'inviteCodes' collection to match auth.service.ts
     const inviteRef = doc(db, 'inviteCodes', codeData.code); // Use code as ID
-    await setDoc(inviteRef, {
+
+    // Fix: Remove undefined values (specifically expiresAt)
+    const dataToSave = {
       ...codeData,
-      clubId, // Save clubId to know which club this invite belongs to
+      clubId,
+      expiresAt: codeData.expiresAt || null, // Ensure not undefined
       createdAt: serverTimestamp(),
-    });
+    };
+
+    await setDoc(inviteRef, dataToSave);
     return codeData.code;
   } catch (error) {
     console.error('Error creating invite code:', error);
