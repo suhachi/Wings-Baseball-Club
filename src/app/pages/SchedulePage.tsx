@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
-import { Calendar, Trophy, MapPin, Users, Clock, CheckCircle2, XCircle, HelpCircle, Plus } from 'lucide-react';
+import { Calendar, Trophy, MapPin, Users, Clock, CheckCircle2, XCircle, HelpCircle, Plus, Edit, Trash2, MoreVertical } from 'lucide-react';
 import { useData, Post, AttendanceStatus } from '../contexts/DataContext';
 import { useAuth } from '../contexts/AuthContext';
 import { Card } from '../components/ui/card';
@@ -8,16 +8,21 @@ import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { CreatePostModal } from '../components/CreatePostModal';
+import { EditPostModal } from '../components/EditPostModal'; // Added import
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { toast } from 'sonner';
 import { MemberPicker } from '../components/MemberPicker';
+import { DeleteConfirmDialog } from '../components/DeleteConfirmDialog'; // Added import
 
 export const SchedulePage: React.FC = () => {
-  const { posts, updateAttendance, getMyAttendance } = useData();
+  const { posts, updateAttendance, getMyAttendance, deletePost } = useData(); // Added deletePost
   const { user, isAdmin } = useAuth();
   const [selectedEvent, setSelectedEvent] = useState<Post | null>(null);
   const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [editingEvent, setEditingEvent] = useState<Post | null>(null); // Added state
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [eventToDelete, setEventToDelete] = useState<string | null>(null);
 
   // Filter events
   const events = posts
@@ -38,6 +43,26 @@ export const SchedulePage: React.FC = () => {
 
     updateAttendance(eventId, user.id, status);
     toast.success('출석 상태가 변경되었습니다');
+  };
+
+  const handleDeleteClick = (eventId: string) => {
+    setEventToDelete(eventId);
+    setDeleteConfirmOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (eventToDelete) {
+      try {
+        await deletePost(eventToDelete);
+        toast.success('일정이 삭제되었습니다');
+        setSelectedEvent(null);
+      } catch (error) {
+        toast.error('삭제 실패');
+      } finally {
+        setDeleteConfirmOpen(false);
+        setEventToDelete(null);
+      }
+    }
   };
 
   return (
@@ -100,11 +125,16 @@ export const SchedulePage: React.FC = () => {
             myStatus={user ? getMyAttendance(selectedEvent.id, user.id) : 'none'}
             onClose={() => setSelectedEvent(null)}
             onAttendance={handleAttendance}
+            onEdit={(event) => {
+              setSelectedEvent(null);
+              setEditingEvent(event);
+            }}
+            onDelete={(eventId) => handleDeleteClick(eventId)}
           />
         )}
 
         {/* Create Event Button */}
-        {isAdmin && (
+        {isAdmin() && (
           <Button
             variant="outline"
             size="sm"
@@ -121,6 +151,23 @@ export const SchedulePage: React.FC = () => {
           isOpen={createModalOpen}
           onClose={() => setCreateModalOpen(false)}
           defaultType="event"
+        />
+
+        {/* Edit Post Modal */}
+        {editingEvent && (
+          <EditPostModal
+            post={editingEvent}
+            isOpen={!!editingEvent}
+            onClose={() => setEditingEvent(null)}
+          />
+        )}
+
+        <DeleteConfirmDialog
+          isOpen={deleteConfirmOpen}
+          title="일정 삭제"
+          message="정말 이 일정을 삭제하시겠습니까?"
+          onConfirm={handleConfirmDelete}
+          onCancel={() => setDeleteConfirmOpen(false)}
         />
       </div>
     </div>
@@ -293,7 +340,9 @@ const EventDetailModal: React.FC<{
   myStatus: AttendanceStatus;
   onClose: () => void;
   onAttendance: (eventId: string, status: AttendanceStatus) => void;
-}> = ({ event, myStatus, onClose, onAttendance }) => {
+  onEdit?: (event: Post) => void;
+  onDelete?: (eventId: string) => void;
+}> = ({ event, myStatus, onClose, onAttendance, onEdit, onDelete }) => {
   const { user, isAdmin } = useAuth();
   const { updatePost } = useData();
   const [isEditingRecorders, setIsEditingRecorders] = useState(false);
@@ -337,7 +386,25 @@ const EventDetailModal: React.FC<{
       >
         <div className="sticky top-0 bg-white dark:bg-gray-900 border-b dark:border-gray-800 p-4">
           <div className="w-12 h-1 bg-gray-300 dark:bg-gray-700 rounded-full mx-auto mb-4"></div>
-          <h2 className="font-bold text-xl text-center">{event.title}</h2>
+
+          <div className="flex items-center justify-between">
+            <h2 className="font-bold text-xl line-clamp-1 flex-1">{event.title}</h2>
+            <div className="flex items-center gap-1">
+              {isAdmin() && (
+                <>
+                  <Button variant="ghost" size="icon" onClick={() => onEdit?.(event)}>
+                    <Edit className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+                  </Button>
+                  <Button variant="ghost" size="icon" onClick={() => onDelete?.(event.id)}>
+                    <Trash2 className="w-5 h-5 text-red-600" />
+                  </Button>
+                </>
+              )}
+              <Button variant="ghost" size="icon" onClick={onClose}>
+                <XCircle className="w-6 h-6 text-gray-400" />
+              </Button>
+            </div>
+          </div>
         </div>
 
         <div className="p-6 space-y-6">

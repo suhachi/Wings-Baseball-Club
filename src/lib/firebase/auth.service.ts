@@ -144,8 +144,8 @@ export async function createAccount(
       uid: user.uid,
       realName,
       nickname: nickname || user.displayName || '',
-      phone: phone,
-      photoURL: user.photoURL || undefined,
+      phone: phone || null,  // Firestore does not support undefined
+      photoURL: user.photoURL || null, // Firestore does not support undefined
       role: inviteData.role || 'MEMBER',
       status: 'active',
       createdAt: new Date(),

@@ -13,9 +13,9 @@ export type NotificationType = 'notice' | 'comment' | 'like' | 'event' | 'mentio
 export interface UserDoc {
   uid: string;
   realName: string;
-  nickname?: string;
-  phone?: string;
-  photoURL?: string;
+  nickname?: string | null;
+  phone?: string | null;
+  photoURL?: string | null;
   role: UserRole;
   position?: string;
   backNumber?: string;
@@ -54,7 +54,7 @@ export interface PostDoc {
   createdAt: Date;
   updatedAt: Date;
   pinned?: boolean;
-  
+
   // Event specific
   eventType?: EventType;
   startAt?: Date;
@@ -62,14 +62,14 @@ export interface PostDoc {
   opponent?: string;
   voteCloseAt?: Date;
   voteClosed?: boolean;
-  
+
   // Poll specific
   choices?: Array<{ id: string; label: string; votes: string[] }>; // votes: userId[]
   multi?: boolean;
   anonymous?: boolean;
   closeAt?: Date;
   closed?: boolean;
-  
+
   // Game specific
   gameType?: GameType;
   score?: { our: number; opp: number };
@@ -77,11 +77,11 @@ export interface PostDoc {
   recordingLocked?: boolean;
   recordingLockedAt?: Date;
   recordingLockedBy?: string;
-  
+
   // Album specific
   mediaUrls?: string[];
   mediaType?: MediaType;
-  
+
   // Push specific (notice only)
   pushStatus?: PushStatus;
   pushSentAt?: Date;
@@ -121,7 +121,7 @@ export interface FinanceDoc {
   createdBy: string;
   createdByName: string;
   createdAt: Date;
-  
+
   // 회비 specific
   duesPaidBy?: string;
   duesPaidByName?: string;
@@ -136,7 +136,7 @@ export interface BatterRecordDoc {
   playerName: string;
   position: string;
   battingOrder: number;
-  
+
   // 타석 결과
   atBats: string[]; // ['1B', 'K', 'GO', '2B', 'HR'] 등
   hits: number;
@@ -144,7 +144,7 @@ export interface BatterRecordDoc {
   rbis: number;
   walks: number;
   strikeouts: number;
-  
+
   createdAt: Date;
   updatedAt: Date;
 }
@@ -155,7 +155,7 @@ export interface PitcherRecordDoc {
   gameId: string;
   playerId: string;
   playerName: string;
-  
+
   // 투구 내용
   innings: number; // 이닝 수 (소수점: 1.1 = 1과 1/3이닝)
   pitches: number; // 투구 수
@@ -164,7 +164,7 @@ export interface PitcherRecordDoc {
   earnedRuns: number;
   walks: number;
   strikeouts: number;
-  
+
   createdAt: Date;
   updatedAt: Date;
 }

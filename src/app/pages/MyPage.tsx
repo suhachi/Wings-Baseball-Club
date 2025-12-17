@@ -16,13 +16,17 @@ interface MyPageProps {
   onNavigateToAdmin?: () => void;
   onNavigateToFinance?: () => void;
   onNavigateToGameRecord?: () => void;
+  onNavigateToNoticeManage?: () => void;
+  onNavigateToScheduleManage?: () => void;
 }
 
 export const MyPage: React.FC<MyPageProps> = ({
   onNavigateToSettings,
   onNavigateToAdmin,
   onNavigateToFinance,
-  onNavigateToGameRecord
+  onNavigateToGameRecord,
+  onNavigateToNoticeManage,
+  onNavigateToScheduleManage
 }: MyPageProps) => {
   const { user, logout, isAdmin, isTreasury } = useAuth();
   const { posts, comments, attendanceRecords } = useData();
@@ -38,15 +42,16 @@ export const MyPage: React.FC<MyPageProps> = ({
     if (!user) return;
 
     // Count attendance
-    const attendanceCount = attendanceRecords.filter(
-      record => record.userId === user.id && record.status === 'ATTENDING'
+    const attendanceCount = (attendanceRecords || []).filter(
+      record => record.userId === user.id && record.status === 'attending'
     ).length;
 
     // Count posts
-    const postCount = posts.filter((post: Post) => post.authorId === user.id).length;
+    const postCount = (posts || []).filter((post: any) => post.authorId === user.id).length;
 
     // Count comments
-    const commentCount = comments.filter((comment: Comment) => comment.authorId === user.id).length;
+    const allComments = Object.values(comments || {}).flat();
+    const commentCount = allComments.filter((comment: any) => comment.authorId === user.id).length;
 
     setStats({
       attendanceCount,
@@ -216,9 +221,16 @@ export const MyPage: React.FC<MyPageProps> = ({
                 {isAdmin() && (
                   <>
                     <Separator />
-                    <MenuItem icon={Bell} label="공지 관리" onClick={() => toast.info('공지 관리')} />
+                    <MenuItem icon={Bell} label="공지 관리" onClick={() => onNavigateToNoticeManage?.()} />
                     <Separator />
-                    <MenuItem icon={Calendar} label="일정 관리" onClick={() => toast.info('일정 관리')} />
+                    <MenuItem
+                      icon={Calendar}
+                      label="일정 관리"
+                      onClick={() => {
+                        toast.info('일정 탭으로 이동합니다. 일정을 클릭하여 수정하세요.');
+                        onNavigateToScheduleManage?.();
+                      }}
+                    />
                     {isTreasury() && (
                       <>
                         <Separator />

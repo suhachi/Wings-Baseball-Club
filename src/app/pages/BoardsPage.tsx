@@ -13,8 +13,10 @@ import { PollVoteModal } from '../components/PollVoteModal';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 
+import { toast } from 'sonner';
+
 export const BoardsPage: React.FC = () => {
-  const { posts } = useData();
+  const { posts, deletePost } = useData();
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [createPostType, setCreatePostType] = useState<PostType>('free');
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
@@ -66,45 +68,45 @@ export const BoardsPage: React.FC = () => {
           </TabsList>
 
           <TabsContent value="notice" className="p-4 space-y-3 mt-0">
-            <PostList 
-              posts={notices} 
-              type="notice" 
+            <PostList
+              posts={notices}
+              type="notice"
               onPostClick={(post) => setSelectedPost(post)}
               onPollClick={(post) => setSelectedPoll(post)}
             />
           </TabsContent>
 
           <TabsContent value="free" className="p-4 space-y-3 mt-0">
-            <PostList 
-              posts={freePosts} 
-              type="free" 
+            <PostList
+              posts={freePosts}
+              type="free"
               onPostClick={(post) => setSelectedPost(post)}
               onPollClick={(post) => setSelectedPoll(post)}
             />
           </TabsContent>
 
           <TabsContent value="meetup" className="p-4 space-y-3 mt-0">
-            <PostList 
-              posts={meetupPosts} 
-              type="meetup" 
+            <PostList
+              posts={meetupPosts}
+              type="meetup"
               onPostClick={(post) => setSelectedPost(post)}
               onPollClick={(post) => setSelectedPoll(post)}
             />
           </TabsContent>
 
           <TabsContent value="poll" className="p-4 space-y-3 mt-0">
-            <PostList 
-              posts={polls} 
-              type="poll" 
+            <PostList
+              posts={polls}
+              type="poll"
               onPostClick={(post) => setSelectedPost(post)}
               onPollClick={(post) => setSelectedPoll(post)}
             />
           </TabsContent>
 
           <TabsContent value="game" className="p-4 space-y-3 mt-0">
-            <PostList 
-              posts={games} 
-              type="game" 
+            <PostList
+              posts={games}
+              type="game"
               onPostClick={(post) => setSelectedPost(post)}
               onPollClick={(post) => setSelectedPoll(post)}
             />
@@ -147,7 +149,11 @@ export const BoardsPage: React.FC = () => {
             setSelectedPost(null);
             setEditingPost(post);
           }}
-          onDelete={() => {
+          onDelete={async () => {
+            if (selectedPost) {
+              await deletePost(selectedPost.id);
+              toast.success('게시글이 삭제되었습니다');
+            }
             setSelectedPost(null);
           }}
         />
@@ -317,13 +323,12 @@ const PostCard: React.FC<{ post: any; index: number; type: PostType; onPostClick
               <div className="mt-2">
                 <Badge
                   variant="outline"
-                  className={`text-xs ${
-                    post.pushStatus === 'SENT'
-                      ? 'text-green-600 border-green-300'
-                      : post.pushStatus === 'FAILED'
+                  className={`text-xs ${post.pushStatus === 'SENT'
+                    ? 'text-green-600 border-green-300'
+                    : post.pushStatus === 'FAILED'
                       ? 'text-red-600 border-red-300'
                       : 'text-yellow-600 border-yellow-300'
-                  }`}
+                    }`}
                 >
                   푸시: {post.pushStatus === 'SENT' ? '발송완료' : post.pushStatus === 'FAILED' ? '발송실패' : '발송중'}
                 </Badge>

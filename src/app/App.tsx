@@ -27,6 +27,7 @@ function AppContent() {
   const data = useData();
   const [activeTab, setActiveTab] = useState<'home' | 'schedule' | 'boards' | 'album' | 'my'>('home');
   const [currentPage, setCurrentPage] = useState<PageType>('home');
+  const [adminInitialTab, setAdminInitialTab] = useState<'members' | 'invites' | 'stats' | 'notices'>('members');
 
   // Calculate unread notification count safely
   const unreadNotificationCount = data?.notifications ? data.notifications.filter((n) => !n.read).length : 0;
@@ -47,20 +48,6 @@ function AppContent() {
   if (!user) {
     return <LoginPage />;
   }
-
-  const handleNavigate = (tab: 'home' | 'schedule' | 'boards' | 'album' | 'my', postId?: string) => {
-    setActiveTab(tab);
-    setCurrentPage(tab);
-    // In a real app, you would also handle postId to show specific post details
-  };
-
-  const handlePageChange = (page: PageType) => {
-    setCurrentPage(page);
-    // Update activeTab if it's a main tab
-    if (page !== 'settings' && page !== 'notifications' && page !== 'admin' && page !== 'finance' && page !== 'game-record') {
-      setActiveTab(page as 'home' | 'schedule' | 'boards' | 'album' | 'my');
-    }
-  };
 
   // Get page title and back button config
   const getPageConfig = () => {
@@ -115,6 +102,25 @@ function AppContent() {
     }
   };
 
+  const handleNavigate = (tab: 'home' | 'schedule' | 'boards' | 'album' | 'my', postId?: string) => {
+    setActiveTab(tab);
+    setCurrentPage(tab);
+    // In a real app, you would also handle postId to show specific post details
+  };
+
+  const handlePageChange = (page: PageType) => {
+    setCurrentPage(page);
+    // Update activeTab if it's a main tab
+    if (page !== 'settings' && page !== 'notifications' && page !== 'admin' && page !== 'finance' && page !== 'game-record') {
+      setActiveTab(page as 'home' | 'schedule' | 'boards' | 'album' | 'my');
+    }
+  };
+
+  const handleNavigateToAdmin = (tab: 'members' | 'invites' | 'stats' | 'notices' = 'members') => {
+    setAdminInitialTab(tab);
+    handlePageChange('admin');
+  };
+
   const pageConfig = getPageConfig();
 
   return (
@@ -139,14 +145,16 @@ function AppContent() {
         {currentPage === 'my' && (
           <MyPage
             onNavigateToSettings={() => handlePageChange('settings')}
-            onNavigateToAdmin={() => handlePageChange('admin')}
+            onNavigateToAdmin={() => handleNavigateToAdmin('members')}
             onNavigateToFinance={() => handlePageChange('finance')}
             onNavigateToGameRecord={() => handlePageChange('game-record')}
+            onNavigateToNoticeManage={() => handleNavigateToAdmin('notices')}
+            onNavigateToScheduleManage={() => handleNavigate('schedule')}
           />
         )}
         {currentPage === 'settings' && <SettingsPage onBack={() => handlePageChange('my')} />}
         {currentPage === 'notifications' && <NotificationPage onBack={() => handlePageChange('my')} />}
-        {currentPage === 'admin' && <AdminPage onBack={() => handlePageChange('home')} />}
+        {currentPage === 'admin' && <AdminPage onBack={() => handlePageChange('home')} initialTab={adminInitialTab} />}
         {currentPage === 'finance' && <FinancePage onBack={() => handlePageChange('home')} />}
         {currentPage === 'game-record' && <GameRecordPage onBack={() => handlePageChange('home')} />}
       </main>

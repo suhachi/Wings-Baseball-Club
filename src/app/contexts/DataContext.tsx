@@ -303,10 +303,10 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Event specific
       if (postData.eventType) {
         newPostData.eventType = postData.eventType;
-        newPostData.startAt = postData.startAt;
-        newPostData.place = postData.place;
-        newPostData.opponent = postData.opponent;
-        newPostData.voteCloseAt = postData.voteCloseAt;
+        newPostData.startAt = postData.startAt || null;
+        newPostData.place = postData.place || null;
+        newPostData.opponent = postData.opponent || null;
+        newPostData.voteCloseAt = postData.voteCloseAt || null;
         newPostData.voteClosed = false;
       }
 

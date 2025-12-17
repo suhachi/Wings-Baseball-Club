@@ -34,13 +34,13 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
-  const author = users.find(u => u.id === post.authorId);
+  const author = (users || []).find(u => u.id === post.authorId);
   const canEdit = user?.id === post.authorId || isAdmin();
   const canDelete = user?.id === post.authorId || isAdmin();
 
   const handleLike = async () => {
     if (!user) return;
-    
+
     try {
       await toggleLike(post.id, user.id);
       setLiked(!liked);
@@ -80,7 +80,7 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
 
   const confirmDelete = async () => {
     setDeleting(true);
-    
+
     try {
       await deletePost(post.id);
       toast.success('게시글이 삭제되었습니다');
@@ -297,7 +297,7 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
                     {post.choices.map((choice) => {
                       const totalVotes = post.choices?.reduce((sum, c) => sum + (c.votes || 0), 0) || 0;
                       const percentage = totalVotes > 0 ? (choice.votes || 0) / totalVotes * 100 : 0;
-                      
+
                       return (
                         <div key={choice.id} className="relative">
                           <div className="flex items-center justify-between mb-1">
@@ -345,11 +345,10 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
                 <div className="flex items-center gap-4 pt-4 border-t border-gray-200 dark:border-gray-800">
                   <button
                     onClick={handleLike}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
-                      liked
-                        ? 'bg-red-50 text-red-600 dark:bg-red-900/20'
-                        : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
-                    }`}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${liked
+                      ? 'bg-red-50 text-red-600 dark:bg-red-900/20'
+                      : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
+                      }`}
                   >
                     <Heart className={`w-5 h-5 ${liked ? 'fill-current' : ''}`} />
                     <span className="text-sm font-medium">
@@ -380,9 +379,9 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
                   <h3 className="font-bold text-lg mb-4">
                     댓글 {post.commentCount || 0}
                   </h3>
-                  
+
                   <CommentList postId={post.id} />
-                  
+
                   {user && <CommentForm postId={post.id} />}
                 </div>
               </div>

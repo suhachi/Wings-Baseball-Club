@@ -20,6 +20,7 @@ import { Badge } from '../components/ui/badge';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
+import { MemberPicker } from '../components/MemberPicker';
 
 interface GameRecordPageProps {
   onBack?: () => void;
@@ -34,16 +35,6 @@ export const GameRecordPage: React.FC<GameRecordPageProps> = () => {
   const games = posts
     .filter((p: Post) => p.type === 'event' && p.eventType === 'GAME')
     .sort((a: Post, b: Post) => (b.startAt?.getTime() || 0) - (a.startAt?.getTime() || 0));
-
-  // Calculate statistics (Mock for now, as real stats need more data structure)
-  const stats = {
-    totalGames: games.length,
-    wins: 0,
-    losses: 0,
-    draws: 0,
-  };
-
-  // Real logic would calculate from game results if stored
 
   return (
     <div className="pb-20 pt-16">
@@ -138,7 +129,7 @@ const GameDetailModal: React.FC<{
   onClose: () => void;
 }> = ({ game, onClose }) => {
   const { user, isAdmin } = useAuth();
-  const { updatePost } = useData();
+  const { updatePost, members } = useData();
   const [isLocking, setIsLocking] = useState(false);
 
   // Gatekeeper Logic
@@ -170,7 +161,12 @@ const GameDetailModal: React.FC<{
     try {
       await updatePost(game.id, {
         recordingLocked: !game.recordingLocked,
-        recordingLockedAt: !game.recordingLocked ? new Date() : undefined,
+        recordingLockedAt: !game.recordingLocked ? new Date() : undefined, // If unlocking, clear date? or just new date. Actually logic above clears it if not locked? No, logic above sets it if !locked. Wait.
+        // Original logic: recordingLocked: !game.recordingLocked
+        // If it WAS locked, it becomes UNLOCKED.
+        // If it WAS NOT locked, it becomes LOCKED.
+        // So `!game.recordingLocked` is the NEW state.
+        // If new state is TRUE (Locked), set date and by.
         recordingLockedBy: !game.recordingLocked ? user?.id : undefined
       });
       toast.success(game.recordingLocked ? '기록 잠금이 해제되었습니다' : '경기 기록이 마감되었습니다');
@@ -235,6 +231,46 @@ const GameDetailModal: React.FC<{
                 {game.startAt ? format(game.startAt, 'yyyy년 M월 d일 HH:mm', { locale: ko }) : ''}
               </p>
             </div>
+
+            {/* Recorders Selection */}
+            {isAdmin() && (
+              <div className="space-y-2">
+                <MemberPicker
+                  label="기록원 배정"
+                  selectedMemberIds={game.recorders || []}
+                  onSelectionChange={async (ids) => {
+                    try {
+                      await updatePost(game.id, { recorders: ids });
+                    } catch (error) {
+                      toast.error('기록원 변경 실패');
+                    }
+                  }}
+                  maxSelection={5}
+                />
+                <p className="text-xs text-gray-500">
+                  기록원으로 지정되면 해당 경기의 기록을 입력할 수 있습니다.
+                </p>
+              </div>
+            )}
+
+            {!isAdmin() && game.recorders && game.recorders.length > 0 && (
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  배정된 기록원
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {game.recorders.map(id => {
+                    const member = members.find(m => m.id === id);
+                    if (!member) return null;
+                    return (
+                      <Badge key={id} variant="secondary">
+                        {member.realName}
+                      </Badge>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* Placeholder for Record Input UI */}
             <div className="p-8 border-2 border-dashed rounded-xl text-center space-y-2">

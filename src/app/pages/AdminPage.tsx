@@ -34,6 +34,7 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
 import { Switch } from '../components/ui/switch';
+import { Badge } from '../components/ui/badge';
 import { toast } from 'sonner';
 import { formatDistanceToNow } from 'date-fns';
 import { ko } from 'date-fns/locale';
@@ -70,13 +71,14 @@ interface InviteCode {
 
 interface AdminPageProps {
   onBack?: () => void;
+  initialTab?: TabType;
 }
 
-export const AdminPage: React.FC<AdminPageProps> = ({ onBack }) => {
+export const AdminPage: React.FC<AdminPageProps> = ({ onBack, initialTab = 'members' }) => {
   const { user, isAdmin } = useAuth();
   const { currentClubId } = useClub();
   const { posts, members: activeMembers } = useData();
-  const [activeTab, setActiveTab] = useState<TabType>('members');
+  const [activeTab, setActiveTab] = useState<TabType>(initialTab);
   const [members, setMembers] = useState<Member[]>([]);
   const [inviteCodes, setInviteCodes] = useState<InviteCode[]>([]);
   const [loading, setLoading] = useState(true);
@@ -686,15 +688,47 @@ const StatsTab: React.FC<{ stats: any }> = ({ stats }) => {
   );
 };
 
-// Notices Tab Component
+// NoticesTab Component
 const NoticesTab: React.FC<{ currentClubId: string; user: any }> = ({
   currentClubId,
   user,
 }) => {
+  const { posts, deletePost, updatePost } = useData();
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [sendPush, setSendPush] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  // Filter notices
+  const notices = posts
+    .filter((p) => p.type === 'notice')
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+
+  const handleEdit = (notice: any) => {
+    setEditingId(notice.id);
+    setTitle(notice.title);
+    setContent(notice.content);
+    setSendPush(false);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleCancelEdit = () => {
+    setEditingId(null);
+    setTitle('');
+    setContent('');
+    setSendPush(true);
+  };
+
+  const handleDelete = async (noticeId: string) => {
+    if (!confirm('정말 이 공지를 삭제하시겠습니까?')) return;
+    try {
+      await deletePost(noticeId);
+      toast.success('공지가 삭제되었습니다');
+    } catch (error) {
+      toast.error('삭제 실패');
+    }
+  };
 
   const handleSubmit = async () => {
     if (!title.trim() || !content.trim()) {
@@ -702,33 +736,40 @@ const NoticesTab: React.FC<{ currentClubId: string; user: any }> = ({
       return;
     }
 
-    if (!confirm('공지사항을 등록하시겠습니까?' + (sendPush ? '\n(멤버들에게 푸시 알림이 발송됩니다)' : ''))) {
+    if (!confirm(editingId ? '공지사항을 수정하시겠습니까?' : '공지사항을 등록하시겠습니까?' + (sendPush ? '\n(멤버들에게 푸시 알림이 발송됩니다)' : ''))) {
       return;
     }
 
     setIsSubmitting(true);
     try {
-      // Create Post with type 'notice'
-      const postData: Omit<PostDoc, 'id' | 'createdAt' | 'updatedAt'> = {
-        type: 'notice',
-        title: title.trim(),
-        content: content.trim(),
-        authorId: user.id,
-        authorName: user.realName,
-        authorPhotoURL: user.photoURL,
-        // Push Notification Meta
-        pushStatus: sendPush ? 'PENDING' : undefined,
-      };
+      if (editingId) {
+        await updatePost(editingId, {
+          title: title.trim(),
+          content: content.trim(),
+          pushStatus: sendPush ? 'PENDING' : undefined,
+        });
+        toast.success('공지사항이 수정되었습니다');
+        setEditingId(null);
+      } else {
+        const postData: Omit<PostDoc, 'id' | 'createdAt' | 'updatedAt'> = {
+          type: 'notice',
+          title: title.trim(),
+          content: content.trim(),
+          authorId: user.id,
+          authorName: user.realName,
+          authorPhotoURL: user.photoURL,
+          pushStatus: sendPush ? 'PENDING' : undefined,
+        };
+        await createPost(currentClubId, postData);
+        toast.success('공지사항이 등록되었습니다');
+      }
 
-      await createPost(currentClubId, postData);
-
-      toast.success('공지사항이 등록되었습니다');
       setTitle('');
       setContent('');
       setSendPush(true);
     } catch (error) {
-      console.error('Error creating notice:', error);
-      toast.error('공지 등록 실패');
+      console.error('Error saving notice:', error);
+      toast.error('저장 실패');
     } finally {
       setIsSubmitting(false);
     }
@@ -741,9 +782,16 @@ const NoticesTab: React.FC<{ currentClubId: string; user: any }> = ({
         animate={{ opacity: 1, y: 0 }}
         className="bg-white dark:bg-gray-900 rounded-2xl p-6 shadow-sm space-y-4"
       >
-        <div className="flex items-center gap-2 mb-2">
-          <Bell className="w-5 h-5 text-purple-600" />
-          <h2 className="text-lg font-bold">새 공지 작성</h2>
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <Bell className="w-5 h-5 text-purple-600" />
+            <h2 className="text-lg font-bold">{editingId ? '공지 수정' : '새 공지 작성'}</h2>
+          </div>
+          {editingId && (
+            <Button variant="ghost" size="sm" onClick={handleCancelEdit}>
+              취소
+            </Button>
+          )}
         </div>
 
         <div className="space-y-4">
@@ -776,7 +824,9 @@ const NoticesTab: React.FC<{ currentClubId: string; user: any }> = ({
               </div>
               <div>
                 <p className="font-medium">푸시 알림 발송</p>
-                <p className="text-xs text-gray-500">모든 멤버에게 알림을 보냅니다</p>
+                <p className="text-xs text-gray-500">
+                  {editingId ? '수정 시에도 알림을 다시 보낼 수 있습니다' : '모든 멤버에게 알림을 보냅니다'}
+                </p>
               </div>
             </div>
             <Switch
@@ -793,17 +843,53 @@ const NoticesTab: React.FC<{ currentClubId: string; user: any }> = ({
             {isSubmitting ? (
               <div className="flex items-center gap-2">
                 <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
-                등록 중...
+                처리 중...
               </div>
             ) : (
               <div className="flex items-center gap-2">
-                <Send className="w-4 h-4" />
-                공지 등록 및 발송
+                {editingId ? <Check className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+                {editingId ? '수정하기' : '등록하기'}
               </div>
             )}
           </Button>
         </div>
       </motion.div>
+
+      {/* Notice List */}
+      <div className="space-y-3">
+        <h3 className="font-bold text-lg px-2">등록된 공지 ({notices.length})</h3>
+        {notices.map((notice) => (
+          <motion.div
+            key={notice.id}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className={`bg-white dark:bg-gray-900 rounded-xl p-4 shadow-sm border border-gray-100 dark:border-gray-800 ${editingId === notice.id ? 'ring-2 ring-purple-500' : ''}`}
+          >
+            <div className="flex items-start justify-between">
+              <div>
+                <h4 className="font-bold text-gray-900 dark:text-white mb-1 line-clamp-1">{notice.title}</h4>
+                <p className="text-sm text-gray-500 dark:text-gray-400 line-clamp-2 mb-2">{notice.content}</p>
+                <div className="flex items-center gap-2 text-xs text-gray-400">
+                  <span>{formatDistanceToNow(notice.createdAt, { addSuffix: true, locale: ko })}</span>
+                  {notice.pushStatus && (
+                    <Badge variant="outline" className="text-[10px] h-5">
+                      {notice.pushStatus === 'SENT' ? '푸시완료' : '푸시미발송'}
+                    </Badge>
+                  )}
+                </div>
+              </div>
+              <div className="flex gap-1">
+                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEdit(notice)}>
+                  <Edit2 className="w-4 h-4 text-gray-500" />
+                </Button>
+                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDelete(notice.id)}>
+                  <Trash2 className="w-4 h-4 text-red-500" />
+                </Button>
+              </div>
+            </div>
+          </motion.div>
+        ))}
+      </div>
 
       <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-xl flex gap-3 text-sm text-blue-700 dark:text-blue-300">
         <Activity className="w-5 h-5 flex-shrink-0" />

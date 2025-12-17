@@ -19,19 +19,19 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
 }) => {
   const { user, isAdmin } = useAuth();
   const { addPost } = useData();
-  
+
   const [postType, setPostType] = useState<PostType>(defaultType);
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [loading, setLoading] = useState(false);
-  
+
   // Event fields
   const [eventType, setEventType] = useState<'PRACTICE' | 'GAME'>('PRACTICE');
   const [startDate, setStartDate] = useState('');
   const [startTime, setStartTime] = useState('');
   const [place, setPlace] = useState('');
   const [opponent, setOpponent] = useState('');
-  
+
   // Poll fields
   const [choices, setChoices] = useState<string[]>(['', '']);
   const [multi, setMulti] = useState(false);
@@ -46,13 +46,13 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
     { id: 'album', label: '앨범', icon: ImageIcon },
   ];
 
-  const availableTypes = isAdmin() 
-    ? postTypes 
+  const availableTypes = isAdmin()
+    ? postTypes
     : postTypes.filter(t => !t.adminOnly);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!title.trim() || !content.trim()) {
       toast.error('제목과 내용을 입력해주세요');
       return;
@@ -84,7 +84,7 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
         postData.startAt = startAt;
         postData.place = place;
         postData.voteCloseAt = voteCloseAt;
-        
+
         if (eventType === 'GAME' && opponent) {
           postData.opponent = opponent;
         }
@@ -104,14 +104,14 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
         }));
         postData.multi = multi;
         postData.anonymous = anonymous;
-        
+
         if (closeDate) {
           postData.closeAt = new Date(`${closeDate}T23:59:59`);
         }
       }
 
       await addPost(postData);
-      
+
       toast.success('게시글이 작성되었습니다');
       onClose();
       resetForm();
@@ -172,7 +172,7 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
             initial={{ opacity: 0, y: 100 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 100 }}
-            className="relative w-full max-w-2xl mx-4 mb-4 sm:mb-0 bg-white dark:bg-gray-900 rounded-2xl shadow-2xl max-h-[90vh] overflow-hidden flex flex-col"
+            className="relative w-full max-w-2xl mx-4 mb-20 sm:mb-0 bg-white dark:bg-gray-900 rounded-2xl shadow-2xl max-h-[90vh] overflow-hidden flex flex-col"
           >
             {/* Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-800">
@@ -195,17 +195,16 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
                     {availableTypes.map((type) => {
                       const Icon = type.icon;
                       const isActive = postType === type.id;
-                      
+
                       return (
                         <button
                           key={type.id}
                           type="button"
                           onClick={() => setPostType(type.id)}
-                          className={`flex flex-col items-center gap-2 p-3 rounded-lg border-2 transition-all ${
-                            isActive
+                          className={`flex flex-col items-center gap-2 p-3 rounded-lg border-2 transition-all ${isActive
                               ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/20'
                               : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'
-                          }`}
+                            }`}
                         >
                           <Icon className={`w-5 h-5 ${isActive ? 'text-blue-600' : 'text-gray-600 dark:text-gray-400'}`} />
                           <span className={`text-xs ${isActive ? 'text-blue-600 font-medium' : 'text-gray-600 dark:text-gray-400'}`}>
@@ -256,7 +255,7 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
                           <option value="GAME">경기</option>
                         </select>
                       </div>
-                      
+
                       <div>
                         <label className="block text-sm font-medium mb-2">장소</label>
                         <input
@@ -279,7 +278,7 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
                           className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-800"
                         />
                       </div>
-                      
+
                       <div>
                         <label className="block text-sm font-medium mb-2">시간</label>
                         <input
@@ -333,7 +332,7 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
                           </div>
                         ))}
                       </div>
-                      
+
                       {choices.length < 10 && (
                         <button
                           type="button"

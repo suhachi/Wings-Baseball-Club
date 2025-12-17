@@ -24,9 +24,9 @@ export type { UserRole };
 export interface User {
   id: string; // using uid from firebase auth
   realName: string;
-  nickname?: string;
-  phone?: string;
-  photoURL?: string;
+  nickname?: string | null;
+  phone?: string | null;
+  photoURL?: string | null;
   role: UserRole;
   position?: string;
   backNumber?: string;

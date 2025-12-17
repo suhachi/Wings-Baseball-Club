@@ -58,6 +58,7 @@ service cloud.firestore {
     }
     
     function getUserData() {
+      // NOTE: Users are at ROOT based on Auth Service
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
     
@@ -69,7 +70,9 @@ service cloud.firestore {
       return isSignedIn() && getUserData().role in ['PRESIDENT', 'TREASURER'];
     }
     
-    // Users Collection
+    // === ROOT COLLECTIONS ===
+    
+    // Users Collection (Root)
     match /users/{userId} {
       allow read: if isSignedIn();
       allow create: if isSignedIn() && isOwner(userId);
@@ -77,60 +80,81 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
     
-    // Invite Codes Collection
+    // Invite Codes Collection (Root)
     match /inviteCodes/{codeId} {
-      allow read: if isSignedIn();
+      allow read: if true; 
       allow create: if isAdmin();
       allow update: if isAdmin();
       allow delete: if isAdmin();
     }
     
-    // Posts Collection
-    match /posts/{postId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn();
-      allow update: if isSignedIn() && (isOwner(resource.data.authorId) || isAdmin());
-      allow delete: if isSignedIn() && (isOwner(resource.data.authorId) || isAdmin());
-    }
-    
-    // Comments Collection
-    match /comments/{commentId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn();
-      allow update: if isSignedIn() && isOwner(resource.data.authorId);
-      allow delete: if isSignedIn() && (isOwner(resource.data.authorId) || isAdmin());
-    }
-    
-    // Attendance Collection
-    match /attendance/{attendanceId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn();
-      allow update: if isSignedIn() && isOwner(resource.data.userId);
-      allow delete: if isAdmin();
-    }
-    
-    // Finance Collection
-    match /finance/{financeId} {
-      allow read: if isSignedIn();
-      allow create: if isTreasury();
-      allow update: if isTreasury();
-      allow delete: if isTreasury();
-    }
-    
-    // Game Records Collection
-    match /gameRecords/{recordId} {
-      allow read: if isSignedIn();
-      allow create: if isAdmin();
-      allow update: if isAdmin();
-      allow delete: if isAdmin();
-    }
-    
-    // Notifications Collection
+    // Notifications Collection (Root)
     match /notifications/{notificationId} {
       allow read: if isSignedIn() && isOwner(resource.data.userId);
-      allow create: if isSignedIn();
+      allow create: if isSignedIn(); 
       allow update: if isSignedIn() && isOwner(resource.data.userId);
       allow delete: if isSignedIn() && isOwner(resource.data.userId);
+    }
+
+    // === CLUB COLLECTIONS ===
+    
+    // Club Documents
+    match /clubs/{clubId} {
+      allow read: if isSignedIn(); 
+      
+      // Members (Club-Scoped)
+      match /members/{userId} {
+        allow read: if isSignedIn();
+        allow write: if isAdmin();
+      }
+
+      // Invites (Club-Scoped)
+      match /invites/{codeId} {
+        allow read: if isAdmin();
+        allow write: if isAdmin();
+      }
+
+      // Posts
+      match /posts/{postId} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn();
+        allow update: if isSignedIn() && (isOwner(resource.data.authorId) || isAdmin());
+        allow delete: if isSignedIn() && (isOwner(resource.data.authorId) || isAdmin());
+
+        // Comments (Nested)
+        match /comments/{commentId} {
+          allow read: if isSignedIn();
+          allow create: if isSignedIn();
+          allow update: if isSignedIn() && isOwner(resource.data.authorId);
+          allow delete: if isSignedIn() && (isOwner(resource.data.authorId) || isAdmin());
+        }
+        
+        // Attendance (Nested)
+        match /attendance/{userId} {
+          allow read: if isSignedIn();
+          allow create: if isSignedIn();
+          allow update: if isSignedIn() && (isOwner(userId) || isAdmin()); 
+          allow delete: if isAdmin();
+        }
+
+        // Game Records (Nested)
+        match /record_batters/{recordId} {
+          allow read: if isSignedIn();
+          allow write: if isAdmin();
+        }
+        match /record_pitchers/{recordId} {
+          allow read: if isSignedIn();
+          allow write: if isAdmin();
+        }
+      }
+      
+      // Ledger / Finance
+      match /ledger/{financeId} {
+        allow read: if isSignedIn();
+        allow create: if isTreasury();
+        allow update: if isTreasury();
+        allow delete: if isTreasury();
+      }
     }
   }
 }
