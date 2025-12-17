@@ -28,7 +28,9 @@ export interface UserDoc {
 
 // Invite Code Document
 export interface InviteCodeDoc {
+  id: string;
   code: string;
+  clubId: string; // Added clubId
   role: UserRole;
   createdBy: string;
   createdByName: string;
@@ -57,9 +59,9 @@ export interface PostDoc {
 
   // Event specific
   eventType?: EventType;
-  startAt?: Date;
-  place?: string;
-  opponent?: string;
+  startAt?: Date | null;
+  place?: string | null;
+  opponent?: string | null;
   voteCloseAt?: Date;
   voteClosed?: boolean;
 

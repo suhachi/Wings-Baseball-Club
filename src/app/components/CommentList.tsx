@@ -13,10 +13,9 @@ interface CommentListProps {
 
 export const CommentList: React.FC<CommentListProps> = ({ postId }) => {
   const { user, isAdmin } = useAuth();
-  const { comments, users, deleteComment, toggleCommentLike } = useData();
-  
-  const postComments = comments
-    .filter(c => c.postId === postId)
+  const { comments, members, deleteComment } = useData();
+
+  const postComments = (comments[postId] || [])
     .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
 
   if (postComments.length === 0) {
@@ -51,15 +50,15 @@ interface CommentItemProps {
 
 const CommentItem: React.FC<CommentItemProps> = ({ comment, index, canDelete }) => {
   const { user } = useAuth();
-  const { users, deleteComment, toggleCommentLike } = useData();
+  const { members, deleteComment } = useData();
   const [showMenu, setShowMenu] = useState(false);
   const [liked, setLiked] = useState(comment.likes?.includes(user?.id || '') || false);
-  
-  const author = users.find(u => u.id === comment.authorId);
+
+  const author = members.find(u => u.uid === comment.authorId);
 
   const handleDelete = async () => {
     if (!confirm('댓글을 삭제하시겠습니까?')) return;
-    
+
     try {
       await deleteComment(comment.postId, comment.id);
       toast.success('댓글이 삭제되었습니다');
@@ -71,7 +70,7 @@ const CommentItem: React.FC<CommentItemProps> = ({ comment, index, canDelete }) 
 
   const handleLike = async () => {
     if (!user) return;
-    
+
     try {
       await toggleCommentLike(comment.postId, comment.id, user.id);
       setLiked(!liked);
@@ -150,11 +149,10 @@ const CommentItem: React.FC<CommentItemProps> = ({ comment, index, canDelete }) 
         <div className="flex items-center gap-4 mt-2">
           <button
             onClick={handleLike}
-            className={`flex items-center gap-1 text-xs transition-colors ${
-              liked
-                ? 'text-red-600 dark:text-red-400'
-                : 'text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400'
-            }`}
+            className={`flex items-center gap-1 text-xs transition-colors ${liked
+              ? 'text-red-600 dark:text-red-400'
+              : 'text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400'
+              }`}
           >
             <Heart className={`w-4 h-4 ${liked ? 'fill-current' : ''}`} />
             <span>{comment.likes?.length || 0}</span>

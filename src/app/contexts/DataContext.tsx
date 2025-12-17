@@ -11,13 +11,12 @@ import {
   deleteComment as deleteCommentInDb,
   getAttendances,
   updateAttendance as updateAttendanceInDb,
-  getUserAttendance,
   getMembers,
   getUserNotifications,
   markNotificationAsRead as markNotificationAsReadInDb,
   markAllNotificationsAsRead as markAllNotificationsAsReadInDb,
 } from '../../lib/firebase/firestore.service';
-import type { PostDoc, CommentDoc, AttendanceDoc, AttendanceStatus, PostType, NotificationDoc } from '../../lib/firebase/types';
+import type { PostDoc, CommentDoc, AttendanceDoc, AttendanceStatus, PostType } from '../../lib/firebase/types';
 
 // Re-export types
 export type { PostType, AttendanceStatus };
@@ -51,7 +50,7 @@ export interface Post {
   };
 
   // Poll specific
-  choices?: Array<{ id: string; label: string; count: number }>;
+  choices?: Array<{ id: string; label: string; count: number; votes?: string[] }>;
   multi?: boolean;
   anonymous?: boolean;
   closeAt?: Date;
@@ -71,6 +70,10 @@ export interface Post {
 
   // Push specific
   pushStatus?: 'SENT' | 'FAILED' | 'PENDING';
+
+  // Stats specific
+  likes?: string[];
+  images?: string[];
 }
 
 export interface Comment {
@@ -137,8 +140,11 @@ interface DataContextType {
   deletePost: (id: string) => Promise<void>;
   loadComments: (postId: string) => Promise<void>;
   addComment: (postId: string, content: string) => Promise<void>;
+  deleteComment: (postId: string, commentId: string) => Promise<void>;
   updateAttendance: (postId: string, userId: string, status: AttendanceStatus) => Promise<void>;
   getMyAttendance: (postId: string, userId: string) => AttendanceStatus;
+  votePoll: (postId: string, userId: string, choices: string[]) => Promise<void>;
+  getMyVote: (postId: string, userId: string) => string[] | null;
   loadAttendances: (postId: string) => Promise<void>;
   loadNotifications: () => Promise<void>;
   markNotificationAsRead: (notificationId: string) => Promise<void>;
@@ -198,6 +204,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
             id: choice.id,
             label: choice.label,
             count: choice.votes?.length || 0,
+            votes: choice.votes || [],
           }));
           post.multi = postDoc.multi;
           post.anonymous = postDoc.anonymous;
@@ -399,14 +406,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!user) return;
 
     try {
-      const commentData: Omit<CommentDoc, 'id' | 'createdAt' | 'updatedAt'> = {
-        postId,
-        content,
-        authorId: user.id,
-        authorName: user.realName,
-        authorPhotoURL: user.photoURL,
-      };
-
       // Note: addCommentInDb(clubId, postId, data)
       const commentDataForDb: Omit<CommentDoc, 'id' | 'createdAt' | 'updatedAt' | 'postId'> = {
         content,
@@ -421,6 +420,63 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.error('Error adding comment:', error);
       throw error;
     }
+  };
+
+  // 댓글 삭제
+  const deleteComment = async (postId: string, commentId: string) => {
+    try {
+      await deleteCommentInDb(currentClubId, postId, commentId);
+      await loadComments(postId);
+    } catch (error) {
+      console.error('Error deleting comment:', error);
+      throw error;
+    }
+  };
+
+  // 투표하기
+  const votePoll = async (postId: string, userId: string, selectedChoices: string[]) => {
+    try {
+      const post = posts.find((p) => p.id === postId);
+      if (!post || !post.choices) return;
+
+      const updatedChoices = post.choices.map((choice) => {
+        let newVotes = choice.votes || [];
+        // 기존 투표 제거
+        if (newVotes.includes(userId)) {
+          newVotes = newVotes.filter((id) => id !== userId);
+        }
+        // 새로운 투표 추가
+        if (selectedChoices.includes(choice.id)) {
+          newVotes = [...newVotes, userId];
+        }
+        return {
+          id: choice.id,
+          label: choice.label,
+          votes: newVotes,
+        };
+      });
+
+      await updatePostInDb(currentClubId, postId, {
+        choices: updatedChoices,
+      });
+
+      await refreshPosts();
+    } catch (error) {
+      console.error('Error voting poll:', error);
+      throw error;
+    }
+  };
+
+  // 내 투표 가져오기
+  const getMyVote = (postId: string, userId: string): string[] | null => {
+    const post = posts.find((p) => p.id === postId);
+    if (!post || !post.choices) return null;
+
+    const myChoices = post.choices
+      .filter((choice) => choice.votes?.includes(userId))
+      .map((choice) => choice.id);
+
+    return myChoices.length > 0 ? myChoices : null;
   };
 
   // 출석 현황 로드
@@ -478,13 +534,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!user) return;
 
     try {
-      const attendanceData: Omit<AttendanceDoc, 'id' | 'updatedAt'> = {
-        postId,
-        userId,
-        userName: user.realName,
-        status,
-      };
-
       // Note: updateAttendanceInDb(clubId, postId, userId, data)
       const attendanceDataForDb: Omit<AttendanceDoc, 'id' | 'updatedAt' | 'postId' | 'userId'> = {
         userName: user.realName,
@@ -548,8 +597,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         deletePost,
         loadComments,
         addComment,
+        deleteComment,
         updateAttendance,
         getMyAttendance,
+        votePoll,
+        getMyVote,
         loadAttendances,
         loadNotifications,
         markNotificationAsRead,

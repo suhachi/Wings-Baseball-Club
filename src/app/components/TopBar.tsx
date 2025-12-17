@@ -10,6 +10,7 @@ interface TopBarProps {
   showNotification?: boolean;
   showSettings?: boolean;
   onNotificationClick?: () => void;
+  onLogoClick?: () => void;
   unreadNotificationCount?: number;
 }
 
@@ -20,6 +21,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   showNotification = true,
   showSettings = false,
   onNotificationClick,
+  onLogoClick,
   unreadNotificationCount,
 }) => {
   const { isAdmin } = useAuth();
@@ -43,9 +45,15 @@ export const TopBar: React.FC<TopBarProps> = ({
 
           {/* Center */}
           <div className="flex-1 text-center">
-            <h1 className="text-white font-bold tracking-tight">
-              {title}
-            </h1>
+            <div
+              onClick={onLogoClick}
+              className={`inline-flex items-center gap-2 ${onLogoClick ? 'cursor-pointer hover:opacity-90 active:scale-95 transition-all' : ''}`}
+            >
+              <img src="/wingslogo.jpg" alt="Logo" className="w-8 h-8 rounded-full border-2 border-white/20 shadow-sm" />
+              <h1 className="text-white font-bold tracking-tight">
+                {title}
+              </h1>
+            </div>
           </div>
 
           {/* Right */}

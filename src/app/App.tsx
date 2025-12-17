@@ -133,6 +133,7 @@ function AppContent() {
         showNotification={pageConfig.showNotification}
         showSettings={pageConfig.showSettings}
         onNotificationClick={() => handlePageChange('notifications')}
+        onLogoClick={() => handlePageChange('home')}
         unreadNotificationCount={unreadNotificationCount}
       />
 

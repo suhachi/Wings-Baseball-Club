@@ -1,30 +1,36 @@
 import React, { useState } from 'react';
-import { X, CheckCircle } from 'lucide-react';
+import { X, CheckCircle, MoreVertical, Edit2, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '../contexts/AuthContext';
 import { useData, Post } from '../contexts/DataContext';
 import { toast } from 'sonner';
 import { Button } from './ui/button';
-
 interface PollVoteModalProps {
   poll: Post;
   isOpen: boolean;
   onClose: () => void;
+  onEdit?: () => void;
+  onDelete?: () => void;
 }
 
 export const PollVoteModal: React.FC<PollVoteModalProps> = ({
   poll,
   isOpen,
   onClose,
+  onEdit,
+  onDelete,
 }) => {
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   const { votePoll, getMyVote } = useData();
   const [selectedChoices, setSelectedChoices] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
+
+  const canEdit = user?.id === poll.author.id || isAdmin();
 
   const myVote = user ? getMyVote(poll.id, user.id) : null;
   const hasVoted = myVote !== null;
-  const totalVotes = poll.choices?.reduce((sum, c) => sum + (c.votes || 0), 0) || 0;
+  const totalVotes = poll.choices?.reduce((sum, c) => sum + (c.votes?.length || 0), 0) || 0;
 
   const handleChoiceToggle = (choiceId: string) => {
     if (hasVoted) return;
@@ -40,6 +46,18 @@ export const PollVoteModal: React.FC<PollVoteModalProps> = ({
       // 단일 선택
       setSelectedChoices([choiceId]);
     }
+  };
+
+  const handleEdit = () => {
+    onEdit?.();
+    setShowMenu(false);
+  };
+
+  const handleDelete = () => {
+    if (confirm('투표를 삭제하시겠습니까?')) {
+      onDelete?.();
+    }
+    setShowMenu(false);
   };
 
   const handleSubmit = async () => {
@@ -92,14 +110,49 @@ export const PollVoteModal: React.FC<PollVoteModalProps> = ({
             <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-800">
               <div className="flex items-center justify-between">
                 <h2 className="text-xl font-bold">{poll.title}</h2>
-                <button
-                  onClick={onClose}
-                  className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-                >
-                  <X className="w-5 h-5" />
-                </button>
+                <div className="flex items-center gap-2">
+                  {canEdit && (
+                    <div className="relative">
+                      <button
+                        onClick={() => setShowMenu(!showMenu)}
+                        className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                      >
+                        <MoreVertical className="w-5 h-5" />
+                      </button>
+
+                      {showMenu && (
+                        <motion.div
+                          initial={{ opacity: 0, scale: 0.95 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          className="absolute right-0 mt-2 w-32 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 py-1 z-50"
+                        >
+                          <button
+                            onClick={handleEdit}
+                            className="flex items-center gap-2 w-full px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-700/50"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                            수정
+                          </button>
+                          <button
+                            onClick={handleDelete}
+                            className="flex items-center gap-2 w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                            삭제
+                          </button>
+                        </motion.div>
+                      )}
+                    </div>
+                  )}
+                  <button
+                    onClick={onClose}
+                    className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
               </div>
-              
+
               <div className="mt-2 flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
                 <span>총 {totalVotes}명 참여</span>
                 {poll.multi && <span className="text-blue-600 dark:text-blue-400">복수 선택 가능</span>}
@@ -122,15 +175,14 @@ export const PollVoteModal: React.FC<PollVoteModalProps> = ({
                   {poll.choices?.map((choice) => {
                     const percentage = totalVotes > 0 ? (choice.votes || 0) / totalVotes * 100 : 0;
                     const isMyChoice = myVote?.includes(choice.id);
-                    
+
                     return (
                       <div
                         key={choice.id}
-                        className={`p-4 rounded-lg border-2 transition-all ${
-                          isMyChoice
-                            ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                            : 'border-gray-200 dark:border-gray-700'
-                        }`}
+                        className={`p-4 rounded-lg border-2 transition-all ${isMyChoice
+                          ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                          : 'border-gray-200 dark:border-gray-700'
+                          }`}
                       >
                         <div className="flex items-center justify-between mb-2">
                           <div className="flex items-center gap-2">
@@ -143,20 +195,19 @@ export const PollVoteModal: React.FC<PollVoteModalProps> = ({
                             {choice.votes || 0}표
                           </span>
                         </div>
-                        
+
                         <div className="relative h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
                           <motion.div
                             initial={{ width: 0 }}
                             animate={{ width: `${percentage}%` }}
                             transition={{ duration: 0.5, delay: 0.1 }}
-                            className={`h-full ${
-                              isMyChoice
-                                ? 'bg-gradient-to-r from-blue-500 to-blue-600'
-                                : 'bg-gradient-to-r from-gray-400 to-gray-500'
-                            }`}
+                            className={`h-full ${isMyChoice
+                              ? 'bg-gradient-to-r from-blue-500 to-blue-600'
+                              : 'bg-gradient-to-r from-gray-400 to-gray-500'
+                              }`}
                           />
                         </div>
-                        
+
                         <div className="mt-1 text-xs text-gray-600 dark:text-gray-400">
                           {percentage.toFixed(1)}%
                         </div>
@@ -193,23 +244,21 @@ export const PollVoteModal: React.FC<PollVoteModalProps> = ({
 
                   {poll.choices?.map((choice) => {
                     const isSelected = selectedChoices.includes(choice.id);
-                    
+
                     return (
                       <button
                         key={choice.id}
                         onClick={() => handleChoiceToggle(choice.id)}
-                        className={`w-full p-4 rounded-lg border-2 transition-all text-left ${
-                          isSelected
-                            ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                            : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
-                        }`}
+                        className={`w-full p-4 rounded-lg border-2 transition-all text-left ${isSelected
+                          ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                          : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                          }`}
                       >
                         <div className="flex items-center gap-3">
-                          <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
-                            isSelected
-                              ? 'border-blue-500 bg-blue-500'
-                              : 'border-gray-300 dark:border-gray-600'
-                          }`}>
+                          <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${isSelected
+                            ? 'border-blue-500 bg-blue-500'
+                            : 'border-gray-300 dark:border-gray-600'
+                            }`}>
                             {isSelected && (
                               <motion.div
                                 initial={{ scale: 0 }}

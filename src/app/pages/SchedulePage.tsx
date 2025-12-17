@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
-import { Calendar, Trophy, MapPin, Users, Clock, CheckCircle2, XCircle, HelpCircle, Plus, Edit, Trash2, MoreVertical } from 'lucide-react';
+import { Calendar, Trophy, MapPin, Users, Clock, CheckCircle2, XCircle, HelpCircle, Plus, Edit, Trash2 } from 'lucide-react';
 import { useData, Post, AttendanceStatus } from '../contexts/DataContext';
 import { useAuth } from '../contexts/AuthContext';
 import { Card } from '../components/ui/card';

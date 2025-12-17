@@ -165,6 +165,17 @@ export const BoardsPage: React.FC = () => {
           poll={selectedPoll}
           isOpen={selectedPoll !== null}
           onClose={() => setSelectedPoll(null)}
+          onEdit={() => {
+            setSelectedPoll(null);
+            setEditingPost(selectedPoll);
+          }}
+          onDelete={async () => {
+            if (selectedPoll) {
+              await deletePost(selectedPoll.id);
+              toast.success('투표가 삭제되었습니다');
+            }
+            setSelectedPoll(null);
+          }}
         />
       )}
     </div>

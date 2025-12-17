@@ -110,9 +110,9 @@ export const LoginPage: React.FC = () => {
           <motion.div
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
-            className="inline-flex items-center justify-center w-16 h-16 mb-4 bg-white/20 rounded-2xl shadow-lg"
+            className="inline-flex items-center justify-center w-24 h-24 mb-6 bg-white/20 rounded-full shadow-lg border-4 border-white/30 overflow-hidden"
           >
-            <Trophy className="w-8 h-8 text-white" />
+            <img src="/wingslogo.jpg" alt="Wings Logo" className="w-full h-full object-cover" />
           </motion.div>
           <h1 className="text-2xl font-bold text-white mb-2">WINGS</h1>
           <p className="text-blue-100 text-sm">야구동호회 커뮤니티</p>

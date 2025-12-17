@@ -139,25 +139,36 @@ export async function createAccount(
 
     const inviteDoc = querySnapshot.docs[0];
     const inviteData = inviteDoc.data();
+    const clubId = inviteData.clubId; // Get clubId from invite
 
     const userData: UserDoc = {
       uid: user.uid,
       realName,
       nickname: nickname || user.displayName || '',
-      phone: phone || null,  // Firestore does not support undefined
-      photoURL: user.photoURL || null, // Firestore does not support undefined
+      phone: phone || null,
+      photoURL: user.photoURL || null,
       role: inviteData.role || 'MEMBER',
       status: 'active',
       createdAt: new Date(),
       updatedAt: new Date(),
     };
 
-    // Firestore에 사용자 정보 저장
+    // 1. Write to global users collection (Profile)
     await setDoc(doc(db, 'users', user.uid), {
       ...userData,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
+
+    // 2. Add to Club Members collection (Membership)
+    if (clubId) {
+      await setDoc(doc(db, 'clubs', clubId, 'members', user.uid), {
+        ...userData,
+        clubId, // Store clubId in member doc too
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    }
 
     // 초대 코드 사용 처리
     await setDoc(

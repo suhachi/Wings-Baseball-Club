@@ -16,7 +16,7 @@ import {
   validateInviteCode,
   InviteCodeData
 } from '../../lib/firebase/auth.service';
-import type { UserDoc, UserRole } from '../../lib/firebase/types';
+import type { UserRole } from '../../lib/firebase/types';
 
 // User roles and constraints re-export
 export type { UserRole };

@@ -6,9 +6,6 @@ import {
   BarChart3,
   Shield,
   UserPlus,
-  Mail,
-  Calendar,
-  TrendingUp,
   Activity,
   Edit2,
   Trash2,
@@ -27,6 +24,7 @@ import {
   getInviteCodes,
   createInviteCode,
   deleteInviteCode,
+  updateInviteCode,
   createPost,
 } from '../../lib/firebase/firestore.service';
 import { Button } from '../components/ui/button';
@@ -38,7 +36,7 @@ import { Badge } from '../components/ui/badge';
 import { toast } from 'sonner';
 import { formatDistanceToNow } from 'date-fns';
 import { ko } from 'date-fns/locale';
-import type { UserRole, PostDoc } from '../../lib/firebase/types';
+import type { UserRole, PostDoc, InviteCodeDoc } from '../../lib/firebase/types';
 
 type TabType = 'members' | 'invites' | 'stats' | 'notices';
 
@@ -53,26 +51,30 @@ interface Member {
   createdAt: Date;
 }
 
-interface InviteCode {
-  id: string;
-  code: string;
-  role: UserRole;
-  createdBy: string;
-  createdByName: string;
-  createdAt: Date;
-  expiresAt?: Date;
-  isUsed: boolean;
-  usedBy?: string;
-  usedByName?: string;
-  usedAt?: Date;
-  maxUses: number;
-  currentUses: number;
+interface InviteCode extends InviteCodeDoc {
+  id: string; // InviteCodeDoc has code as key, but sometimes we map id. Firestore service returns id same as code.
 }
 
 interface AdminPageProps {
   onBack?: () => void;
   initialTab?: TabType;
 }
+
+const roleLabels: Record<UserRole, string> = {
+  PRESIDENT: '회장',
+  DIRECTOR: '감독',
+  TREASURER: '총무',
+  ADMIN: '관리자',
+  MEMBER: '일반',
+};
+
+const roleColors: Record<UserRole, string> = {
+  PRESIDENT: 'from-yellow-500 to-orange-500',
+  DIRECTOR: 'from-blue-500 to-cyan-500',
+  TREASURER: 'from-green-500 to-emerald-500',
+  ADMIN: 'from-purple-500 to-pink-500',
+  MEMBER: 'from-gray-500 to-gray-600',
+};
 
 export const AdminPage: React.FC<AdminPageProps> = ({ onBack, initialTab = 'members' }) => {
   const { user, isAdmin } = useAuth();
@@ -162,6 +164,17 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onBack, initialTab = 'memb
     } catch (error) {
       console.error('Error deleting invite code:', error);
       toast.error('삭제 실패');
+    }
+  };
+
+  const handleUpdateInviteCode = async (code: string, updates: Partial<InviteCode>) => {
+    try {
+      await updateInviteCode(currentClubId, code, updates);
+      await loadData();
+      toast.success('초대 코드가 수정되었습니다');
+    } catch (error) {
+      console.error('Error updating invite code:', error);
+      toast.error('수정 실패');
     }
   };
 
@@ -270,7 +283,9 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onBack, initialTab = 'memb
                 setShowCreateInvite={setShowCreateInvite}
                 onCreateInviteCode={handleCreateInviteCode}
                 onDeleteInviteCode={handleDeleteInviteCode}
+                onUpdateInviteCode={handleUpdateInviteCode}
               />
+
             )}
 
             {/* Notices Tab */}
@@ -294,21 +309,7 @@ const MembersTab: React.FC<{
 }> = ({ members, editingMember, setEditingMember, onUpdateMember }) => {
   const [editData, setEditData] = useState<Partial<Member>>({});
 
-  const roleLabels: Record<UserRole, string> = {
-    PRESIDENT: '회장',
-    DIRECTOR: '감독',
-    TREASURER: '총무',
-    ADMIN: '관리자',
-    MEMBER: '일반',
-  };
 
-  const roleColors: Record<UserRole, string> = {
-    PRESIDENT: 'from-yellow-500 to-orange-500',
-    DIRECTOR: 'from-blue-500 to-cyan-500',
-    TREASURER: 'from-green-500 to-emerald-500',
-    ADMIN: 'from-purple-500 to-pink-500',
-    MEMBER: 'from-gray-500 to-gray-600',
-  };
 
   const startEdit = (member: Member) => {
     setEditingMember(member.id);
@@ -340,7 +341,7 @@ const MembersTab: React.FC<{
                   onChange={(e) =>
                     setEditData({ ...editData, role: e.target.value as UserRole })
                   }
-                  className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-lg"
+                  className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
                 >
                   <option value="MEMBER">일반</option>
                   <option value="ADMIN">관리자</option>
@@ -473,16 +474,38 @@ const InvitesTab: React.FC<{
   setShowCreateInvite: (show: boolean) => void;
   onCreateInviteCode: (data: any) => void;
   onDeleteInviteCode: (code: string) => void;
+  onUpdateInviteCode: (code: string, updates: Partial<InviteCode>) => void;
 }> = ({
   inviteCodes,
   showCreateInvite,
   setShowCreateInvite,
   onCreateInviteCode,
   onDeleteInviteCode,
+  onUpdateInviteCode,
 }) => {
     const [newCode, setNewCode] = useState('');
     const [newRole, setNewRole] = useState<UserRole>('MEMBER');
     const [maxUses, setMaxUses] = useState(1);
+
+    // Edit States
+    const [editingCode, setEditingCode] = useState<string | null>(null);
+    const [editRole, setEditRole] = useState<UserRole>('MEMBER');
+    const [editMaxUses, setEditMaxUses] = useState(1);
+
+    const startEdit = (invite: InviteCode) => {
+      setEditingCode(invite.code);
+      setEditRole(invite.role);
+      setEditMaxUses(invite.maxUses);
+    };
+
+    const handleUpdate = () => {
+      if (!editingCode) return;
+      onUpdateInviteCode(editingCode, {
+        role: editRole,
+        maxUses: editMaxUses,
+      });
+      setEditingCode(null);
+    };
 
     const handleCreate = () => {
       if (!newCode.trim()) {
@@ -531,7 +554,7 @@ const InvitesTab: React.FC<{
               <select
                 value={newRole}
                 onChange={(e) => setNewRole(e.target.value as UserRole)}
-                className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-lg"
+                className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
               >
                 <option value="MEMBER">일반</option>
                 <option value="ADMIN">관리자</option>
@@ -582,6 +605,11 @@ const InvitesTab: React.FC<{
                     >
                       {invite.isUsed ? '사용됨' : '사용 가능'}
                     </span>
+                    <span
+                      className={`ml-2 px-2 py-0.5 text-xs font-medium text-white bg-gradient-to-r ${roleColors[invite.role]} rounded-full`}
+                    >
+                      {roleLabels[invite.role]}
+                    </span>
                   </div>
                   <p className="text-sm text-gray-600 dark:text-gray-400">
                     생성자: {invite.createdByName}
@@ -594,15 +622,62 @@ const InvitesTab: React.FC<{
                   </p>
                 </div>
                 {!invite.isUsed && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => onDeleteInviteCode(invite.code)}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => startEdit(invite)}
+                    >
+                      <Edit2 className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => onDeleteInviteCode(invite.code)}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
                 )}
               </div>
+
+              {/* Edit Mode Form */}
+              {editingCode === invite.code && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  className="mt-4 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl space-y-3"
+                >
+                  <div>
+                    <Label>역할 수정</Label>
+                    <select
+                      value={editRole}
+                      onChange={(e) => setEditRole(e.target.value as UserRole)}
+                      className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                    >
+                      <option value="MEMBER">일반</option>
+                      <option value="ADMIN">관리자</option>
+                      <option value="TREASURER">총무</option>
+                      <option value="DIRECTOR">감독</option>
+                      <option value="PRESIDENT">회장</option>
+                    </select>
+                  </div>
+                  <div>
+                    <Label>최대 사용 횟수 수정</Label>
+                    <Input
+                      type="number"
+                      value={editMaxUses}
+                      onChange={(e) => setEditMaxUses(parseInt(e.target.value) || 1)}
+                      min="1"
+                    />
+                  </div>
+                  <div className="flex gap-2 justify-end">
+                    <Button size="sm" variant="outline" onClick={() => setEditingCode(null)}>취소</Button>
+                    <Button size="sm" onClick={handleUpdate}>저장</Button>
+                  </div>
+                </motion.div>
+              )}
+
               {invite.isUsed && invite.usedByName && (
                 <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
                   <p className="text-sm text-gray-600 dark:text-gray-400">

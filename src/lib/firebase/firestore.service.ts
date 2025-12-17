@@ -17,9 +17,11 @@ import {
   addDoc,
 } from 'firebase/firestore';
 import { db } from './config';
-import type {
+import {
+  UserDoc,
   PostDoc,
   CommentDoc,
+  InviteCodeDoc,
   AttendanceDoc,
   FinanceDoc,
   BatterRecordDoc,
@@ -328,10 +330,11 @@ export async function updateMember(clubId: string, userId: string, updates: any)
  */
 export async function createInviteCode(clubId: string, codeData: Omit<any, 'id' | 'createdAt'>): Promise<string> {
   try {
-    // invite code is docId? Yes.
-    const inviteRef = getClubDoc(clubId, 'invites', codeData.code);
+    // Standardizing on ROOT 'inviteCodes' collection to match auth.service.ts
+    const inviteRef = doc(db, 'inviteCodes', codeData.code); // Use code as ID
     await setDoc(inviteRef, {
       ...codeData,
+      clubId, // Save clubId to know which club this invite belongs to
       createdAt: serverTimestamp(),
     });
     return codeData.code;
@@ -344,10 +347,11 @@ export async function createInviteCode(clubId: string, codeData: Omit<any, 'id' 
 /**
  * 초대 코드 목록 가져오기
  */
-export async function getInviteCodes(clubId: string): Promise<any[]> {
+export async function getInviteCodes(clubId: string): Promise<InviteCodeDoc[]> {
   try {
-    const invitesRef = getClubCol(clubId, 'invites');
-    const q = query(invitesRef, orderBy('createdAt', 'desc'));
+    const invitesRef = collection(db, 'inviteCodes');
+    // Filter by clubId
+    const q = query(invitesRef, where('clubId', '==', clubId), orderBy('createdAt', 'desc'));
     const snapshot = await getDocs(q);
 
     return snapshot.docs.map((doc) => ({
@@ -356,7 +360,7 @@ export async function getInviteCodes(clubId: string): Promise<any[]> {
       createdAt: (doc.data().createdAt as Timestamp)?.toDate(),
       expiresAt: (doc.data().expiresAt as Timestamp)?.toDate(),
       usedAt: (doc.data().usedAt as Timestamp)?.toDate(),
-    }));
+    })) as unknown as InviteCodeDoc[];
   } catch (error) {
     console.error('Error getting invite codes:', error);
     return [];
@@ -366,11 +370,32 @@ export async function getInviteCodes(clubId: string): Promise<any[]> {
 /**
  * 초대 코드 삭제
  */
-export async function deleteInviteCode(clubId: string, code: string): Promise<void> {
+export async function deleteInviteCode(_clubId: string, code: string): Promise<void> {
   try {
-    await deleteDoc(getClubDoc(clubId, 'invites', code));
+    // Delete from root collection
+    await deleteDoc(doc(db, 'inviteCodes', code));
   } catch (error) {
     console.error('Error deleting invite code:', error);
+    throw error;
+  }
+}
+
+/**
+ * 초대 코드 수정 (역할, 최대 사용 횟수, 만료일 등)
+ */
+export async function updateInviteCode(
+  _clubId: string,
+  code: string,
+  updates: Partial<any>
+): Promise<void> {
+  try {
+    const inviteRef = doc(db, 'inviteCodes', code);
+    await updateDoc(inviteRef, {
+      ...updates,
+      // No updatedAt field in current schema, but good to have if we added it
+    });
+  } catch (error) {
+    console.error('Error updating invite code:', error);
     throw error;
   }
 }
