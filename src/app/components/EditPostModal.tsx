@@ -18,11 +18,11 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
 }) => {
   const { user, isAdmin } = useAuth();
   const { updatePost } = useData();
-  
+
   const [title, setTitle] = useState(post.title);
   const [content, setContent] = useState(post.content);
   const [loading, setLoading] = useState(false);
-  
+
   // Event fields
   const [eventType, setEventType] = useState<'PRACTICE' | 'GAME'>(post.eventType || 'PRACTICE');
   const [startDate, setStartDate] = useState(
@@ -33,7 +33,7 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
   );
   const [place, setPlace] = useState(post.place || '');
   const [opponent, setOpponent] = useState(post.opponent || '');
-  
+
   // Poll fields
   const [choices, setChoices] = useState<string[]>(post.choices || ['', '']);
   const [multi, setMulti] = useState(post.multi || false);
@@ -61,7 +61,7 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!title.trim()) {
       toast.error('제목을 입력해주세요');
       return;
@@ -160,21 +160,21 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
           className="absolute inset-0 bg-black/50"
           onClick={onClose}
         />
-        
+
         {/* Modal */}
         <motion.div
           initial={{ opacity: 0, y: '100%' }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: '100%' }}
           transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-          className="relative w-full max-w-md bg-white dark:bg-gray-900 rounded-t-3xl sm:rounded-3xl shadow-xl max-h-[90vh] overflow-hidden flex flex-col"
+          onClick={(e) => e.stopPropagation()}
+          className="bg-white dark:bg-gray-900 w-full max-w-lg h-[90vh] sm:h-auto sm:max-h-[85vh] overflow-hidden rounded-t-[20px] sm:rounded-2xl shadow-xl border border-gray-200 dark:border-gray-800 flex flex-col"
         >
-          {/* Header */}
-          <div className="flex items-center justify-between px-6 py-4 border-b">
-            <h2 className="font-bold">게시글 수정</h2>
+          <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between shrink-0 bg-white dark:bg-gray-900">
+            <h2 className="text-lg font-bold text-gray-900 dark:text-white">게시글 수정</h2>
             <button
               onClick={onClose}
-              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors"
+              className="p-2 -mr-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full"
             >
               <X className="w-5 h-5" />
             </button>
@@ -205,22 +205,20 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
                       <button
                         type="button"
                         onClick={() => setEventType('PRACTICE')}
-                        className={`flex-1 py-3 px-4 rounded-xl font-medium transition-colors ${
-                          eventType === 'PRACTICE'
+                        className={`flex-1 py-3 px-4 rounded-xl font-medium transition-colors ${eventType === 'PRACTICE'
                             ? 'bg-blue-500 text-white'
                             : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300'
-                        }`}
+                          }`}
                       >
                         연습
                       </button>
                       <button
                         type="button"
                         onClick={() => setEventType('GAME')}
-                        className={`flex-1 py-3 px-4 rounded-xl font-medium transition-colors ${
-                          eventType === 'GAME'
+                        className={`flex-1 py-3 px-4 rounded-xl font-medium transition-colors ${eventType === 'GAME'
                             ? 'bg-blue-500 text-white'
                             : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300'
-                        }`}
+                          }`}
                       >
                         경기
                       </button>

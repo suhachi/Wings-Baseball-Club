@@ -172,14 +172,14 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
             initial={{ opacity: 0, y: 100 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 100 }}
-            className="relative w-full max-w-2xl mx-4 mb-20 sm:mb-0 bg-white dark:bg-gray-900 rounded-2xl shadow-2xl max-h-[90vh] overflow-hidden flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white dark:bg-gray-900 w-full max-w-lg h-[90vh] sm:h-auto sm:max-h-[85vh] overflow-hidden rounded-t-[20px] sm:rounded-2xl shadow-xl border border-gray-200 dark:border-gray-800 flex flex-col"
           >
-            {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-800">
-              <h2 className="text-xl font-bold">게시글 작성</h2>
+            <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between shrink-0 bg-white dark:bg-gray-900">
+              <h2 className="text-lg font-bold text-gray-900 dark:text-white">새 게시글 작성</h2>
               <button
                 onClick={onClose}
-                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                className="p-2 -mr-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -202,8 +202,8 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
                           type="button"
                           onClick={() => setPostType(type.id)}
                           className={`flex flex-col items-center gap-2 p-3 rounded-lg border-2 transition-all ${isActive
-                              ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/20'
-                              : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'
+                            ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/20'
+                            : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'
                             }`}
                         >
                           <Icon className={`w-5 h-5 ${isActive ? 'text-blue-600' : 'text-gray-600 dark:text-gray-400'}`} />

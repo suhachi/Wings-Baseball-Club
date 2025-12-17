@@ -15,6 +15,8 @@ import {
   Bell,
   Send,
 } from 'lucide-react';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore'; // Import Firestore helpers directly for repair
+import { db } from '../../lib/firebase/config';
 import { useAuth } from '../contexts/AuthContext';
 import { useData } from '../contexts/DataContext';
 import { useClub } from '../contexts/ClubContext';
@@ -87,16 +89,19 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onBack, initialTab = 'memb
   const [editingMember, setEditingMember] = useState<string | null>(null);
   const [showCreateInvite, setShowCreateInvite] = useState(false);
 
-  // 관리자 권한 확인
+  // 관리자 권한 확인 및 데이터 로드
   useEffect(() => {
     if (!isAdmin()) {
       toast.error('관리자 권한이 필요합니다');
       return;
     }
-    loadData();
-  }, []);
+    if (currentClubId) {
+      loadData();
+    }
+  }, [currentClubId]); // currentClubId 변경 시 재실행
 
   const loadData = async () => {
+    if (!currentClubId) return; // Guard against undefined clubId
     setLoading(true);
     try {
       const [membersData, invitesData] = await Promise.all([
@@ -105,6 +110,32 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onBack, initialTab = 'memb
       ]);
       setMembers(membersData);
       setInviteCodes(invitesData);
+
+      // Self-Repair: If current user is not in the list, add them.
+      // This handles legacy admins created before the createAccount fix.
+      if (user && !membersData.find((m) => m.id === user.id)) {
+        console.log('User missing from club members, repairing...');
+        try {
+          await setDoc(doc(db, 'clubs', currentClubId, 'members', user.id), {
+            uid: user.id, // Collection expects uid field often, map id to uid if needed or keep consistent. Let's use user.id which is uid.
+            realName: user.realName,
+            nickname: user.nickname,
+            photoURL: user.photoURL,
+            role: user.role, // Use current role
+            status: 'active',
+            clubId: currentClubId,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          });
+          toast.success('멤버십 정보가 동기화되었습니다.');
+          // Reload to show the new member
+          const updatedMembers = await getAllMembers(currentClubId);
+          setMembers(updatedMembers);
+        } catch (err) {
+          console.error('Auto-repair failed:', err);
+        }
+      }
+
     } catch (error) {
       console.error('Error loading admin data:', error);
       toast.error('데이터 로드 실패');
@@ -333,58 +364,85 @@ const MembersTab: React.FC<{
         >
           {editingMember === member.id ? (
             // Edit Mode
-            <div className="space-y-4">
-              <div>
-                <Label>역할</Label>
-                <select
-                  value={editData.role}
-                  onChange={(e) =>
-                    setEditData({ ...editData, role: e.target.value as UserRole })
-                  }
-                  className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+            <motion.div
+              key={member.id}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-white dark:bg-gray-900 w-full max-w-md rounded-2xl p-6 shadow-xl border border-gray-200 dark:border-gray-800"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-xl font-bold text-gray-900 dark:text-white">
+                  멤버 정보 수정
+                </h3>
+                <button
+                  onClick={() => setEditingMember(null)}
+                  className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
                 >
-                  <option value="MEMBER">일반</option>
-                  <option value="ADMIN">관리자</option>
-                  <option value="TREASURER">총무</option>
-                  <option value="DIRECTOR">감독</option>
-                  <option value="PRESIDENT">회장</option>
-                </select>
+                  <X className="w-6 h-6" />
+                </button>
               </div>
-              <div>
-                <Label>포지션</Label>
-                <Input
-                  value={editData.position || ''}
-                  onChange={(e) =>
-                    setEditData({ ...editData, position: e.target.value })
-                  }
-                  placeholder="예: 투수"
-                />
-              </div>
-              <div>
-                <Label>등번호</Label>
-                <Input
-                  value={editData.backNumber || ''}
-                  onChange={(e) =>
-                    setEditData({ ...editData, backNumber: e.target.value })
-                  }
-                  placeholder="예: 10"
-                />
-              </div>
-              <div>
-                <Label>상태</Label>
-                <select
-                  value={editData.status}
-                  onChange={(e) =>
-                    setEditData({
-                      ...editData,
-                      status: e.target.value as 'active' | 'inactive',
-                    })
-                  }
-                  className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-lg"
-                >
-                  <option value="active">활성</option>
-                  <option value="inactive">비활성</option>
-                </select>
+
+              <div className="space-y-4">
+                <div>
+                  <Label className="text-gray-700 dark:text-gray-300">역할</Label>
+                  <select
+                    className="w-full mt-1 p-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                    value={member.role}
+                    onChange={(e) =>
+                      onUpdateMember(member.id, {
+                        role: e.target.value as UserRole,
+                      })
+                    }
+                  >
+                    <option value="MEMBER" className="bg-white dark:bg-gray-800 text-gray-900 dark:text-white">일반</option>
+                    <option value="ADMIN" className="bg-white dark:bg-gray-800 text-gray-900 dark:text-white">관리자</option>
+                    <option value="TREASURER" className="bg-white dark:bg-gray-800 text-gray-900 dark:text-white">총무</option>
+                    <option value="DIRECTOR" className="bg-white dark:bg-gray-800 text-gray-900 dark:text-white">감독</option>
+                    <option value="PRESIDENT" className="bg-white dark:bg-gray-800 text-gray-900 dark:text-white">회장</option>
+                  </select>
+                </div>
+
+                <div>
+                  <Label className="text-gray-700 dark:text-gray-300">포지션</Label>
+                  <Input
+                    value={member.position || ''}
+                    onChange={(e) =>
+                      onUpdateMember(member.id, { position: e.target.value })
+                    }
+                    placeholder="예: 투수"
+                    className="mt-1 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white border-gray-200 dark:border-gray-700"
+                  />
+                </div>
+
+                <div>
+                  <Label className="text-gray-700 dark:text-gray-300">등번호</Label>
+                  <Input
+                    value={member.backNumber || ''}
+                    onChange={(e) =>
+                      onUpdateMember(member.id, { backNumber: e.target.value })
+                    }
+                    placeholder="예: 10"
+                    className="mt-1 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white border-gray-200 dark:border-gray-700"
+                  />
+                </div>
+
+                <div>
+                  <Label className="text-gray-700 dark:text-gray-300">상태</Label>
+                  <select
+                    className="w-full mt-1 p-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
+                    value={member.status}
+                    onChange={(e) =>
+                      onUpdateMember(member.id, {
+                        status: e.target.value as 'active' | 'inactive',
+                      })
+                    }
+                  >
+                    <option value="active" className="bg-white dark:bg-gray-800 text-gray-900 dark:text-white">활성</option>
+                    <option value="inactive" className="bg-white dark:bg-gray-800 text-gray-900 dark:text-white">비활성</option>
+                  </select>
+                </div>
               </div>
               <div className="flex gap-2">
                 <Button
@@ -405,7 +463,7 @@ const MembersTab: React.FC<{
                   취소
                 </Button>
               </div>
-            </div>
+            </motion.div>
           ) : (
             // View Mode
             <div className="flex items-center justify-between">

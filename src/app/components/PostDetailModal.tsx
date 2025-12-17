@@ -157,48 +157,38 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
 
                 <div className="flex items-center gap-2">
                   {(canEdit || canDelete) && (
-                    <div className="relative">
-                      <button
-                        onClick={() => setShowMenu(!showMenu)}
-                        className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-                      >
-                        <MoreVertical className="w-5 h-5" />
-                      </button>
-
-                      {showMenu && (
-                        <motion.div
-                          initial={{ opacity: 0, scale: 0.95 }}
-                          animate={{ opacity: 1, scale: 1 }}
-                          className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-20"
+                    <div className="flex gap-2">
+                      {canEdit && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            console.log('Edit clicked');
+                            onEdit?.(post);
+                          }}
+                          className="p-2 text-gray-500 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-full transition-colors"
                         >
-                          {canEdit && (
-                            <button
-                              onClick={handleEdit}
-                              className="flex items-center gap-2 w-full px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-                            >
-                              <Edit className="w-4 h-4" />
-                              수정
-                            </button>
-                          )}
-                          {canDelete && (
-                            <button
-                              onClick={handleDelete}
-                              className="flex items-center gap-2 w-full px-4 py-2 text-left text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                              삭제
-                            </button>
-                          )}
-                        </motion.div>
+                          <Edit2 className="w-5 h-5" />
+                        </button>
+                      )}
+                      {canDelete && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            console.log('Delete clicked');
+                            onDelete?.(post.id);
+                          }}
+                          className="p-2 text-gray-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-full transition-colors"
+                        >
+                          <Trash2 className="w-5 h-5" />
+                        </button>
                       )}
                     </div>
                   )}
-
                   <button
                     onClick={onClose}
-                    className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                    className="p-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full"
                   >
-                    <X className="w-5 h-5" />
+                    <X className="w-6 h-6" />
                   </button>
                 </div>
               </div>

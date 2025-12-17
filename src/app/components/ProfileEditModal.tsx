@@ -16,7 +16,7 @@ export const ProfileEditModal: React.FC<ProfileEditModalProps> = ({
 }) => {
   const { user, updateUser } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
+
   const [nickname, setNickname] = useState(user?.nickname || '');
   const [phone, setPhone] = useState(user?.phone || '');
   const [position, setPosition] = useState(user?.position || '');
@@ -46,7 +46,7 @@ export const ProfileEditModal: React.FC<ProfileEditModalProps> = ({
     }
 
     setPhotoFile(file);
-    
+
     // Create preview
     const reader = new FileReader();
     reader.onloadend = () => {
@@ -57,7 +57,7 @@ export const ProfileEditModal: React.FC<ProfileEditModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!user) return;
 
     setLoading(true);
@@ -100,23 +100,23 @@ export const ProfileEditModal: React.FC<ProfileEditModalProps> = ({
           className="absolute inset-0 bg-black/50"
           onClick={onClose}
         />
-        
+
         {/* Modal */}
         <motion.div
           initial={{ opacity: 0, y: '100%' }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: '100%' }}
           transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-          className="relative w-full max-w-md bg-white dark:bg-gray-900 rounded-t-3xl sm:rounded-3xl shadow-xl max-h-[90vh] overflow-hidden flex flex-col"
+          className="bg-white dark:bg-gray-900 w-full max-w-md rounded-t-[20px] sm:rounded-2xl p-6 shadow-xl border border-gray-200 dark:border-gray-800"
+          onClick={(e) => e.stopPropagation()}
         >
-          {/* Header */}
-          <div className="flex items-center justify-between px-6 py-4 border-b">
-            <h2 className="font-bold">프로필 수정</h2>
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="text-xl font-bold text-gray-900 dark:text-white">프로필 수정</h3>
             <button
               onClick={onClose}
-              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors"
+              className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
             >
-              <X className="w-5 h-5" />
+              <X className="w-6 h-6" />
             </button>
           </div>
 
@@ -224,9 +224,9 @@ export const ProfileEditModal: React.FC<ProfileEditModalProps> = ({
                 <input
                   type="text"
                   value={user.role === 'PRESIDENT' ? '회장' :
-                         user.role === 'DIRECTOR' ? '감독' :
-                         user.role === 'TREASURER' ? '총무' :
-                         user.role === 'ADMIN' ? '관리자' : '일반회원'}
+                    user.role === 'DIRECTOR' ? '감독' :
+                      user.role === 'TREASURER' ? '총무' :
+                        user.role === 'ADMIN' ? '관리자' : '일반회원'}
                   disabled
                   className="w-full px-4 py-3 border rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-500 cursor-not-allowed"
                 />

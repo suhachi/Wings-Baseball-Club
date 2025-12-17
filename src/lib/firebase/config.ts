@@ -6,7 +6,7 @@
 
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore, enableIndexedDbPersistence, CACHE_SIZE_UNLIMITED } from 'firebase/firestore';
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, CACHE_SIZE_UNLIMITED } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import { getFunctions } from 'firebase/functions';
 
@@ -26,28 +26,17 @@ const app = initializeApp(firebaseConfig);
 
 // Firebase 서비스 초기화
 export const auth = getAuth(app);
-export const db = getFirestore(app);
+
+// Firestore 초기화 (New Persistence API)
+export const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({
+    tabManager: persistentMultipleTabManager(),
+    cacheSizeBytes: CACHE_SIZE_UNLIMITED
+  })
+});
+
 export const storage = getStorage(app);
 export const functions = getFunctions(app, 'asia-northeast3'); // 서울 리전
-
-// Firestore 오프라인 persistence 활성화 (PWA 지원)
-// 단, 개발 환경에서는 여러 탭이 열려있을 수 있으므로 에러를 무시합니다
-if (typeof window !== 'undefined') {
-  enableIndexedDbPersistence(db, {
-    cacheSizeBytes: CACHE_SIZE_UNLIMITED
-  }).catch((err) => {
-    if (err.code === 'failed-precondition') {
-      // 여러 탭이 열려있을 때
-      console.warn('⚠️ Firestore persistence failed: Multiple tabs open');
-    } else if (err.code === 'unimplemented') {
-      // 브라우저가 지원하지 않을 때
-      console.warn('⚠️ Firestore persistence not supported');
-    } else {
-      // 기타 에러는 무시 (예: 오프라인 상태)
-      console.warn('⚠️ Firestore persistence warning:', err.code);
-    }
-  });
-}
 
 // 전역 Firebase 에러 핸들러
 const originalConsoleError = console.error;

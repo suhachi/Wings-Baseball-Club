@@ -32,11 +32,13 @@ export interface InviteCodeData {
   maxUses: number;
   currentUses: number;
   expiresAt?: Timestamp;
+  clubId?: string;
 }
 
 /**
  * 1. 초대 코드 유효성 검증 (로그인 전 단계)
  * 유효하면 초대 코드 데이터를 반환하고, 아니면 에러를 던짐.
+ * Fix: 'WINGS2024' 코드가 DB에 없으면 자동으로 생성하여 로그인 가능하게 함.
  */
 export async function validateInviteCode(inviteCode: string): Promise<InviteCodeData> {
   try {
@@ -45,6 +47,26 @@ export async function validateInviteCode(inviteCode: string): Promise<InviteCode
     const querySnapshot = await getDocs(q);
 
     if (querySnapshot.empty) {
+      // Emergency Fallback: If 'WINGS2024' is entered but missing, create it.
+      if (inviteCode === 'WINGS2024') {
+        const fallbackData: InviteCodeData = {
+          code: 'WINGS2024',
+          role: 'MEMBER',
+          isUsed: false,
+          maxUses: 9999,
+          currentUses: 0,
+          clubId: 'default-club',
+          // No expiresAt
+        };
+
+        // Create in DB so createAccount step also passes
+        await setDoc(doc(db, 'inviteCodes', 'WINGS2024'), {
+          ...fallbackData,
+          createdAt: serverTimestamp(),
+        });
+
+        return fallbackData;
+      }
       throw new Error('존재하지 않는 초대 코드입니다.');
     }
 

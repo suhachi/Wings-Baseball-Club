@@ -107,57 +107,42 @@ export const PollVoteModal: React.FC<PollVoteModalProps> = ({
             className="relative w-full max-w-lg mx-4 bg-white dark:bg-gray-900 rounded-t-3xl sm:rounded-3xl shadow-2xl max-h-[80vh] overflow-hidden flex flex-col"
           >
             {/* Header */}
-            <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-800">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-bold">{poll.title}</h2>
-                <div className="flex items-center gap-2">
-                  {canEdit && (
-                    <div className="relative">
+            <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between shrink-0 bg-white dark:bg-gray-900">
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white">{poll.title}</h2>
+              <div className="flex items-center gap-2">
+                {(canEdit || canDelete) && (
+                  <div className="flex gap-1 mr-2">
+                    {canEdit && (
                       <button
-                        onClick={() => setShowMenu(!showMenu)}
-                        className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                        onClick={handleEdit}
+                        className="p-2 text-gray-500 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-full transition-colors"
                       >
-                        <MoreVertical className="w-5 h-5" />
+                        <Edit2 className="w-4 h-4" />
                       </button>
-
-                      {showMenu && (
-                        <motion.div
-                          initial={{ opacity: 0, scale: 0.95 }}
-                          animate={{ opacity: 1, scale: 1 }}
-                          className="absolute right-0 mt-2 w-32 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 py-1 z-50"
-                        >
-                          <button
-                            onClick={handleEdit}
-                            className="flex items-center gap-2 w-full px-4 py-2 text-sm hover:bg-gray-50 dark:hover:bg-gray-700/50"
-                          >
-                            <Edit2 className="w-4 h-4" />
-                            수정
-                          </button>
-                          <button
-                            onClick={handleDelete}
-                            className="flex items-center gap-2 w-full px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                            삭제
-                          </button>
-                        </motion.div>
-                      )}
-                    </div>
-                  )}
-                  <button
-                    onClick={onClose}
-                    className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
+                    )}
+                    {canDelete && (
+                      <button
+                        onClick={handleDelete}
+                        className="p-2 text-gray-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-full transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                )}
+                <button
+                  onClick={onClose}
+                  className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                >
+                  <X className="w-6 h-6" />
+                </button>
               </div>
+            </div>
 
-              <div className="mt-2 flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
-                <span>총 {totalVotes}명 참여</span>
-                {poll.multi && <span className="text-blue-600 dark:text-blue-400">복수 선택 가능</span>}
-                {poll.anonymous && <span className="text-purple-600 dark:text-purple-400">익명 투표</span>}
-              </div>
+            <div className="mt-2 flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
+              <span>총 {totalVotes}명 참여</span>
+              {poll.multi && <span className="text-blue-600 dark:text-blue-400">복수 선택 가능</span>}
+              {poll.anonymous && <span className="text-purple-600 dark:text-purple-400">익명 투표</span>}
             </div>
 
             {/* Content */}

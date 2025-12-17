@@ -96,13 +96,14 @@ export const MemberPicker: React.FC<MemberPickerProps> = ({
                             initial={{ y: '100%' }}
                             animate={{ y: 0 }}
                             exit={{ y: '100%' }}
-                            className="w-full max-w-md bg-white dark:bg-gray-900 rounded-t-2xl sm:rounded-2xl shadow-xl flex flex-col max-h-[80vh]"
+                            onClick={(e) => e.stopPropagation()}
+                            className="bg-white dark:bg-gray-900 w-full max-w-md flex flex-col rounded-t-[20px] sm:rounded-2xl shadow-xl overflow-hidden max-h-[85vh]"
                         >
-                            <div className="p-4 border-b dark:border-gray-800 flex items-center justify-between">
-                                <h3 className="font-bold text-lg">{label}</h3>
-                                <Button variant="ghost" size="sm" onClick={() => setIsOpen(false)}>
+                            <div className="p-4 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between bg-white dark:bg-gray-900">
+                                <h3 className="font-bold text-lg text-gray-900 dark:text-white">멤버 선택</h3>
+                                <button onClick={() => setIsOpen(false)} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full text-gray-500">
                                     <X className="w-5 h-5" />
-                                </Button>
+                                </button>
                             </div>
 
                             <div className="p-4">
