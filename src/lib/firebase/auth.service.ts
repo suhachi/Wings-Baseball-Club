@@ -1,31 +1,55 @@
 // Firebase Authentication Service
 import {
-  signInAnonymously,
   signOut,
   onAuthStateChanged,
   User as FirebaseUser,
+  GoogleAuthProvider,
+  signInWithPopup,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  updateProfile,
 } from 'firebase/auth';
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import {
+  doc,
+  getDoc,
+  setDoc,
+  serverTimestamp,
+  collection,
+  query,
+  where,
+  getDocs,
+  limit,
+  Timestamp
+} from 'firebase/firestore';
 import { auth, db } from './config';
 import type { UserDoc, UserRole } from './types';
 
-/**
- * 초대 코드로 회원가입
- */
-export async function redeemInviteCode(
-  inviteCode: string,
-  realName: string
-): Promise<UserDoc> {
-  try {
-    // 1. 초대 코드 확인
-    const inviteCodeRef = doc(db, 'inviteCodes', inviteCode);
-    const inviteDoc = await getDoc(inviteCodeRef);
+// Invite Code Data Interface
+export interface InviteCodeData {
+  code: string;
+  role: UserRole;
+  isUsed: boolean;
+  maxUses: number;
+  currentUses: number;
+  expiresAt?: Timestamp;
+}
 
-    if (!inviteDoc.exists()) {
+/**
+ * 1. 초대 코드 유효성 검증 (로그인 전 단계)
+ * 유효하면 초대 코드 데이터를 반환하고, 아니면 에러를 던짐.
+ */
+export async function validateInviteCode(inviteCode: string): Promise<InviteCodeData> {
+  try {
+    const inviteCodesRef = collection(db, 'inviteCodes');
+    const q = query(inviteCodesRef, where('code', '==', inviteCode), limit(1));
+    const querySnapshot = await getDocs(q);
+
+    if (querySnapshot.empty) {
       throw new Error('존재하지 않는 초대 코드입니다.');
     }
 
-    const inviteData = inviteDoc.data() as any;
+    const inviteDoc = querySnapshot.docs[0];
+    const inviteData = inviteDoc.data() as InviteCodeData;
 
     if (inviteData.isUsed && inviteData.currentUses >= inviteData.maxUses) {
       throw new Error('이미 사용된 초대 코드입니다.');
@@ -35,31 +59,112 @@ export async function redeemInviteCode(
       throw new Error('만료된 초대 코드입니다.');
     }
 
-    // 2. 익명 로그인
-    const firebaseUser = await signInAnonymously(auth).then((cred) => cred.user);
+    return inviteData;
+  } catch (error: any) {
+    if (error.code === 'unavailable') {
+      throw new Error('인터넷 연결을 확인해주세요.');
+    }
+    throw error;
+  }
+}
+
+/**
+ * 2-A. 구글 로그인
+ */
+export async function loginWithGoogle(): Promise<FirebaseUser> {
+  const provider = new GoogleAuthProvider();
+  try {
+    const result = await signInWithPopup(auth, provider);
+    return result.user;
+  } catch (error: any) {
+    console.error('Google Login Error:', error);
+    throw error;
+  }
+}
+
+/**
+ * 2-B. 이메일 회원가입
+ */
+export async function signUpWithEmail(email: string, password: string, name: string): Promise<FirebaseUser> {
+  try {
+    const result = await createUserWithEmailAndPassword(auth, email, password);
+    await updateProfile(result.user, { displayName: name });
+    return result.user;
+  } catch (error: any) {
+    console.error('Email SignUp Error:', error);
+    if (error.code === 'auth/email-already-in-use') {
+      throw new Error('이미 사용 중인 이메일입니다.');
+    }
+    throw error;
+  }
+}
+
+/**
+ * 2-C. 이메일 로그인
+ */
+export async function loginWithEmail(email: string, password: string): Promise<FirebaseUser> {
+  try {
+    const result = await signInWithEmailAndPassword(auth, email, password);
+    return result.user;
+  } catch (error: any) {
+    console.error('Email Login Error:', error);
+    if (error.code === 'auth/invalid-credential') {
+      throw new Error('이메일 또는 비밀번호가 올바르지 않습니다.');
+    }
+    throw error;
+  }
+}
+
+
+/**
+ * 3. 계정 생성 (로그인 성공 후 Firestore 처리)
+ * 초대 코드 사용 처리 및 UserDoc 생성
+ */
+export async function createAccount(
+  user: FirebaseUser,
+  inviteCode: string,
+  realName: string,
+  nickname?: string,
+  phone?: string
+): Promise<UserDoc> {
+  try {
+    // 초대 코드 데이터 다시 가져오기 (Doc Ref 필요)
+    const inviteCodesRef = collection(db, 'inviteCodes');
+    const q = query(inviteCodesRef, where('code', '==', inviteCode), limit(1));
+    const querySnapshot = await getDocs(q);
+
+    // 이 시점에서 코드가 없거나 만료되었을 수도 있지만, 
+    // validateInviteCode를 통과했다고 가정하고 진행 (혹은 여기서 다시 검증)
+    if (querySnapshot.empty) throw new Error('Invalid code during creation');
+
+    const inviteDoc = querySnapshot.docs[0];
+    const inviteData = inviteDoc.data();
 
     const userData: UserDoc = {
-      id: firebaseUser.uid,
+      uid: user.uid,
       realName,
+      nickname: nickname || user.displayName || '',
+      phone: phone,
+      photoURL: user.photoURL || undefined,
       role: inviteData.role || 'MEMBER',
       status: 'active',
       createdAt: new Date(),
       updatedAt: new Date(),
     };
 
-    // 3. Firestore에 사용자 정보 저장
-    await setDoc(doc(db, 'users', firebaseUser.uid), {
+    // Firestore에 사용자 정보 저장
+    await setDoc(doc(db, 'users', user.uid), {
       ...userData,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
 
-    // 4. 초대 코드 사용 처리
+    // 초대 코드 사용 처리
     await setDoc(
-      inviteCodeRef,
+      inviteDoc.ref,
       {
         isUsed: true,
-        usedBy: firebaseUser.uid,
+        usedBy: user.uid,
         usedByName: realName,
         usedAt: serverTimestamp(),
         currentUses: inviteData.currentUses + 1,
@@ -68,16 +173,14 @@ export async function redeemInviteCode(
     );
 
     return userData;
-  } catch (error: any) {
-    // Firebase offline error handling
-    if (error.code === 'unavailable') {
-      console.warn('Firebase is offline. Please check your internet connection.');
-      throw new Error('인터넷 연결을 확인해주세요.');
-    }
-    console.error('❌ Error redeeming invite code:', error);
+  } catch (error) {
+    console.error('Error creating account:', error);
     throw error;
   }
 }
+
+
+
 
 /**
  * 현재 사용자 정보 가져오기

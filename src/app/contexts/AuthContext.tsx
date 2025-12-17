@@ -1,7 +1,7 @@
+// Firebase Authentication Context
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User as FirebaseUser } from 'firebase/auth';
 import {
-  redeemInviteCode,
   getCurrentUserData,
   updateUserData,
   logout as firebaseLogout,
@@ -9,14 +9,20 @@ import {
   isAdmin as checkIsAdmin,
   isTreasury as checkIsTreasury,
   canRecordGame,
+  loginWithGoogle,
+  loginWithEmail,
+  signUpWithEmail,
+  createAccount,
+  validateInviteCode,
+  InviteCodeData
 } from '../../lib/firebase/auth.service';
 import type { UserDoc, UserRole } from '../../lib/firebase/types';
 
-// User roles
+// User roles and constraints re-export
 export type { UserRole };
 
 export interface User {
-  id: string;
+  id: string; // using uid from firebase auth
   realName: string;
   nickname?: string;
   phone?: string;
@@ -31,7 +37,17 @@ export interface User {
 interface AuthContextType {
   user: User | null;
   loading: boolean;
-  login: (code: string, realName: string, nickname?: string, phone?: string) => Promise<void>;
+
+  // New Auth Methods
+  signInWithGoogle: () => Promise<void>;
+  signInWithEmail: (email: string, pass: string) => Promise<void>;
+  registerWithEmail: (email: string, pass: string, name: string) => Promise<FirebaseUser>;
+
+  // Account Creation (Linking Auth + Invite Code)
+  createMsgAccount: (firebaseUser: FirebaseUser, inviteCode: string, realName: string, nickname?: string, phone?: string) => Promise<void>;
+
+  // Utils
+  checkInviteCode: (code: string) => Promise<InviteCodeData>;
   logout: () => void;
   updateUser: (updates: Partial<User>) => void;
   isAdmin: () => boolean;
@@ -46,10 +62,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Firebase 인증 상태 감지
     const unsubscribe = onAuthStateChange(async (firebaseUser: FirebaseUser | null) => {
       if (firebaseUser) {
-        // Firestore에서 사용자 데이터 가져오기
         const userData = await getCurrentUserData(firebaseUser.uid);
         if (userData) {
           setUser({
@@ -57,13 +71,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             realName: userData.realName,
             nickname: userData.nickname,
             phone: userData.phone,
-            photoURL: userData.photoURL,
+            photoURL: userData.photoURL || firebaseUser.photoURL || undefined,
             role: userData.role,
             position: userData.position,
             backNumber: userData.backNumber,
             status: userData.status,
             createdAt: userData.createdAt,
           });
+        } else {
+          // Logged in but no UserDoc (e.g. fresh signup before createAccount called)
+          // Do NOT set user yet, let the UI handle the 'creating account' state flow
         }
       } else {
         setUser(null);
@@ -74,12 +91,65 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => unsubscribe();
   }, []);
 
-  const login = async (code: string, realName: string, nickname?: string, phone?: string) => {
+  // --- New Methods ---
+
+  const signInWithGoogle = async () => {
+    setLoading(true);
     try {
-      setLoading(true);
-      const userData = await redeemInviteCode(code, realName);
+      await loginWithGoogle();
+      // onAuthStateChange will handle user state update
+    } catch (error) {
+      console.error('Google Sign In Error:', error);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const signInWithEmail = async (email: string, pass: string) => {
+    setLoading(true);
+    try {
+      await loginWithEmail(email, pass);
+    } catch (error) {
+      console.error('Email Sign In Error:', error);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const registerWithEmail = async (email: string, pass: string, name: string) => {
+    setLoading(true);
+    try {
+      return await signUpWithEmail(email, pass, name);
+    } catch (error) {
+      console.error('Email Register Error:', error);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Finalize account creation (link auth user with firestore user doc using invite code)
+  const createMsgAccount = async (
+    firebaseUser: FirebaseUser,
+    inviteCode: string,
+    realName: string,
+    nickname?: string,
+    phone?: string
+  ) => {
+    setLoading(true);
+    try {
+      const userData = await createAccount(
+        firebaseUser,
+        inviteCode,
+        realName,
+        nickname,
+        phone
+      );
+      // Manually set user state since onAuthStateChange might have fired before doc creation
       setUser({
-        id: userData.id,
+        id: userData.uid,
         realName: userData.realName,
         nickname: userData.nickname,
         phone: userData.phone,
@@ -90,16 +160,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         status: userData.status,
         createdAt: userData.createdAt,
       });
-    } catch (error: any) {
-      // Suppress console error for offline state
-      if (error.code !== 'unavailable') {
-        console.error('❌ Login error:', error);
-      }
+    } catch (error) {
+      console.error('Account Creation Error:', error);
       throw error;
     } finally {
       setLoading(false);
     }
   };
+
+  const checkInviteCode = async (code: string) => {
+    return await validateInviteCode(code);
+  }
+
+  // --- Legacy Methods ---
 
   const logout = async () => {
     try {
@@ -113,7 +186,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const updateUser = async (updates: Partial<User>) => {
     if (user) {
       try {
-        await updateUserData(user.id, updates as Partial<UserDoc>);
+        await updateUserData(user.id, updates as Partial<unknown>); // Cast to unknown then UserDoc properly if needed
         setUser({ ...user, ...updates });
       } catch (error) {
         console.error('Update user error:', error);
@@ -130,14 +203,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return user ? checkIsTreasury(user.role) : false;
   };
 
-  const isRecorder = (postId: string) => {
-    // 실제로는 Firestore에서 해당 게시글의 recorders 배열을 확인해야 함
-    // 지금은 관리자면 기록 가능하도록
+  const isRecorder = (_postId: string) => {
     return user ? canRecordGame(user.role) : false;
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, updateUser, isAdmin, isTreasury, isRecorder }}>
+    <AuthContext.Provider value={{
+      user,
+      loading,
+      signInWithGoogle,
+      signInWithEmail,
+      registerWithEmail,
+      createMsgAccount,
+      checkInviteCode,
+      logout,
+      updateUser,
+      isAdmin,
+      isTreasury,
+      isRecorder
+    }}>
       {children}
     </AuthContext.Provider>
   );

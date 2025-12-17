@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Search, X, Check, CheckCircle2 } from 'lucide-react';
+import { Search, X, Check, CheckCircle2, PlusCircle } from 'lucide-react';
 import { useData } from '../contexts/DataContext';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -57,7 +57,7 @@ export const MemberPicker: React.FC<MemberPickerProps> = ({
                     onClick={() => setIsOpen(true)}
                     type="button"
                 >
-                    <PlusCircleIcon className="w-4 h-4 mr-1" />
+                    <PlusCircle className="w-4 h-4 mr-1" />
                     추가
                 </Button>
             </div>
@@ -125,8 +125,8 @@ export const MemberPicker: React.FC<MemberPickerProps> = ({
                                             key={member.id}
                                             onClick={() => toggleSelection(member.id)}
                                             className={`flex items-center justify-between p-3 rounded-xl cursor-pointer transition-colors ${isSelected
-                                                    ? 'bg-purple-50 border border-purple-200 dark:bg-purple-900/20 dark:border-purple-800'
-                                                    : 'hover:bg-gray-50 dark:hover:bg-gray-800 border border-transparent'
+                                                ? 'bg-purple-50 border border-purple-200 dark:bg-purple-900/20 dark:border-purple-800'
+                                                : 'hover:bg-gray-50 dark:hover:bg-gray-800 border border-transparent'
                                                 }`}
                                         >
                                             <div className="flex items-center gap-3">
@@ -158,20 +158,3 @@ export const MemberPicker: React.FC<MemberPickerProps> = ({
         </div>
     );
 };
-
-const PlusCircleIcon = ({ className }: { className?: string }) => (
-    <svg
-        xmlns="http://www.w3.org/2000/svg"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        className={className}
-    >
-        <circle cx="12" cy="12" r="10" />
-        <path d="M8 12h8" />
-        <path d="M12 8v8" />
-    </svg>
-);
