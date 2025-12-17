@@ -60,7 +60,7 @@ export interface Post {
   // Game specific
   gameType?: 'LEAGUE' | 'PRACTICE';
   score?: { our: number; opp: number };
-  recorders?: Array<{ userId: string; realName: string; position?: string; backNumber?: string }>;
+  recorders?: string[];
   recordingLocked?: boolean;
   recordingLockedAt?: Date;
   recordingLockedBy?: string;
@@ -209,6 +209,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (postDoc.gameType) {
           post.gameType = postDoc.gameType;
           post.score = postDoc.score;
+          post.recorders = postDoc.recorders;
           post.recordingLocked = postDoc.recordingLocked;
           post.recordingLockedAt = postDoc.recordingLockedAt;
           post.recordingLockedBy = postDoc.recordingLockedBy;

@@ -15,6 +15,8 @@ import {
   Check,
   X,
   Plus,
+  Bell,
+  Send,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useData } from '../contexts/DataContext';
@@ -25,16 +27,19 @@ import {
   getInviteCodes,
   createInviteCode,
   deleteInviteCode,
+  createPost,
 } from '../../lib/firebase/firestore.service';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
+import { Textarea } from '../components/ui/textarea';
+import { Switch } from '../components/ui/switch';
 import { toast } from 'sonner';
 import { formatDistanceToNow } from 'date-fns';
 import { ko } from 'date-fns/locale';
-import type { UserRole } from '../../lib/firebase/types';
+import type { UserRole, PostDoc } from '../../lib/firebase/types';
 
-type TabType = 'members' | 'invites' | 'stats';
+type TabType = 'members' | 'invites' | 'stats' | 'notices';
 
 interface Member {
   id: string;
@@ -216,6 +221,16 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onBack }) => {
             초대 코드
           </button>
           <button
+            onClick={() => setActiveTab('notices')}
+            className={`flex-1 px-4 py-3 font-medium transition-colors ${activeTab === 'notices'
+              ? 'text-purple-600 border-b-2 border-purple-600'
+              : 'text-gray-600 dark:text-gray-400'
+              }`}
+          >
+            <Bell className="w-5 h-5 inline-block mr-2" />
+            공지/푸시
+          </button>
+          <button
             onClick={() => setActiveTab('stats')}
             className={`flex-1 px-4 py-3 font-medium transition-colors ${activeTab === 'stats'
               ? 'text-purple-600 border-b-2 border-purple-600'
@@ -255,6 +270,9 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onBack }) => {
                 onDeleteInviteCode={handleDeleteInviteCode}
               />
             )}
+
+            {/* Notices Tab */}
+            {activeTab === 'notices' && <NoticesTab currentClubId={currentClubId} user={user!} />}
 
             {/* Stats Tab */}
             {activeTab === 'stats' && <StatsTab stats={stats} />}
@@ -663,6 +681,135 @@ const StatsTab: React.FC<{ stats: any }> = ({ stats }) => {
             <p className="text-sm opacity-90">{stat.label}</p>
           </motion.div>
         ))}
+      </div>
+    </div>
+  );
+};
+
+// Notices Tab Component
+const NoticesTab: React.FC<{ currentClubId: string; user: any }> = ({
+  currentClubId,
+  user,
+}) => {
+  const [title, setTitle] = useState('');
+  const [content, setContent] = useState('');
+  const [sendPush, setSendPush] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleSubmit = async () => {
+    if (!title.trim() || !content.trim()) {
+      toast.error('제목과 내용을 입력하세요');
+      return;
+    }
+
+    if (!confirm('공지사항을 등록하시겠습니까?' + (sendPush ? '\n(멤버들에게 푸시 알림이 발송됩니다)' : ''))) {
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      // Create Post with type 'notice'
+      const postData: Omit<PostDoc, 'id' | 'createdAt' | 'updatedAt'> = {
+        type: 'notice',
+        title: title.trim(),
+        content: content.trim(),
+        authorId: user.id,
+        authorName: user.realName,
+        authorPhotoURL: user.photoURL,
+        // Push Notification Meta
+        pushStatus: sendPush ? 'PENDING' : undefined,
+      };
+
+      await createPost(currentClubId, postData);
+
+      toast.success('공지사항이 등록되었습니다');
+      setTitle('');
+      setContent('');
+      setSendPush(true);
+    } catch (error) {
+      console.error('Error creating notice:', error);
+      toast.error('공지 등록 실패');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="bg-white dark:bg-gray-900 rounded-2xl p-6 shadow-sm space-y-4"
+      >
+        <div className="flex items-center gap-2 mb-2">
+          <Bell className="w-5 h-5 text-purple-600" />
+          <h2 className="text-lg font-bold">새 공지 작성</h2>
+        </div>
+
+        <div className="space-y-4">
+          <div>
+            <Label htmlFor="notice-title">제목</Label>
+            <Input
+              id="notice-title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="공지사항 제목을 입력하세요"
+              className="mt-1"
+            />
+          </div>
+
+          <div>
+            <Label htmlFor="notice-content">내용</Label>
+            <Textarea
+              id="notice-content"
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              placeholder="내용을 입력하세요"
+              className="mt-1 min-h-[150px]"
+            />
+          </div>
+
+          <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-xl">
+            <div className="flex items-center gap-3">
+              <div className={`p-2 rounded-full ${sendPush ? 'bg-purple-100 text-purple-600' : 'bg-gray-200 text-gray-500'}`}>
+                <Send className="w-5 h-5" />
+              </div>
+              <div>
+                <p className="font-medium">푸시 알림 발송</p>
+                <p className="text-xs text-gray-500">모든 멤버에게 알림을 보냅니다</p>
+              </div>
+            </div>
+            <Switch
+              checked={sendPush}
+              onCheckedChange={setSendPush}
+            />
+          </div>
+
+          <Button
+            onClick={handleSubmit}
+            className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white"
+            disabled={isSubmitting}
+          >
+            {isSubmitting ? (
+              <div className="flex items-center gap-2">
+                <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                등록 중...
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <Send className="w-4 h-4" />
+                공지 등록 및 발송
+              </div>
+            )}
+          </Button>
+        </div>
+      </motion.div>
+
+      <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-xl flex gap-3 text-sm text-blue-700 dark:text-blue-300">
+        <Activity className="w-5 h-5 flex-shrink-0" />
+        <p>
+          공지사항은 메인 홈 화면 최상단에 고정될 수 있으며, 푸시 알림을 활성화하면 앱을 설치한 모든 멤버에게 즉시 알림이 전송됩니다.
+        </p>
       </div>
     </div>
   );

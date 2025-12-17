@@ -11,6 +11,7 @@ import { CreatePostModal } from '../components/CreatePostModal';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { toast } from 'sonner';
+import { MemberPicker } from '../components/MemberPicker';
 
 export const SchedulePage: React.FC = () => {
   const { posts, updateAttendance, getMyAttendance } = useData();
@@ -28,7 +29,7 @@ export const SchedulePage: React.FC = () => {
 
   const handleAttendance = (eventId: string, status: AttendanceStatus) => {
     if (!user) return;
-    
+
     const event = posts.find(p => p.id === eventId);
     if (event?.voteClosed) {
       toast.error('투표가 마감되었습니다');
@@ -162,11 +163,10 @@ const EventCard: React.FC<{
       <Card className={`overflow-hidden ${isPast ? 'opacity-75' : ''}`}>
         {/* Header with gradient */}
         <div
-          className={`p-4 ${
-            event.eventType === 'GAME'
-              ? 'bg-gradient-to-r from-blue-500 to-blue-600'
-              : 'bg-gradient-to-r from-green-500 to-green-600'
-          } text-white`}
+          className={`p-4 ${event.eventType === 'GAME'
+            ? 'bg-gradient-to-r from-blue-500 to-blue-600'
+            : 'bg-gradient-to-r from-green-500 to-green-600'
+            } text-white`}
         >
           <div className="flex items-start justify-between mb-2">
             <div className="flex items-center gap-2">
@@ -183,7 +183,7 @@ const EventCard: React.FC<{
               {getStatusText(myStatus)}
             </div>
           </div>
-          
+
           <h3 className="font-bold text-lg mb-1">{event.title}</h3>
           {event.opponent && (
             <p className="text-sm opacity-90">vs {event.opponent}</p>
@@ -294,6 +294,31 @@ const EventDetailModal: React.FC<{
   onClose: () => void;
   onAttendance: (eventId: string, status: AttendanceStatus) => void;
 }> = ({ event, myStatus, onClose, onAttendance }) => {
+  const { user, isAdmin } = useAuth();
+  const { updatePost } = useData();
+  const [isEditingRecorders, setIsEditingRecorders] = useState(false);
+  const [recorderIds, setRecorderIds] = useState<string[]>(event.recorders || []);
+  const [isSavingRecorders, setIsSavingRecorders] = useState(false);
+
+  // Sync recorderIds when event changes
+  React.useEffect(() => {
+    setRecorderIds(event.recorders || []);
+  }, [event.recorders]);
+
+  const handleSaveRecorders = async () => {
+    setIsSavingRecorders(true);
+    try {
+      await updatePost(event.id, { recorders: recorderIds });
+      toast.success('기록원이 지정되었습니다');
+      setIsEditingRecorders(false);
+    } catch (error) {
+      console.error('Error updating recorders:', error);
+      toast.error('기록원 지정 실패');
+    } finally {
+      setIsSavingRecorders(false);
+    }
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -352,6 +377,65 @@ const EventDetailModal: React.FC<{
               </div>
             )}
           </div>
+
+          {/* Game Recorders Section (Only for Games and Admins) */}
+          {event.eventType === 'GAME' && isAdmin() && (
+            <div className="p-4 border border-purple-200 dark:border-purple-900 bg-purple-50 dark:bg-purple-900/10 rounded-xl space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="text-sm font-bold text-purple-800 dark:text-purple-300 flex items-center gap-2">
+                  <Badge variant="outline" className="bg-purple-100 text-purple-700 border-purple-200">기록원</Badge>
+                  관리
+                </div>
+                {!isEditingRecorders ? (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setIsEditingRecorders(true)}
+                    className="h-8 text-xs"
+                  >
+                    편집
+                  </Button>
+                ) : (
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      onClick={handleSaveRecorders}
+                      disabled={isSavingRecorders}
+                      className="h-8 text-xs"
+                    >
+                      저장
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setIsEditingRecorders(false)}
+                      className="h-8 text-xs"
+                    >
+                      취소
+                    </Button>
+                  </div>
+                )}
+              </div>
+
+              {isEditingRecorders ? (
+                <MemberPicker
+                  selectedMemberIds={recorderIds}
+                  onSelectionChange={setRecorderIds}
+                  label="기록원 선택"
+                />
+              ) : (
+                <div className="text-sm">
+                  {recorderIds.length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                      <SelectedRecordersList recorderIds={recorderIds} />
+                    </div>
+                  ) : (
+                    <span className="text-gray-500">배정된 기록원이 없습니다.</span>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Attendance Summary */}
           {event.attendanceSummary && (
@@ -434,5 +518,21 @@ const EventDetailModal: React.FC<{
         </div>
       </motion.div>
     </motion.div>
+  );
+};
+
+// Helper component to display list of recorder names
+const SelectedRecordersList: React.FC<{ recorderIds: string[] }> = ({ recorderIds }) => {
+  const { members } = useData();
+  return (
+    <>
+      {recorderIds.map((id) => {
+        const member = members.find(m => m.id === id);
+        if (!member) return null;
+        return (
+          <span key={id} className="text-xs font-medium text-purple-700 bg-purple-100 px-2 py-1 rounded-full">{member.realName}</span>
+        )
+      })}
+    </>
   );
 };

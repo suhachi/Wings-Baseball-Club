@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { User, Settings, Bell, Shield, LogOut, ChevronRight, Crown, Star, Calendar, Trophy, MessageSquare, Edit } from 'lucide-react';
-import { useAuth } from '../contexts/AuthContext';
-import { useData } from '../contexts/DataContext';
+import { useAuth, UserRole } from '../contexts/AuthContext';
+import { useData, Post, Comment } from '../contexts/DataContext';
 import { Card } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
@@ -18,7 +18,12 @@ interface MyPageProps {
   onNavigateToGameRecord?: () => void;
 }
 
-export const MyPage: React.FC<MyPageProps> = ({ onNavigateToSettings, onNavigateToAdmin, onNavigateToFinance, onNavigateToGameRecord }) => {
+export const MyPage: React.FC<MyPageProps> = ({
+  onNavigateToSettings,
+  onNavigateToAdmin,
+  onNavigateToFinance,
+  onNavigateToGameRecord
+}: MyPageProps) => {
   const { user, logout, isAdmin, isTreasury } = useAuth();
   const { posts, comments, attendanceRecords } = useData();
   const [editModalOpen, setEditModalOpen] = useState(false);
@@ -38,10 +43,10 @@ export const MyPage: React.FC<MyPageProps> = ({ onNavigateToSettings, onNavigate
     ).length;
 
     // Count posts
-    const postCount = posts.filter(post => post.authorId === user.id).length;
+    const postCount = posts.filter((post: Post) => post.authorId === user.id).length;
 
     // Count comments
-    const commentCount = comments.filter(comment => comment.authorId === user.id).length;
+    const commentCount = comments.filter((comment: Comment) => comment.authorId === user.id).length;
 
     setStats({
       attendanceCount,
@@ -55,7 +60,7 @@ export const MyPage: React.FC<MyPageProps> = ({ onNavigateToSettings, onNavigate
     toast.success('로그아웃되었습니다');
   };
 
-  const getRoleInfo = (role: string) => {
+  const getRoleInfo = (role: UserRole) => {
     switch (role) {
       case 'PRESIDENT':
         return { label: '회장', color: 'bg-gradient-to-r from-yellow-500 to-orange-500', icon: Crown };
@@ -189,29 +194,37 @@ export const MyPage: React.FC<MyPageProps> = ({ onNavigateToSettings, onNavigate
           transition={{ delay: 0.2 }}
           className="px-4 mt-6 space-y-3"
         >
-          {/* Admin Menu */}
-          {isAdmin() && (
+          {/* Admin & Recorder Menu */}
+          {(isAdmin() || posts.some((p: Post) => p.recorders?.includes(user.id))) && (
             <>
               <Card className="overflow-hidden">
                 <div className="p-3 bg-gradient-to-r from-purple-500 to-purple-600 text-white">
                   <div className="flex items-center gap-2">
                     <Shield className="w-4 h-4" />
-                    <span className="font-semibold text-sm">관리자 메뉴</span>
+                    <span className="font-semibold text-sm">관리자 및 기록원 메뉴</span>
                   </div>
                 </div>
-                <MenuItem icon={Shield} label="관리자 페이지" onClick={() => onNavigateToAdmin?.()} />
-                <Separator />
-                <MenuItem icon={User} label="멤버 관리" onClick={() => onNavigateToAdmin?.()} />
-                <Separator />
-                <MenuItem icon={Trophy} label="경기 기록" onClick={() => onNavigateToGameRecord?.()} />
-                <Separator />
-                <MenuItem icon={Bell} label="공지 관리" onClick={() => toast.info('공지 관리')} />
-                <Separator />
-                <MenuItem icon={Calendar} label="일정 관리" onClick={() => toast.info('일정 관리')} />
-                {isTreasury() && (
+                {isAdmin() && (
+                  <>
+                    <MenuItem icon={Shield} label="관리자 페이지" onClick={() => onNavigateToAdmin?.()} />
+                    <Separator />
+                    <MenuItem icon={User} label="멤버 관리" onClick={() => onNavigateToAdmin?.()} />
+                    <Separator />
+                  </>
+                )}
+                <MenuItem icon={Trophy} label="경기 기록 관리" onClick={() => onNavigateToGameRecord?.()} />
+                {isAdmin() && (
                   <>
                     <Separator />
-                    <MenuItem icon={Trophy} label="회비/회계" onClick={() => onNavigateToFinance?.()} />
+                    <MenuItem icon={Bell} label="공지 관리" onClick={() => toast.info('공지 관리')} />
+                    <Separator />
+                    <MenuItem icon={Calendar} label="일정 관리" onClick={() => toast.info('일정 관리')} />
+                    {isTreasury() && (
+                      <>
+                        <Separator />
+                        <MenuItem icon={Trophy} label="회비/회계" onClick={() => onNavigateToFinance?.()} />
+                      </>
+                    )}
                   </>
                 )}
               </Card>
