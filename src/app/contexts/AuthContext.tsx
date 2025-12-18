@@ -8,15 +8,15 @@ import {
   onAuthStateChange,
   isAdmin as checkIsAdmin,
   isTreasury as checkIsTreasury,
-  canRecordGame,
   loginWithGoogle,
-  loginWithEmail,
-  signUpWithEmail,
   createAccount,
-  validateInviteCode,
-  InviteCodeData
 } from '../../lib/firebase/auth.service';
+import { getMember } from '../../lib/firebase/firestore.service';
 import type { UserRole } from '../../lib/firebase/types';
+
+// μATOM-0404: Gate 성공 시 clubId 컨텍스트 고정
+// 기본값은 ClubContext에서 전달받도록 변경 예정
+const DEFAULT_CLUB_ID = 'default-club';
 
 // User roles and constraints re-export
 export type { UserRole };
@@ -37,36 +37,62 @@ export interface User {
 interface AuthContextType {
   user: User | null;
   loading: boolean;
+  memberStatus: 'checking' | 'active' | 'denied' | null; // μATOM-0401~0402: 멤버 상태 체크
+  currentClubId: string; // μATOM-0404: Gate 성공 시 clubId 컨텍스트 고정
 
   // New Auth Methods
-  signInWithGoogle: () => Promise<void>;
-  signInWithEmail: (email: string, pass: string) => Promise<void>;
-  registerWithEmail: (email: string, pass: string, name: string) => Promise<FirebaseUser>;
-
-  // Account Creation (Linking Auth + Optional Invite Code)
-  createMsgAccount: (firebaseUser: FirebaseUser, inviteCode: string | null | undefined, realName: string, nickname?: string, phone?: string) => Promise<void>;
+  loginWithGoogle: () => Promise<void>;
+  logout: () => Promise<void>;
+  createMsgAccount: (firebaseUser: FirebaseUser, realName: string, nickname?: string, phone?: string) => Promise<void>;
 
   // Utils
-  checkInviteCode: (code: string) => Promise<InviteCodeData>;
-  logout: () => void;
   updateUser: (updates: Partial<User>) => void;
   isAdmin: () => boolean;
   isTreasury: () => boolean;
-  isRecorder: (postId: string) => boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+interface AuthProviderProps {
+  children: React.ReactNode;
+  clubId?: string; // μATOM-0404: Gate 성공 시 clubId 컨텍스트 고정
+}
+
+export const AuthProvider: React.FC<AuthProviderProps> = ({ children, clubId = DEFAULT_CLUB_ID }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [memberStatus, setMemberStatus] = useState<'checking' | 'active' | 'denied' | null>(null);
+  const [currentClubId] = useState<string>(clubId); // μATOM-0404: clubId 컨텍스트 고정
+
+  // μATOM-0401: 로그인 후 members/{uid} 존재 체크
+  // μATOM-0402: status==active 검증
+  const checkMemberAccess = async (uid: string, clubId: string): Promise<'active' | 'denied'> => {
+    try {
+      const memberData = await getMember(clubId, uid);
+
+      if (!memberData) {
+        // 멤버 문서가 없음
+        return 'denied';
+      }
+
+      if (memberData.status === 'active') {
+        return 'active';
+      }
+
+      // status가 'active'가 아님 (pending, rejected, withdrawn 등)
+      return 'denied';
+    } catch (error) {
+      console.error('Error checking member access:', error);
+      return 'denied';
+    }
+  };
 
   useEffect(() => {
     const unsubscribe = onAuthStateChange(async (firebaseUser: FirebaseUser | null) => {
       if (firebaseUser) {
         const userData = await getCurrentUserData(firebaseUser.uid);
         if (userData) {
-          setUser({
+          const userObj = {
             id: userData.uid,
             realName: userData.realName,
             nickname: userData.nickname,
@@ -77,13 +103,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             backNumber: userData.backNumber,
             status: userData.status,
             createdAt: userData.createdAt,
-          });
+          };
+          setUser(userObj);
+
+          // μATOM-0401: 멤버 상태 체크 (members/{uid} 존재 확인)
+          // μATOM-0402: status==active 검증
+          setMemberStatus('checking');
+          const accessStatus = await checkMemberAccess(userData.uid, currentClubId);
+          setMemberStatus(accessStatus);
         } else {
           // Logged in but no UserDoc (e.g. fresh signup before createAccount called)
           // Do NOT set user yet, let the UI handle the 'creating account' state flow
+          setMemberStatus('denied');
         }
       } else {
         setUser(null);
+        setMemberStatus(null);
       }
       setLoading(false);
     });
@@ -93,7 +128,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // --- New Methods ---
 
-  const signInWithGoogle = async () => {
+  const handleLoginWithGoogle = async () => {
     setLoading(true);
     try {
       await loginWithGoogle();
@@ -106,34 +141,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const signInWithEmail = async (email: string, pass: string) => {
-    setLoading(true);
-    try {
-      await loginWithEmail(email, pass);
-    } catch (error) {
-      console.error('Email Sign In Error:', error);
-      throw error;
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const registerWithEmail = async (email: string, pass: string, name: string) => {
-    setLoading(true);
-    try {
-      return await signUpWithEmail(email, pass, name);
-    } catch (error) {
-      console.error('Email Register Error:', error);
-      throw error;
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Finalize account creation (link auth user with firestore user doc using optional invite code)
+  // Finalize account creation (link auth user with firestore user doc)
   const createMsgAccount = async (
     firebaseUser: FirebaseUser,
-    inviteCode: string | null | undefined, // Changed to optional
     realName: string,
     nickname?: string,
     phone?: string
@@ -142,7 +152,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const userData = await createAccount(
         firebaseUser,
-        inviteCode,
         realName,
         nickname,
         phone
@@ -168,16 +177,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const checkInviteCode = async (code: string) => {
-    return await validateInviteCode(code);
-  }
-
   // --- Legacy Methods ---
 
+  // μATOM-0405: 로그아웃 시 상태 초기화
   const logout = async () => {
     try {
       await firebaseLogout();
+      // 상태 초기화: user, memberStatus 모두 null로 설정
       setUser(null);
+      setMemberStatus(null);
+      // Note: DataContext의 초기화는 DataContext 내부에서 user 변경 감지하여 처리
     } catch (error) {
       console.error('Logout error:', error);
     }
@@ -203,24 +212,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return user ? checkIsTreasury(user.role) : false;
   };
 
-  const isRecorder = (_postId: string) => {
-    return user ? canRecordGame(user.role) : false;
-  };
-
   return (
     <AuthContext.Provider value={{
       user,
       loading,
-      signInWithGoogle,
-      signInWithEmail,
-      registerWithEmail,
+      memberStatus,
+      currentClubId, // μATOM-0404: clubId 컨텍스트 고정
+      loginWithGoogle: handleLoginWithGoogle,
       createMsgAccount,
-      checkInviteCode,
       logout,
       updateUser,
       isAdmin,
-      isTreasury,
-      isRecorder
+      isTreasury
     }}>
       {children}
     </AuthContext.Provider>

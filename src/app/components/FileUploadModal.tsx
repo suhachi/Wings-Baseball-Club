@@ -1,15 +1,15 @@
 import React, { useState, useRef } from 'react';
-import { X, Upload, Image as ImageIcon, Video, File, Trash2 } from 'lucide-react';
+import { X, Upload, Image as ImageIcon, Video, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '../contexts/AuthContext';
-import { useData } from '../contexts/DataContext';
 import { toast } from 'sonner';
 import { Button } from './ui/button';
+import { uploadPostAttachment } from '../../lib/firebase/storage.service';
 
 interface FileUploadModalProps {
   isOpen: boolean;
   onClose: () => void;
-  type: 'album' | 'post';
+  type: 'post';
   postId?: string;
   onUploadComplete?: (urls: string[]) => void;
 }
@@ -23,32 +23,28 @@ interface FilePreview {
 export const FileUploadModal: React.FC<FileUploadModalProps> = ({
   isOpen,
   onClose,
-  type,
   postId,
   onUploadComplete,
 }) => {
   const { user } = useAuth();
-  const { uploadFile, addPost } = useData();
   const [files, setFiles] = useState<FilePreview[]>([]);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const acceptedTypes = type === 'album' ? 'image/*,video/*' : 'image/*';
-  const maxFiles = type === 'album' ? 10 : 5;
+  const acceptedTypes = 'image/*';
+  const maxFiles = 5;
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = Array.from(e.target.files || []);
-    
+
     if (files.length + selectedFiles.length > maxFiles) {
       toast.error(`최대 ${maxFiles}개 파일만 업로드 가능합니다`);
       return;
     }
 
     const newPreviews: FilePreview[] = [];
-    
+
     selectedFiles.forEach((file) => {
       // 파일 크기 체크 (20MB)
       if (file.size > 20 * 1024 * 1024) {
@@ -57,9 +53,9 @@ export const FileUploadModal: React.FC<FileUploadModalProps> = ({
       }
 
       // 파일 타입 체크
-      const fileType = file.type.startsWith('image/') ? 'image' : 
-                      file.type.startsWith('video/') ? 'video' : null;
-      
+      const fileType = file.type.startsWith('image/') ? 'image' :
+        file.type.startsWith('video/') ? 'video' : null;
+
       if (!fileType) {
         toast.error(`${file.name}은(는) 지원하지 않는 형식입니다`);
         return;
@@ -88,10 +84,6 @@ export const FileUploadModal: React.FC<FileUploadModalProps> = ({
       return;
     }
 
-    if (type === 'album' && !title.trim()) {
-      toast.error('제목을 입력해주세요');
-      return;
-    }
 
     if (!user) {
       toast.error('로그인이 필요합니다');
@@ -107,37 +99,24 @@ export const FileUploadModal: React.FC<FileUploadModalProps> = ({
 
       for (let i = 0; i < files.length; i++) {
         const filePreview = files[i];
-        const path = type === 'album' 
-          ? `albums/${user.id}/${Date.now()}_${filePreview.file.name}`
-          : `posts/${postId || 'temp'}/${Date.now()}_${filePreview.file.name}`;
+        let url = '';
 
-        const url = await uploadFile(filePreview.file, path);
-        uploadedUrls.push(url);
-        
-        // 진행률 업데이트
-        setProgress(Math.round(((i + 1) / totalFiles) * 100));
-      }
-
-      // 앨범 타입이면 게시글 생성
-      if (type === 'album') {
-        await addPost({
-          type: 'album',
-          title: title.trim(),
-          content: description.trim(),
-          images: uploadedUrls,
+        // Post attachment
+        url = await uploadPostAttachment(postId || 'temp', filePreview.file, (p) => {
+          const currentTotal = ((i * 100) + p) / totalFiles;
+          setProgress(Math.round(currentTotal));
         });
-        toast.success('앨범이 업로드되었습니다');
-      } else {
-        // 게시글 첨부용
-        onUploadComplete?.(uploadedUrls);
-        toast.success('파일이 업로드되었습니다');
+
+        uploadedUrls.push(url);
       }
+
+      // 게시글 첨부용
+      onUploadComplete?.(uploadedUrls);
+      toast.success('파일이 업로드되었습니다');
 
       // 초기화
       files.forEach(f => URL.revokeObjectURL(f.preview));
       setFiles([]);
-      setTitle('');
-      setDescription('');
       onClose();
     } catch (error) {
       console.error('Upload error:', error);
@@ -172,9 +151,7 @@ export const FileUploadModal: React.FC<FileUploadModalProps> = ({
             {/* Header */}
             <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-800">
               <div className="flex items-center justify-between">
-                <h2 className="text-xl font-bold">
-                  {type === 'album' ? '앨범 업로드' : '파일 업로드'}
-                </h2>
+                <h2 className="text-xl font-bold">파일 업로드</h2>
                 <button
                   onClick={onClose}
                   disabled={uploading}
@@ -187,43 +164,14 @@ export const FileUploadModal: React.FC<FileUploadModalProps> = ({
 
             {/* Content */}
             <div className="flex-1 overflow-y-auto px-6 py-4">
-              {/* Title & Description (Album only) */}
-              {type === 'album' && (
-                <div className="space-y-4 mb-6">
-                  <div>
-                    <label className="block text-sm font-medium mb-2">제목 *</label>
-                    <input
-                      type="text"
-                      value={title}
-                      onChange={(e) => setTitle(e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-800"
-                      placeholder="앨범 제목을 입력하세요"
-                      disabled={uploading}
-                    />
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium mb-2">설명 (선택)</label>
-                    <textarea
-                      value={description}
-                      onChange={(e) => setDescription(e.target.value)}
-                      rows={3}
-                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-800 resize-none"
-                      placeholder="설명을 입력하세요"
-                      disabled={uploading}
-                    />
-                  </div>
-                </div>
-              )}
 
               {/* File Upload Area */}
               <div
                 onClick={() => !uploading && fileInputRef.current?.click()}
-                className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors ${
-                  uploading
-                    ? 'border-gray-300 dark:border-gray-700 cursor-not-allowed opacity-50'
-                    : 'border-blue-300 dark:border-blue-700 hover:border-blue-500 dark:hover:border-blue-500 cursor-pointer'
-                }`}
+                className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors ${uploading
+                  ? 'border-gray-300 dark:border-gray-700 cursor-not-allowed opacity-50'
+                  : 'border-blue-300 dark:border-blue-700 hover:border-blue-500 dark:hover:border-blue-500 cursor-pointer'
+                  }`}
               >
                 <div className="flex flex-col items-center gap-3">
                   <div className="p-4 bg-blue-100 dark:bg-blue-900/20 rounded-full">
@@ -234,11 +182,11 @@ export const FileUploadModal: React.FC<FileUploadModalProps> = ({
                       파일을 드래그하거나 클릭하여 선택
                     </p>
                     <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                      {type === 'album' ? '사진, 동영상' : '이미지'} (최대 {maxFiles}개, 각 20MB 이하)
+                      이미지 (최대 {maxFiles}개, 각 20MB 이하)
                     </p>
                   </div>
                 </div>
-                
+
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -289,7 +237,7 @@ export const FileUploadModal: React.FC<FileUploadModalProps> = ({
                             <Video className="w-12 h-12 text-gray-400" />
                           </div>
                         )}
-                        
+
                         {!uploading && (
                           <button
                             onClick={() => removeFile(index)}
@@ -346,7 +294,7 @@ export const FileUploadModal: React.FC<FileUploadModalProps> = ({
                 </Button>
                 <Button
                   onClick={handleUpload}
-                  disabled={uploading || files.length === 0 || (type === 'album' && !title.trim())}
+                  disabled={uploading || files.length === 0}
                   className="flex-1"
                 >
                   {uploading ? `업로드 중 (${progress}%)` : '업로드'}

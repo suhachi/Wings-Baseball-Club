@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { User, Settings, Bell, Shield, LogOut, ChevronRight, Crown, Star, Calendar, Trophy, MessageSquare, Edit, Camera } from 'lucide-react';
+import { User, Settings, Bell, Shield, LogOut, ChevronRight, Crown, Star, Calendar, Trophy, MessageSquare, Edit, Camera, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { useAuth, UserRole } from '../contexts/AuthContext';
-import { useData, Post, Comment } from '../contexts/DataContext';
+import { useData } from '../contexts/DataContext';
 import { Card } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
@@ -10,24 +10,19 @@ import { Separator } from '../components/ui/separator';
 import { ProfileEditModal } from '../components/ProfileEditModal';
 import { APP_INFO } from '../../lib/constants/app-info';
 import { toast } from 'sonner';
+import { useFcm } from '../hooks/useFcm';
 
 interface MyPageProps {
   onNavigateToSettings?: () => void;
   onNavigateToAdmin?: () => void;
-  onNavigateToFinance?: () => void;
-  onNavigateToGameRecord?: () => void;
   onNavigateToNoticeManage?: () => void;
-  onNavigateToScheduleManage?: () => void;
   onNavigateToMyActivity?: () => void;
 }
 
 export const MyPage: React.FC<MyPageProps> = ({
   onNavigateToSettings,
   onNavigateToAdmin,
-  onNavigateToFinance,
-  onNavigateToGameRecord,
   onNavigateToNoticeManage,
-  onNavigateToScheduleManage,
   onNavigateToMyActivity
 }: MyPageProps) => {
   const { user, logout, isAdmin, isTreasury } = useAuth();
@@ -39,6 +34,11 @@ export const MyPage: React.FC<MyPageProps> = ({
     commentCount: 0,
   });
 
+  // μATOM-0512: 알림 권한 요청 UX(내정보)
+  // μATOM-0513: 토큰 취득→Functions 호출
+  // μATOM-0514: 토큰 재등록 버튼
+  const { permission, tokenRegistered, tokenError, requestPermission, retryRegister } = useFcm();
+
   // Calculate real statistics
   useEffect(() => {
     if (!user) return;
@@ -49,11 +49,11 @@ export const MyPage: React.FC<MyPageProps> = ({
     ).length;
 
     // Count posts
-    const postCount = (posts || []).filter((post: any) => post.authorId === user.id).length;
+    const postCount = (posts || []).filter((post) => post.author.id === user.id).length;
 
     // Count comments
     const allComments = Object.values(comments || {}).flat();
-    const commentCount = allComments.filter((comment: any) => comment.authorId === user.id).length;
+    const commentCount = allComments.filter((comment) => comment.author.id === user.id).length;
 
     setStats({
       attendanceCount,
@@ -212,14 +212,14 @@ export const MyPage: React.FC<MyPageProps> = ({
           transition={{ delay: 0.2 }}
           className="px-4 mt-6 space-y-3"
         >
-          {/* Admin & Recorder Menu */}
-          {(isAdmin() || posts.some((p: Post) => p.recorders?.includes(user.id))) && (
+          {/* Admin Menu */}
+          {isAdmin() && (
             <>
               <Card className="overflow-hidden">
-                <div className="p-3 bg-gradient-to-r from-purple-500 to-purple-600 text-white">
+                  <div className="p-3 bg-gradient-to-r from-purple-500 to-purple-600 text-white">
                   <div className="flex items-center gap-2">
                     <Shield className="w-4 h-4" />
-                    <span className="font-semibold text-sm">관리자 및 기록원 메뉴</span>
+                    <span className="font-semibold text-sm">관리자 메뉴</span>
                   </div>
                 </div>
                 {isAdmin() && (
@@ -230,24 +230,14 @@ export const MyPage: React.FC<MyPageProps> = ({
                     <Separator />
                   </>
                 )}
-                <MenuItem icon={Trophy} label="경기 기록 관리" onClick={() => onNavigateToGameRecord?.()} />
                 {isAdmin() && (
                   <>
                     <Separator />
                     <MenuItem icon={Bell} label="공지 관리" onClick={() => onNavigateToNoticeManage?.()} />
                     <Separator />
-                    <MenuItem
-                      icon={Calendar}
-                      label="일정 관리"
-                      onClick={() => {
-                        toast.info('일정 탭으로 이동합니다. 일정을 클릭하여 수정하세요.');
-                        onNavigateToScheduleManage?.();
-                      }}
-                    />
                     {isTreasury() && (
                       <>
                         <Separator />
-                        <MenuItem icon={Trophy} label="회비/회계" onClick={() => onNavigateToFinance?.()} />
                       </>
                     )}
                   </>
@@ -256,6 +246,85 @@ export const MyPage: React.FC<MyPageProps> = ({
               <div className="h-3"></div>
             </>
           )}
+
+          {/* μATOM-0512: 알림 권한 요청 UX(내정보) */}
+          <Card className="mb-3">
+            <div className="p-4">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <Bell className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                  <span className="font-semibold text-sm">푸시 알림</span>
+                </div>
+                {permission === 'granted' && tokenRegistered ? (
+                  <Badge className="bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400">
+                    <CheckCircle2 className="w-3 h-3 mr-1" />
+                    등록됨
+                  </Badge>
+                ) : permission === 'granted' && !tokenRegistered ? (
+                  <Badge className="bg-yellow-100 text-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-400">
+                    <AlertCircle className="w-3 h-3 mr-1" />
+                    등록 실패
+                  </Badge>
+                ) : permission === 'denied' ? (
+                  <Badge className="bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400">
+                    <AlertCircle className="w-3 h-3 mr-1" />
+                    거부됨
+                  </Badge>
+                ) : (
+                  <Badge variant="outline">대기중</Badge>
+                )}
+              </div>
+              {permission === 'granted' && tokenRegistered && (
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                  푸시 알림이 활성화되어 있습니다
+                </p>
+              )}
+              {permission === 'granted' && !tokenRegistered && (
+                <div className="space-y-2">
+                  <p className="text-xs text-red-600 dark:text-red-400 mb-2">
+                    {tokenError || '토큰 등록에 실패했습니다'}
+                  </p>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={retryRegister}
+                    className="w-full"
+                  >
+                    재시도
+                  </Button>
+                </div>
+              )}
+              {permission !== 'granted' && (
+                <div className="space-y-2">
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                    {permission === 'denied'
+                      ? '브라우저 설정에서 알림 권한을 허용해주세요'
+                      : '푸시 알림을 받으려면 권한을 허용해주세요'}
+                  </p>
+                  {permission !== 'denied' && (
+                    <Button
+                      size="sm"
+                      onClick={requestPermission}
+                      className="w-full"
+                    >
+                      알림 권한 요청
+                    </Button>
+                  )}
+                </div>
+              )}
+              {/* μATOM-0514: 토큰 재등록 버튼 */}
+              {permission === 'granted' && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={retryRegister}
+                  className="w-full mt-2"
+                >
+                  토큰 재등록
+                </Button>
+              )}
+            </div>
+          </Card>
 
           {/* General Menu */}
           <Card>

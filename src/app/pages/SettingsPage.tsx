@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import {
   Info,
   Mail,
@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
+import { useFcm } from '../hooks/useFcm'; // ATOM-13
 import { APP_INFO, DEVELOPER_INFO, FEATURES, TECH_STACK } from '../../lib/constants/app-info';
 import { toast } from 'sonner';
 
@@ -26,7 +27,7 @@ interface SettingsPageProps {
 export const SettingsPage: React.FC<SettingsPageProps> = () => {
   const { logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
-  const [pushEnabled, setPushEnabled] = React.useState(false);
+  const { permission, tokenRegistered, tokenError, requestPermission, retryRegister } = useFcm(); // ATOM-13
 
   const handleLogout = async () => {
     try {
@@ -37,49 +38,28 @@ export const SettingsPage: React.FC<SettingsPageProps> = () => {
     }
   };
 
-  useEffect(() => {
-    // Check saved state
-    const saved = localStorage.getItem('wings_push_enabled');
-    if (saved === 'true') {
-      if (Notification.permission === 'granted') {
-        setPushEnabled(true);
-      } else {
-        localStorage.removeItem('wings_push_enabled');
-      }
-    }
-  }, []);
-
+  // ATOM-13: FCM 토큰 등록 상태 관리
+  const pushEnabled = permission === 'granted' && tokenRegistered;
+  
   const handlePushToggle = async () => {
-    if (pushEnabled) {
-      // Turn off
-      setPushEnabled(false);
-      localStorage.setItem('wings_push_enabled', 'false');
-      toast.info('푸시 알림이 해제되었습니다');
-      return;
-    }
-
-    // Turn on
-    if (!('Notification' in window)) {
+    if (permission === 'unsupported') {
       toast.error('이 브라우저는 푸시 알림을 지원하지 않습니다');
       return;
     }
 
-    try {
-      const permission = await Notification.requestPermission();
-      if (permission === 'granted') {
-        setPushEnabled(true);
-        localStorage.setItem('wings_push_enabled', 'true');
-        toast.success('푸시 알림이 설정되었습니다');
-
-        // TODO: Get FCM Token and save to user profile
-        // This requires 'messaging' from firebase config to be fully set up
+    if (permission === 'granted') {
+      // 이미 허용됨 - 토큰 등록 상태에 따라 다르게 처리
+      if (tokenError) {
+        // 에러가 있으면 재시도
+        await retryRegister();
       } else {
-        toast.error('알림 권한이 거부되었습니다. 브라우저 설정에서 허용해주세요.');
+        toast.info('푸시 알림은 이미 활성화되어 있습니다');
       }
-    } catch (error) {
-      console.error('Notification permission error:', error);
-      toast.error('알림 권한 요청 중 오류가 발생했습니다');
+      return;
     }
+
+    // 권한 요청
+    await requestPermission();
   };
 
   return (
@@ -219,7 +199,19 @@ export const SettingsPage: React.FC<SettingsPageProps> = () => {
                 <Bell className="w-5 h-5 text-gray-400" />
                 <div className="text-left">
                   <p className="font-medium">푸시 알림</p>
-                  <p className="text-xs text-gray-500">곧 지원 예정</p>
+                  <p className="text-xs text-gray-500">
+                    {permission === 'unsupported' 
+                      ? '브라우저 미지원'
+                      : permission === 'granted'
+                      ? tokenRegistered
+                        ? '활성화됨'
+                        : tokenError
+                        ? '토큰 등록 실패 (재시도 버튼 클릭)'
+                        : '토큰 등록 중...'
+                      : permission === 'denied'
+                      ? '권한 거부됨 (브라우저 설정에서 허용 필요)'
+                      : '권한 요청 필요'}
+                  </p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -237,6 +229,14 @@ export const SettingsPage: React.FC<SettingsPageProps> = () => {
                 </div>
               </div>
             </button>
+            {tokenError && (
+              <button
+                onClick={retryRegister}
+                className="w-full mt-2 px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                토큰 등록 재시도
+              </button>
+            )}
           </div>
         </div>
 

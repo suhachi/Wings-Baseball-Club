@@ -54,51 +54,6 @@ export async function uploadProfilePhoto(
 }
 
 /**
- * 앨범 미디어 업로드
- */
-export async function uploadAlbumMedia(
-  file: File,
-  _type: 'photo' | 'video',
-  onProgress?: (progress: number) => void
-): Promise<string> {
-  try {
-    const date = new Date();
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const fileName = `${Date.now()}_${file.name}`;
-    const storageRef = ref(storage, `albums/${year}/${month}/${fileName}`);
-
-    if (onProgress) {
-      const uploadTask = uploadBytesResumable(storageRef, file);
-
-      return new Promise((resolve, reject) => {
-        uploadTask.on(
-          'state_changed',
-          (snapshot) => {
-            const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-            onProgress(progress);
-          },
-          (error) => {
-            console.error('Upload error:', error);
-            reject(error);
-          },
-          async () => {
-            const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-            resolve(downloadURL);
-          }
-        );
-      });
-    } else {
-      await uploadBytes(storageRef, file);
-      return await getDownloadURL(storageRef);
-    }
-  } catch (error) {
-    console.error('Error uploading album media:', error);
-    throw error;
-  }
-}
-
-/**
  * 게시글 첨부파일 업로드
  */
 export async function uploadPostAttachment(

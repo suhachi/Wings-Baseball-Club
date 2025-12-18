@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
-import { MessageSquare, Heart } from 'lucide-react';
+import { MessageSquare } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useData } from '../contexts/DataContext';
 import { formatDistanceToNow } from 'date-fns';
@@ -26,13 +26,13 @@ export const MyActivityPage: React.FC = () => {
 
     // Filter my posts
     const myPosts = posts
-        .filter(post => post.authorId === user.id) // Use authorId as per interface usually, or author.id check below if needed
+        .filter(post => post.author.id === user.id) // Use author.id
         .sort((a, b) => getPoolDate(b).getTime() - getPoolDate(a).getTime());
 
     // Filter my comments
     const myComments = Object.entries(comments).flatMap(([postId, postComments]) =>
         postComments
-            .filter((comment: any) => comment.authorId === user.id)
+            .filter((comment: any) => comment.author.id === user.id)
             .map((comment: any) => ({ ...comment, postId }))
     ).sort((a: any, b: any) => getPoolDate(b).getTime() - getPoolDate(a).getTime());
 
@@ -95,10 +95,6 @@ export const MyActivityPage: React.FC = () => {
                                         {post.content}
                                     </p>
                                     <div className="flex items-center gap-4 text-xs text-gray-500">
-                                        <div className="flex items-center gap-1">
-                                            <Heart className="w-3.5 h-3.5" />
-                                            {post.likes ? post.likes.length : 0}
-                                        </div>
                                         <div className="flex items-center gap-1">
                                             <MessageSquare className="w-3.5 h-3.5" />
                                             {post.commentCount || 0}

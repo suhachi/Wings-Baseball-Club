@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Toaster } from 'sonner';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import { ClubProvider } from './contexts/ClubContext';
+import { ClubProvider, useClub } from './contexts/ClubContext';
 import { DataProvider, useData } from './contexts/DataContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { TopBar } from './components/TopBar';
@@ -9,28 +9,27 @@ import { BottomNav } from './components/BottomNav';
 import { InstallPrompt } from './components/InstallPrompt';
 import { LoginPage } from './pages/LoginPage';
 import { HomePage } from './pages/HomePage';
-import { SchedulePage } from './pages/SchedulePage';
 import { BoardsPage } from './pages/BoardsPage';
-import { AlbumPage } from './pages/AlbumPage';
 import { MyPage } from './pages/MyPage';
 import { MyActivityPage } from './pages/MyActivityPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { NotificationPage } from './pages/NotificationPage';
 import { AdminPage } from './pages/AdminPage';
-import { FinancePage } from './pages/FinancePage';
-import { GameRecordPage } from './pages/GameRecordPage';
 import { InstallPage } from './pages/InstallPage'; // Added
+import { AccessDeniedPage } from './pages/AccessDeniedPage'; // ATOM-08
+import { useFcm } from './hooks/useFcm'; // ATOM-13: FCM 초기화
 import { Loader2 } from 'lucide-react';
 
-type PageType = 'home' | 'schedule' | 'boards' | 'album' | 'my' | 'settings' | 'notifications' | 'admin' | 'finance' | 'game-record' | 'my-activity' | 'install';
+type PageType = 'home' | 'boards' | 'my' | 'settings' | 'notifications' | 'admin' | 'my-activity' | 'install';
 
 function AppContent() {
   // [DEBUG] Version Check
   console.log('%c Wings PWA v1.3-debug loaded ', 'background: #222; color: #ff00ff');
 
-  const { user, loading } = useAuth();
+  const { user, loading, memberStatus } = useAuth(); // μATOM-0401~0402: memberStatus 추가
   const data = useData();
-  const [activeTab, setActiveTab] = useState<'home' | 'schedule' | 'boards' | 'album' | 'my'>('home');
+  useFcm(); // ATOM-13: FCM 초기화 (권한 확인, 토큰 등록, foreground 수신 핸들러)
+  const [activeTab, setActiveTab] = useState<'home' | 'boards' | 'my'>('home');
   const [currentPage, setCurrentPage] = useState<PageType>('home');
   const [adminInitialTab, setAdminInitialTab] = useState<'members' | 'stats' | 'notices'>('members');
 
@@ -61,11 +60,34 @@ function AppContent() {
     return <LoginPage />;
   }
 
-  // Global Gate: Check for Pending Status - DISABLED as per new requirement
-  // Pending users can access the app but have limited permissions (e.g. read-only)
-  // if (user.status === 'pending' && user.role !== 'ADMIN') {
-  //   return <ApprovalPendingPage />;
-  // }
+  // μATOM-0401: 로그인 후 members/{uid} 존재 체크
+  // μATOM-0402: status==active 검증
+  // μATOM-0403: Gate 실패 시 강제 이동(라우트 가드)
+  // 멤버 문서가 없거나 status가 'active'가 아니면 차단
+  // URL 직접 접근도 AccessDenied로 수렴
+  if (user && memberStatus === 'denied') {
+    return <AccessDeniedPage />;
+  }
+
+  // 멤버 상태 체크 중이면 로딩 표시
+  if (user && memberStatus === 'checking') {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-600 via-blue-500 to-blue-400 flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-12 h-12 text-white animate-spin mx-auto mb-4" />
+          <p className="text-white text-lg">접근 권한 확인 중...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // μATOM-0403: Gate 실패 시 강제 이동(라우트 가드)
+  // memberStatus가 'active'가 아니면 모든 보호 페이지 접근 차단
+  if (user && memberStatus !== 'active' && currentPage !== 'install') {
+    return <AccessDeniedPage />;
+  }
+
+
 
   // Get page title and back button config
   const getPageConfig = () => {
@@ -94,22 +116,6 @@ function AppContent() {
           showNotification: false,
           showSettings: false
         };
-      case 'finance':
-        return {
-          title: '재무 관리',
-          showBack: true,
-          onBack: () => handlePageChange('home'),
-          showNotification: false,
-          showSettings: false
-        };
-      case 'game-record':
-        return {
-          title: '경기 기록',
-          showBack: true,
-          onBack: () => handlePageChange('home'),
-          showNotification: false,
-          showSettings: false
-        };
       default:
         return {
           title: 'WINGS BASEBALL CLUB',
@@ -120,7 +126,7 @@ function AppContent() {
     }
   };
 
-  const handleNavigate = (tab: 'home' | 'schedule' | 'boards' | 'album' | 'my') => {
+  const handleNavigate = (tab: 'home' | 'boards' | 'my') => {
     setActiveTab(tab);
     setCurrentPage(tab);
     // In a real app, you would also handle postId to show specific post details
@@ -129,9 +135,9 @@ function AppContent() {
   const handlePageChange = (page: PageType) => {
     setCurrentPage(page);
     // Update activeTab if it's a main tab
-    if (page !== 'settings' && page !== 'notifications' && page !== 'admin' && page !== 'finance' && page !== 'game-record') {
-      setActiveTab(page as 'home' | 'schedule' | 'boards' | 'album' | 'my');
-    }
+      if (page !== 'settings' && page !== 'notifications' && page !== 'admin') {
+        setActiveTab(page as 'home' | 'boards' | 'my');
+      }
   };
 
   const handleNavigateToAdmin = (tab: 'members' | 'stats' | 'notices' = 'members') => {
@@ -162,17 +168,12 @@ function AppContent() {
       {/* Main Content */}
       <main className="min-h-screen">
         {currentPage === 'home' && <HomePage onNavigate={handleNavigate} />}
-        {currentPage === 'schedule' && <SchedulePage />}
         {currentPage === 'boards' && <BoardsPage />}
-        {currentPage === 'album' && <AlbumPage />}
         {currentPage === 'my' && (
           <MyPage
             onNavigateToSettings={() => handlePageChange('settings')}
             onNavigateToAdmin={() => handleNavigateToAdmin('members')}
-            onNavigateToFinance={() => handlePageChange('finance')}
-            onNavigateToGameRecord={() => handlePageChange('game-record')}
             onNavigateToNoticeManage={() => handleNavigateToAdmin('notices')}
-            onNavigateToScheduleManage={() => handleNavigate('schedule')}
             onNavigateToMyActivity={() => handlePageChange('my-activity')}
           />
         )}
@@ -180,8 +181,6 @@ function AppContent() {
         {currentPage === 'settings' && <SettingsPage onBack={() => handlePageChange('my')} />}
         {currentPage === 'notifications' && <NotificationPage onBack={() => handlePageChange('my')} />}
         {currentPage === 'admin' && <AdminPage initialTab={adminInitialTab} />}
-        {currentPage === 'finance' && <FinancePage onBack={() => handlePageChange('home')} />}
-        {currentPage === 'game-record' && <GameRecordPage onBack={() => handlePageChange('home')} />}
       </main>
 
       {/* Bottom Navigation */}
@@ -203,14 +202,21 @@ function AppContent() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <ClubProvider>
+    <ClubProvider>
+      <AuthProviderWithClub>
         <DataProvider>
           <ThemeProvider>
             <AppContent />
           </ThemeProvider>
         </DataProvider>
-      </ClubProvider>
-    </AuthProvider>
+      </AuthProviderWithClub>
+    </ClubProvider>
   );
 }
+
+// μATOM-0404: Gate 성공 시 clubId 컨텍스트 고정
+// ClubContext의 clubId를 AuthProvider에 전달
+const AuthProviderWithClub: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { currentClubId } = useClub();
+  return <AuthProvider clubId={currentClubId}>{children}</AuthProvider>;
+};

@@ -1,18 +1,16 @@
 import React from 'react';
-import { Home, Calendar, MessageSquare, Image, User } from 'lucide-react';
+import { Home, MessageSquare, User } from 'lucide-react';
 import { motion } from 'motion/react';
 
 interface BottomNavProps {
-  activeTab: 'home' | 'schedule' | 'boards' | 'album' | 'my';
-  onTabChange: (tab: 'home' | 'schedule' | 'boards' | 'album' | 'my') => void;
+  activeTab: 'home' | 'boards' | 'my';
+  onTabChange: (tab: 'home' | 'boards' | 'my') => void;
 }
 
 export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, onTabChange }) => {
   const tabs = [
     { id: 'home', label: '홈', icon: Home },
-    { id: 'schedule', label: '일정', icon: Calendar },
     { id: 'boards', label: '게시판', icon: MessageSquare },
-    { id: 'album', label: '앨범', icon: Image },
     { id: 'my', label: '내정보', icon: User },
   ] as const;
 

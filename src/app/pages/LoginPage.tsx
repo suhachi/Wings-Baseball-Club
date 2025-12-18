@@ -1,13 +1,8 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  Loader2,
-  Mail,
-  ArrowLeft
+  Loader2
 } from 'lucide-react';
-import { useAuth } from '../contexts/AuthContext';
-import { Input } from '../components/ui/input';
-import { Label } from '../components/ui/label';
 import { Button } from '../components/ui/button';
 import { toast } from 'sonner';
 import {
@@ -17,18 +12,12 @@ import {
 import {
   isInAppBrowser,
   getBreakoutUrl,
-  isAndroid,
-  isIOS
+  isAndroid
 } from '../../lib/utils/userAgent';
 
-type LoginStep = 'code' | 'method' | 'email-signup' | 'email-login' | 'additional-info';
+type LoginStep = 'method';
 
 export const LoginPage: React.FC = () => {
-  const {
-    registerWithEmail,
-    createMsgAccount
-  } = useAuth();
-  
   // WebView Detection
   if (isInAppBrowser()) {
     return (
@@ -46,7 +35,7 @@ export const LoginPage: React.FC = () => {
         </p>
 
         {isAndroid() ? (
-          <Button 
+          <Button
             className="w-full h-14 text-lg font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-xl"
             onClick={() => {
               window.location.href = getBreakoutUrl();
@@ -70,73 +59,28 @@ export const LoginPage: React.FC = () => {
     );
   }
 
-  const [step, setStep] = useState<LoginStep>('method'); // Start at Method Selection
+  const [step] = useState<LoginStep>('method');
   const [loading, setLoading] = useState(false);
-  const [inviteCode] = useState(''); // Kept as empty string const for compatibility if needed, or remove completely. Let's remove setInviteCode usage.
-  const [pendingGoogleUser, setPendingGoogleUser] = useState<any>(null);
-
-  // Detail Form States
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [realName, setRealName] = useState('');
-  const [nickname, setNickname] = useState('');
-  const [phone, setPhone] = useState('');
-
   const [error, setError] = useState('');
 
-  const handleAdditionalInfoSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!pendingGoogleUser) return;
-
-    if (!realName.trim() || !phone.trim()) {
-      toast.error('이름과 전화번호를 모두 입력해주세요.');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      // Import dynamically to avoid circular dependency issues if any
-      const { createAccount } = await import('../../lib/firebase/auth.service');
-      // Pass inviteCode (can be empty string, createAccount handles it)
-      await createAccount(
-        pendingGoogleUser,
-        inviteCode || null,
-        realName,
-        nickname,
-        phone
-      );
-      toast.success('회원가입이 완료되었습니다! (관리자 승인 대기중)');
-      // App.tsx will redirect to Pending Page based on new status
-    } catch (error: any) {
-      console.error('Account creation failed:', error);
-      toast.error(error.message || '가입 처리에 실패했습니다.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // 2-A. Google Sign In
+  // 1. Google Sign In
   const handleGoogleLogin = async () => {
     setLoading(true);
     setError('');
 
     try {
       const { loginWithGoogle } = await import('../../lib/firebase/auth.service');
-      // 1. Google Auth Login (gets firebase user)
+      // Google Auth Login (gets firebase user)
       const firebaseUser = await loginWithGoogle();
 
-      // 2. Check if user profile exists
+      // Check if user profile exists
       const exists = await checkUserExists(firebaseUser.uid);
 
       if (exists) {
-        // User exists -> Login success (Global AuthContext will pick it up)
         toast.success(`환영합니다, ${firebaseUser.displayName}님!`);
-        // Navigation handled by App.tsx based on user state
       } else {
-        // User does NOT exist -> Go to Additional Info Step
-        setPendingGoogleUser(firebaseUser);
-        setRealName(firebaseUser.displayName || ''); // Pre-fill name if available
-        setStep('additional-info');
+        // [NOTICE] 정책상 가입/승인 로직을 제외하므로, 미등록 사용자는 Access Gate에서 차단됨
+        toast.info('등록되지 않은 사용자입니다. 관리자에게 문의해주세요.');
       }
     } catch (err: any) {
       setError(err.message);
@@ -145,26 +89,6 @@ export const LoginPage: React.FC = () => {
       setLoading(false);
     }
   };
-
-  // 3. Email Sign Up
-  const handleEmailSignup = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-
-    try {
-      // 1. Create Auth User
-      const user = await registerWithEmail(email, password, realName);
-      // 2. Create Firestore Doc & Link Invite (Optional)
-      await createMsgAccount(user, inviteCode || null, realName, nickname, phone);
-      toast.success('가입이 완료되었습니다!');
-      // Redirection happens automatically as user state updates
-    } catch (err: any) {
-      setError(err.message);
-      toast.error(err.message);
-      setLoading(false);
-    }
-  };
-
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-600 via-blue-500 to-blue-400 dark:from-blue-900 dark:via-blue-800 dark:to-blue-700 flex items-center justify-center p-4">
@@ -191,8 +115,6 @@ export const LoginPage: React.FC = () => {
 
         <div className="p-8">
           <AnimatePresence mode="wait">
-
-            {/* STEP 2: METHOD SELECTION (Now Step 1) */}
             {step === 'method' && (
               <motion.div
                 key="step-method"
@@ -220,196 +142,9 @@ export const LoginPage: React.FC = () => {
                       </>
                     )}
                   </Button>
-
-                  <Button
-                    variant="outline"
-                    onClick={() => setStep('email-login')}
-                    className="w-full h-12 bg-transparent border-white/30 text-white hover:bg-white/10 flex items-center justify-center gap-2"
-                  >
-                    <Mail className="w-5 h-5" />
-                    이메일로 로그인
-                  </Button>
-                </div>
-
-                <div className="pt-4 border-t border-white/10 text-center">
-                  <button
-                    onClick={() => setStep('email-signup')}
-                    className="text-white/70 text-sm hover:text-white underline"
-                  >
-                    계정이 없으신가요? 이메일로 회원가입
-                  </button>
                 </div>
               </motion.div>
             )}
-
-            {/* STEP: EMAIL LOGIN */}
-            {step === 'email-login' && (
-              <motion.div
-                key="step-email-login"
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -20 }}
-                className="space-y-4"
-              >
-                <form
-                  onSubmit={async (e) => {
-                    e.preventDefault();
-                    setLoading(true);
-                    try {
-                      const { loginWithEmail } = await import('../../lib/firebase/auth.service');
-                      await loginWithEmail(email, password);
-                      toast.success('로그인 성공!');
-                    } catch (err: any) {
-                      setError(err.message);
-                      toast.error('로그인 실패');
-                    } finally {
-                      setLoading(false);
-                    }
-                  }}
-                  className="space-y-4"
-                >
-                  <div className="space-y-2">
-                    <Label className="text-white">이메일</Label>
-                    <Input
-                      value={email}
-                      onChange={e => setEmail(e.target.value)}
-                      type="email"
-                      required
-                      className="bg-white/10 border-white/20 text-white"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-white">비밀번호</Label>
-                    <Input
-                      value={password}
-                      onChange={e => setPassword(e.target.value)}
-                      type="password"
-                      required
-                      className="bg-white/10 border-white/20 text-white"
-                    />
-                  </div>
-                  <Button
-                    type="submit"
-                    disabled={loading}
-                    className="w-full h-12 bg-white text-blue-600 hover:bg-blue-50 font-bold"
-                  >
-                    {loading ? <Loader2 className="animate-spin" /> : "로그인"}
-                  </Button>
-                </form>
-                <Button
-                  variant="ghost"
-                  onClick={() => setStep('method')}
-                  className="w-full text-blue-200"
-                >
-                  <ArrowLeft className="w-4 h-4 mr-2" />
-                  뒤로 가기
-                </Button>
-              </motion.div>
-            )}
-
-
-            {/* STEP 3: EMAIL SIGNUP FORM */}
-            {step === 'email-signup' && (
-              <motion.form
-                key="step-email-signup"
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -20 }}
-                onSubmit={handleEmailSignup}
-                className="space-y-4"
-              >
-                <div className="space-y-3 max-h-[350px] overflow-y-auto pr-2 custom-scrollbar">
-                  <div className="space-y-1">
-                    <Label className="text-white text-xs">이메일</Label>
-                    <Input value={email} onChange={e => setEmail(e.target.value)} type="email" required className="bg-white/10 border-white/20 text-white" />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-white text-xs">비밀번호</Label>
-                    <Input value={password} onChange={e => setPassword(e.target.value)} type="password" required className="bg-white/10 border-white/20 text-white" />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-white text-xs">실명</Label>
-                    <Input value={realName} onChange={e => setRealName(e.target.value)} placeholder="홍길동" required className="bg-white/10 border-white/20 text-white" />
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="space-y-1">
-                      <Label className="text-white text-xs">닉네임</Label>
-                      <Input value={nickname} onChange={e => setNickname(e.target.value)} className="bg-white/10 border-white/20 text-white" />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-white text-xs">연락처</Label>
-                      <Input value={phone} onChange={e => setPhone(e.target.value)} className="bg-white/10 border-white/20 text-white" />
-                    </div>
-                  </div>
-                  <div className="space-y-1 pt-2 border-t border-white/10">
-                    <p className="text-[10px] text-blue-100/70 text-center">
-                      * 가입 후 관리자 승인이 필요합니다.
-                    </p>
-                  </div>
-                </div>
-
-                <Button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full h-12 bg-white text-blue-600 hover:bg-blue-50 font-bold mt-4"
-                >
-                  {loading ? <Loader2 className="animate-spin" /> : "가입하기"}
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  onClick={() => setStep('method')}
-                  className="w-full text-blue-200"
-                >
-                  <ArrowLeft className="w-4 h-4 mr-2" />
-                  뒤로 가기
-                </Button>
-              </motion.form>
-            )}
-
-            {/* STEP: ADDITIONAL INFO (For Google Signup) */}
-            {step === 'additional-info' && (
-              <motion.form
-                key="step-additional"
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -20 }}
-                onSubmit={handleAdditionalInfoSubmit}
-                className="space-y-4"
-              >
-                <div className="text-center mb-4">
-                  <h3 className="text-white font-bold text-lg">추가 정보 입력</h3>
-                  <p className="text-blue-100 text-xs">원활한 활동을 위해 추가 정보를 입력해주세요.</p>
-                </div>
-
-                <div className="space-y-3">
-                  <div className="space-y-1">
-                    <Label className="text-white text-xs">실명</Label>
-                    <Input value={realName} onChange={e => setRealName(e.target.value)} required className="bg-white/10 border-white/20 text-white" />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-white text-xs">연락처</Label>
-                    <Input value={phone} onChange={e => setPhone(e.target.value)} required placeholder="010-0000-0000" className="bg-white/10 border-white/20 text-white" />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-white text-xs">닉네임 (선택)</Label>
-                    <Input value={nickname} onChange={e => setNickname(e.target.value)} className="bg-white/10 border-white/20 text-white" />
-                  </div>
-                  <p className="text-[10px] text-blue-100/70 text-center pt-2">
-                    * 가입 후 관리자 승인이 완료되면 이용 가능합니다.
-                  </p>
-                </div>
-
-                <Button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full h-12 bg-white text-blue-600 hover:bg-blue-50 font-bold mt-4"
-                >
-                  {loading ? <Loader2 className="animate-spin" /> : "가입 완료"}
-                </Button>
-              </motion.form>
-            )}
-
           </AnimatePresence>
 
           {/* Global Error */}

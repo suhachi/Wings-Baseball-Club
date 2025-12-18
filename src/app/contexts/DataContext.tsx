@@ -8,6 +8,7 @@ import {
   deletePost as deletePostInDb,
   getComments,
   addComment as addCommentInDb,
+  updateComment as updateCommentInDb,
   deleteComment as deleteCommentInDb,
   getAttendances,
   updateAttendance as updateAttendanceInDb,
@@ -16,10 +17,14 @@ import {
   markNotificationAsRead as markNotificationAsReadInDb,
   markAllNotificationsAsRead as markAllNotificationsAsReadInDb,
 } from '../../lib/firebase/firestore.service';
-import type { PostDoc, CommentDoc, AttendanceDoc, AttendanceStatus, PostType } from '../../lib/firebase/types';
+import { PostDoc, CommentDoc, AttendanceDoc, AttendanceStatus, PostType } from '../../lib/firebase/types';
+import type { UserRole } from '../../lib/firebase/types';
+
+// ATOM-08: Access Gate - default club ID (나중에 ClubContext와 통합 가능)
+// const DEFAULT_CLUB_ID = 'default-club';
 
 // Re-export types
-export type { PostType, AttendanceStatus };
+export type { PostType, AttendanceStatus, UserRole };
 
 export interface Post {
   id: string;
@@ -49,31 +54,9 @@ export interface Post {
     maybe: number;
   };
 
-  // Poll specific
-  choices?: Array<{ id: string; label: string; count: number; votes?: string[] }>;
-  multi?: boolean;
-  anonymous?: boolean;
-  closeAt?: Date;
-  closed?: boolean;
-
-  // Game specific
-  gameType?: 'LEAGUE' | 'PRACTICE';
-  score?: { our: number; opp: number };
-  recorders?: string[];
-  recordingLocked?: boolean;
-  recordingLockedAt?: Date;
-  recordingLockedBy?: string;
-
-  // Album specific
-  mediaUrl?: string;
-  mediaType?: 'photo' | 'video';
-
-  // Push specific
   pushStatus?: 'SENT' | 'FAILED' | 'PENDING';
-
-  // Stats specific
-  likes?: string[];
-  images?: string[];
+  pushError?: string;
+  pushSentAt?: Date;
 }
 
 export interface Comment {
@@ -108,12 +91,13 @@ export interface AttendanceRecord {
 export interface Member {
   id: string;
   realName: string;
-  nickname?: string;
-  photoURL?: string;
-  role: string;
-  position?: string;
-  backNumber?: string;
-  status: 'active' | 'inactive';
+  nickname?: string | null;
+  photoURL?: string | null;
+  role: UserRole;
+  position?: string | null;
+  backNumber?: string | null;
+  status: 'pending' | 'active' | 'rejected' | 'withdrawn';
+  createdAt: Date;
 }
 
 export interface Notification {
@@ -140,15 +124,15 @@ interface DataContextType {
   deletePost: (id: string) => Promise<void>;
   loadComments: (postId: string) => Promise<void>;
   addComment: (postId: string, content: string) => Promise<void>;
+  updateComment: (postId: string, commentId: string, content: string) => Promise<void>;
   deleteComment: (postId: string, commentId: string) => Promise<void>;
   updateAttendance: (postId: string, userId: string, status: AttendanceStatus) => Promise<void>;
   getMyAttendance: (postId: string, userId: string) => AttendanceStatus;
-  votePoll: (postId: string, userId: string, choices: string[]) => Promise<void>;
-  getMyVote: (postId: string, userId: string) => string[] | null;
   loadAttendances: (postId: string) => Promise<void>;
   loadNotifications: () => Promise<void>;
   markNotificationAsRead: (notificationId: string) => Promise<void>;
   markAllNotificationsAsRead: () => Promise<void>;
+  refreshMembers: () => Promise<void>; // Added
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -168,7 +152,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const refreshPosts = async () => {
     try {
       setLoading(true);
-      const postsData = await getPosts(currentClubId);
+      const { posts: postsData } = await getPosts(currentClubId);
 
       // Firebase PostDoc을 Post로 변환
       const transformedPosts: Post[] = postsData.map((postDoc) => {
@@ -191,46 +175,18 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // Event specific
         if (postDoc.eventType) {
           post.eventType = postDoc.eventType;
-          post.startAt = postDoc.startAt;
-          post.place = postDoc.place;
-          post.opponent = postDoc.opponent;
-          post.voteCloseAt = postDoc.voteCloseAt;
+          post.startAt = postDoc.startAt || undefined;
+          post.place = postDoc.place || undefined;
+          post.opponent = postDoc.opponent || undefined;
+          post.voteCloseAt = postDoc.voteCloseAt || undefined;
           post.voteClosed = postDoc.voteClosed;
         }
 
-        // Poll specific
-        if (postDoc.choices) {
-          post.choices = postDoc.choices.map((choice) => ({
-            id: choice.id,
-            label: choice.label,
-            count: choice.votes?.length || 0,
-            votes: choice.votes || [],
-          }));
-          post.multi = postDoc.multi;
-          post.anonymous = postDoc.anonymous;
-          post.closeAt = postDoc.closeAt;
-          post.closed = postDoc.closed;
-        }
-
-        // Game specific
-        if (postDoc.gameType) {
-          post.gameType = postDoc.gameType;
-          post.score = postDoc.score;
-          post.recorders = postDoc.recorders;
-          post.recordingLocked = postDoc.recordingLocked;
-          post.recordingLockedAt = postDoc.recordingLockedAt;
-          post.recordingLockedBy = postDoc.recordingLockedBy;
-        }
-
-        // Album specific
-        if (postDoc.mediaUrls && postDoc.mediaUrls.length > 0) {
-          post.mediaUrl = postDoc.mediaUrls[0];
-          post.mediaType = postDoc.mediaType;
-        }
-
-        // Push specific
+        // Push specific (notice only)
         if (postDoc.pushStatus) {
           post.pushStatus = postDoc.pushStatus;
+          post.pushError = postDoc.pushError;
+          post.pushSentAt = postDoc.pushSentAt;
         }
 
         return post;
@@ -251,8 +207,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  // 멤버 로드
-  const loadMembers = async () => {
+  // 멤버 로드 (exposed as refreshMembers)
+  const refreshMembers = async () => {
     try {
       const membersData = await getMembers(currentClubId);
       setMembers(membersData);
@@ -260,6 +216,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.error('Error loading members:', error);
     }
   };
+
+  // Keep loadMembers for internal useEffect usage if needed, or just use refreshMembers
+  const loadMembers = refreshMembers;
 
   // 알림 로드
   const loadNotifications = async () => {
@@ -289,6 +248,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       refreshPosts();
       loadMembers();
       loadNotifications();
+    } else {
+      // μATOM-0405: 로그아웃 시 상태 초기화
+      // user가 null이면 모든 데이터 초기화
+      setPosts([]);
+      setComments({});
+      setAttendances({});
+      setAttendanceRecords([]);
+      setMembers([]);
+      setNotifications([]);
     }
   }, [user]);
 
@@ -303,40 +271,20 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         content: postData.content,
         authorId: user.id,
         authorName: user.realName,
-        authorPhotoURL: user.photoURL,
+        authorPhotoURL: user.photoURL || undefined,
         pinned: postData.pinned,
       };
 
       // Event specific
       if (postData.eventType) {
         newPostData.eventType = postData.eventType;
-        newPostData.startAt = postData.startAt || null;
+        newPostData.startAt = postData.startAt ?? undefined;
         newPostData.place = postData.place || null;
         newPostData.opponent = postData.opponent || null;
-        newPostData.voteCloseAt = postData.voteCloseAt || null;
+        newPostData.voteCloseAt = postData.voteCloseAt ?? undefined;
         newPostData.voteClosed = false;
       }
 
-      // Poll specific
-      if (postData.choices) {
-        newPostData.choices = postData.choices.map((choice) => ({
-          id: choice.id,
-          label: choice.label,
-          votes: [],
-        }));
-        newPostData.multi = postData.multi;
-        newPostData.anonymous = postData.anonymous;
-        newPostData.closeAt = postData.closeAt;
-        newPostData.closed = false;
-      }
-
-      // Game specific
-      if (postData.gameType) {
-        newPostData.gameType = postData.gameType;
-        newPostData.score = postData.score;
-        newPostData.recorders = [];
-        newPostData.recordingLocked = false;
-      }
 
       await createPostInDb(currentClubId, newPostData);
       await refreshPosts();
@@ -379,7 +327,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         author: {
           id: commentDoc.authorId,
           name: commentDoc.authorName,
-          photoURL: commentDoc.authorPhotoURL,
+          photoURL: commentDoc.authorPhotoURL ?? undefined,
         },
         createdAt: commentDoc.createdAt,
         updatedAt: commentDoc.updatedAt,
@@ -411,13 +359,26 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         content,
         authorId: user.id,
         authorName: user.realName,
-        authorPhotoURL: user.photoURL,
+        authorPhotoURL: user.photoURL ?? undefined,
       };
 
       await addCommentInDb(currentClubId, postId, commentDataForDb);
       await loadComments(postId);
     } catch (error) {
       console.error('Error adding comment:', error);
+      throw error;
+    }
+  };
+
+  // 댓글 업데이트
+  const updateComment = async (postId: string, commentId: string, content: string) => {
+    if (!user) return;
+
+    try {
+      await updateCommentInDb(currentClubId, postId, commentId, { content });
+      await loadComments(postId);
+    } catch (error) {
+      console.error('Error updating comment:', error);
       throw error;
     }
   };
@@ -431,52 +392,6 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.error('Error deleting comment:', error);
       throw error;
     }
-  };
-
-  // 투표하기
-  const votePoll = async (postId: string, userId: string, selectedChoices: string[]) => {
-    try {
-      const post = posts.find((p) => p.id === postId);
-      if (!post || !post.choices) return;
-
-      const updatedChoices = post.choices.map((choice) => {
-        let newVotes = choice.votes || [];
-        // 기존 투표 제거
-        if (newVotes.includes(userId)) {
-          newVotes = newVotes.filter((id) => id !== userId);
-        }
-        // 새로운 투표 추가
-        if (selectedChoices.includes(choice.id)) {
-          newVotes = [...newVotes, userId];
-        }
-        return {
-          id: choice.id,
-          label: choice.label,
-          votes: newVotes,
-        };
-      });
-
-      await updatePostInDb(currentClubId, postId, {
-        choices: updatedChoices,
-      });
-
-      await refreshPosts();
-    } catch (error) {
-      console.error('Error voting poll:', error);
-      throw error;
-    }
-  };
-
-  // 내 투표 가져오기
-  const getMyVote = (postId: string, userId: string): string[] | null => {
-    const post = posts.find((p) => p.id === postId);
-    if (!post || !post.choices) return null;
-
-    const myChoices = post.choices
-      .filter((choice) => choice.votes?.includes(userId))
-      .map((choice) => choice.id);
-
-    return myChoices.length > 0 ? myChoices : null;
   };
 
   // 출석 현황 로드
@@ -597,15 +512,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         deletePost,
         loadComments,
         addComment,
+        updateComment,
         deleteComment,
         updateAttendance,
         getMyAttendance,
-        votePoll,
-        getMyVote,
         loadAttendances,
         loadNotifications,
         markNotificationAsRead,
         markAllNotificationsAsRead,
+        refreshMembers,
       }}
     >
       {children}

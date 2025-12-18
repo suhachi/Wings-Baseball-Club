@@ -1,8 +1,7 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { Calendar, Users, Trophy, Clock, Bell, Plus, Camera, FileText } from 'lucide-react';
+import { Calendar, Users, Trophy, Clock, Bell, Plus, FileText } from 'lucide-react';
 import { useData, Post } from '../contexts/DataContext';
-import { useAuth } from '../contexts/AuthContext';
 import { Card } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
@@ -10,12 +9,11 @@ import { format, differenceInHours } from 'date-fns';
 import { ko } from 'date-fns/locale';
 
 interface HomePageProps {
-  onNavigate: (tab: 'schedule' | 'boards' | 'album', postId?: string) => void;
+  onNavigate: (tab: 'boards', postId?: string) => void;
 }
 
 export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
   const { posts } = useData();
-  const { user } = useAuth();
 
   // Get upcoming events (next 3)
   const upcomingEvents = posts
@@ -99,7 +97,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => onNavigate('schedule')}
+              onClick={() => onNavigate('boards')}
               className="text-blue-600 dark:text-blue-400"
             >
               전체보기
@@ -178,7 +176,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
             <Button
               variant="outline"
               className="h-auto py-4 flex-col gap-2"
-              onClick={() => nextEventWithDeadline && onNavigate('schedule', nextEventWithDeadline.id)}
+              onClick={() => nextEventWithDeadline && onNavigate('boards', nextEventWithDeadline.id)}
             >
               <Calendar className="w-6 h-6 text-blue-600" />
               <span className="text-xs">출석하기</span>
@@ -191,14 +189,6 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
               <FileText className="w-6 h-6 text-green-600" />
               <span className="text-xs">글쓰기</span>
             </Button>
-            <Button
-              variant="outline"
-              className="h-auto py-4 flex-col gap-2"
-              onClick={() => onNavigate('album')}
-            >
-              <Camera className="w-6 h-6 text-purple-600" />
-              <span className="text-xs">사진올리기</span>
-            </Button>
           </div>
         </motion.div>
       </div>
@@ -210,7 +200,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
 const EventCard: React.FC<{
   event: Post;
   index: number;
-  onNavigate: (tab: 'schedule', postId?: string) => void;
+  onNavigate: (tab: 'boards', postId?: string) => void;
 }> = ({ event, index, onNavigate }) => {
   return (
     <motion.div
@@ -220,7 +210,7 @@ const EventCard: React.FC<{
     >
       <Card
         className="p-4 hover:shadow-lg transition-shadow cursor-pointer"
-        onClick={() => onNavigate('schedule', event.id)}
+        onClick={() => onNavigate('boards', event.id)}
       >
         <div className="flex items-start gap-3">
           <div className="p-2 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg text-white">

@@ -9,6 +9,7 @@ import { getAuth } from 'firebase/auth';
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, CACHE_SIZE_UNLIMITED } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import { getFunctions } from 'firebase/functions';
+// Note: getMessaging은 클라이언트에서만 사용하므로 messaging.service.ts에서 import
 
 const firebaseConfig = {
   // 우선순위: .env 값 > 아래 기본값 (사용자가 제공한 Firebase 설정)

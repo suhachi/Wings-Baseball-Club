@@ -9,11 +9,9 @@ import {
   Megaphone,
   User,
   CheckCheck,
-  Trash2,
   ArrowLeft,
 } from 'lucide-react';
 import { useData } from '../contexts/DataContext';
-import { useAuth } from '../contexts/AuthContext';
 import { Button } from '../components/ui/button';
 import { formatDistanceToNow } from 'date-fns';
 import { ko } from 'date-fns/locale';
@@ -25,7 +23,6 @@ interface NotificationPageProps {
 
 export const NotificationPage: React.FC<NotificationPageProps> = ({ onBack }) => {
   const { notifications, markNotificationAsRead, markAllNotificationsAsRead } = useData();
-  const { user } = useAuth();
 
   const handleNotificationClick = async (notification: any) => {
     if (!notification.read) {

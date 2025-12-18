@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { X, Calendar } from 'lucide-react';
+import { X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { useAuth } from '../contexts/AuthContext';
 import { useData, Post } from '../contexts/DataContext';
 import { toast } from 'sonner';
 
@@ -16,7 +15,6 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
   isOpen,
   onClose,
 }) => {
-  const { user, isAdmin } = useAuth();
   const { updatePost } = useData();
 
   const [title, setTitle] = useState(post.title);
@@ -34,15 +32,6 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
   const [place, setPlace] = useState(post.place || '');
   const [opponent, setOpponent] = useState(post.opponent || '');
 
-  // Poll fields
-  const [choices, setChoices] = useState<string[]>(
-    post.choices ? post.choices.map(c => c.label) : ['', '']
-  );
-  const [multi, setMulti] = useState(post.multi || false);
-  const [anonymous, setAnonymous] = useState(post.anonymous || false);
-  const [closeDate, setCloseDate] = useState(
-    post.voteCloseAt ? new Date(post.voteCloseAt).toISOString().split('T')[0] : ''
-  );
 
   useEffect(() => {
     if (isOpen) {
@@ -54,10 +43,6 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
       setStartTime(post.startAt ? new Date(post.startAt).toTimeString().slice(0, 5) : '');
       setPlace(post.place || '');
       setOpponent(post.opponent || '');
-      setChoices(post.choices ? post.choices.map(c => c.label) : ['', '']);
-      setMulti(post.multi || false);
-      setAnonymous(post.anonymous || false);
-      setCloseDate(post.voteCloseAt ? new Date(post.voteCloseAt).toISOString().split('T')[0] : '');
     }
   }, [isOpen, post]);
 
@@ -105,27 +90,6 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
         }
       }
 
-      // Poll specific fields
-      if (post.type === 'poll') {
-        const validChoices = choices.filter(c => c.trim());
-        if (validChoices.length < 2) {
-          toast.error('투표 선택지를 최소 2개 입력해주세요');
-          setLoading(false);
-          return;
-        }
-
-        updates.choices = validChoices.map((label, index) => ({
-          id: `choice_${Date.now()}_${index}`,
-          label,
-          count: 0,
-          votes: []
-        }));
-        updates.multi = multi;
-        updates.anonymous = anonymous;
-        if (closeDate) {
-          updates.voteCloseAt = new Date(closeDate);
-        }
-      }
 
       await updatePost(post.id, updates);
       toast.success('게시글이 수정되었습니다');
@@ -138,21 +102,6 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
     }
   };
 
-  const addChoice = () => {
-    setChoices([...choices, '']);
-  };
-
-  const updateChoice = (index: number, value: string) => {
-    const newChoices = [...choices];
-    newChoices[index] = value;
-    setChoices(newChoices);
-  };
-
-  const removeChoice = (index: number) => {
-    if (choices.length > 2) {
-      setChoices(choices.filter((_, i) => i !== index));
-    }
-  };
 
   if (!isOpen) return null;
 
@@ -279,75 +228,6 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
                       />
                     </div>
                   )}
-                </>
-              )}
-
-              {/* Poll specific fields */}
-              {post.type === 'poll' && (
-                <>
-                  <div>
-                    <label className="block text-sm font-medium mb-2">투표 선택지</label>
-                    <div className="space-y-2">
-                      {choices.map((choice, index) => (
-                        <div key={index} className="flex gap-2">
-                          <input
-                            type="text"
-                            value={choice}
-                            onChange={(e) => updateChoice(index, e.target.value)}
-                            className="flex-1 px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            placeholder={`선택지 ${index + 1}`}
-                          />
-                          {choices.length > 2 && (
-                            <button
-                              type="button"
-                              onClick={() => removeChoice(index)}
-                              className="px-3 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl"
-                            >
-                              <X className="w-5 h-5" />
-                            </button>
-                          )}
-                        </div>
-                      ))}
-                      <button
-                        type="button"
-                        onClick={addChoice}
-                        className="w-full py-3 border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-xl text-gray-500 hover:border-blue-500 hover:text-blue-500 transition-colors"
-                      >
-                        + 선택지 추가
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="space-y-3">
-                    <label className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={multi}
-                        onChange={(e) => setMulti(e.target.checked)}
-                        className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                      />
-                      <span className="text-sm">복수 선택 허용</span>
-                    </label>
-                    <label className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={anonymous}
-                        onChange={(e) => setAnonymous(e.target.checked)}
-                        className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                      />
-                      <span className="text-sm">익명 투표</span>
-                    </label>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium mb-2">마감일 (선택)</label>
-                    <input
-                      type="date"
-                      value={closeDate}
-                      onChange={(e) => setCloseDate(e.target.value)}
-                      className="w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
                 </>
               )}
 

@@ -1,11 +1,9 @@
 // Firebase Firestore 데이터 타입 정의
 
 export type UserRole = 'PRESIDENT' | 'DIRECTOR' | 'TREASURER' | 'ADMIN' | 'MEMBER';
-export type PostType = 'notice' | 'free' | 'event' | 'meetup' | 'poll' | 'game' | 'album';
+export type PostType = 'notice' | 'free' | 'event';
 export type EventType = 'PRACTICE' | 'GAME';
-export type GameType = 'LEAGUE' | 'PRACTICE';
 export type AttendanceStatus = 'attending' | 'absent' | 'maybe' | 'none';
-export type MediaType = 'photo' | 'video';
 export type PushStatus = 'SENT' | 'FAILED' | 'PENDING';
 export type NotificationType = 'notice' | 'comment' | 'like' | 'event' | 'mention' | 'system';
 
@@ -20,29 +18,11 @@ export interface UserDoc {
   position?: string;
   backNumber?: string;
   status: 'pending' | 'active' | 'rejected' | 'withdrawn';
-  invitedBy?: string;
-  inviteCode?: string;
   createdAt: Date;
   updatedAt: Date;
 }
 
-// Invite Code Document
-export interface InviteCodeDoc {
-  id: string;
-  code: string;
-  clubId: string; // Added clubId
-  role: UserRole;
-  createdBy: string;
-  createdByName: string;
-  createdAt: Date;
-  expiresAt?: Date;
-  usedBy?: string;
-  usedByName?: string;
-  usedAt?: Date;
-  isUsed: boolean;
-  maxUses: number;
-  currentUses: number;
-}
+
 
 // Post Document
 export interface PostDoc {
@@ -65,28 +45,11 @@ export interface PostDoc {
   voteCloseAt?: Date;
   voteClosed?: boolean;
 
-  // Poll specific
-  choices?: Array<{ id: string; label: string; votes: string[] }>; // votes: userId[]
-  multi?: boolean;
-  anonymous?: boolean;
-  closeAt?: Date;
-  closed?: boolean;
-
-  // Game specific
-  gameType?: GameType;
-  score?: { our: number; opp: number };
-  recorders?: string[]; // userId[]
-  recordingLocked?: boolean;
-  recordingLockedAt?: Date;
-  recordingLockedBy?: string;
-
-  // Album specific
-  mediaUrls?: string[];
-  mediaType?: MediaType;
 
   // Push specific (notice only)
   pushStatus?: PushStatus;
   pushSentAt?: Date;
+  pushError?: string;
 }
 
 // Comment Document
@@ -112,64 +75,6 @@ export interface AttendanceDoc {
   updatedAt: Date;
 }
 
-// Finance Document (회비/회계)
-export interface FinanceDoc {
-  id: string;
-  type: 'income' | 'expense';
-  category: 'dues' | 'event' | 'equipment' | 'other';
-  amount: number;
-  description: string;
-  date: Date;
-  createdBy: string;
-  createdByName: string;
-  createdAt: Date;
-
-  // 회비 specific
-  duesPaidBy?: string;
-  duesPaidByName?: string;
-  duesMonth?: string; // YYYY-MM
-}
-
-// Game Record Document (타자 기록)
-export interface BatterRecordDoc {
-  id: string;
-  gameId: string;
-  playerId: string;
-  playerName: string;
-  position: string;
-  battingOrder: number;
-
-  // 타석 결과
-  atBats: string[]; // ['1B', 'K', 'GO', '2B', 'HR'] 등
-  hits: number;
-  runs: number;
-  rbis: number;
-  walks: number;
-  strikeouts: number;
-
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-// Game Record Document (투수 기록)
-export interface PitcherRecordDoc {
-  id: string;
-  gameId: string;
-  playerId: string;
-  playerName: string;
-
-  // 투구 내용
-  innings: number; // 이닝 수 (소수점: 1.1 = 1과 1/3이닝)
-  pitches: number; // 투구 수
-  hitsAllowed: number;
-  runsAllowed: number;
-  earnedRuns: number;
-  walks: number;
-  strikeouts: number;
-
-  createdAt: Date;
-  updatedAt: Date;
-}
 
 // Notification Document (알림)
 export interface NotificationDoc {

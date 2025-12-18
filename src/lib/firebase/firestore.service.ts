@@ -11,19 +11,18 @@ import {
   where,
   orderBy,
   limit,
+  startAfter,
   serverTimestamp,
   Timestamp,
   addDoc,
+  QueryDocumentSnapshot,
+  DocumentData,
 } from 'firebase/firestore';
 import { db } from './config';
 import {
   PostDoc,
   CommentDoc,
-  InviteCodeDoc,
   AttendanceDoc,
-  FinanceDoc,
-  BatterRecordDoc,
-  PitcherRecordDoc,
   NotificationDoc,
 } from './types';
 
@@ -53,8 +52,14 @@ export async function createPost(clubId: string, postData: Omit<PostDoc, 'id' | 
 
 /**
  * 게시글 목록 가져오기
+ * μATOM-0302: 쿼리 규격 통일 (orderBy createdAt desc, limit N)
  */
-export async function getPosts(clubId: string, postType?: string, limitCount: number = 50): Promise<PostDoc[]> {
+export async function getPosts(
+  clubId: string, 
+  postType?: 'notice' | 'free' | 'event', 
+  limitCount: number = 50,
+  lastVisible?: QueryDocumentSnapshot<DocumentData>
+): Promise<{ posts: PostDoc[]; lastDoc: QueryDocumentSnapshot<DocumentData> | null }> {
   try {
     const postsRef = getClubCol(clubId, 'posts');
     let q = query(postsRef, orderBy('createdAt', 'desc'), limit(limitCount));
@@ -63,21 +68,26 @@ export async function getPosts(clubId: string, postType?: string, limitCount: nu
       q = query(postsRef, where('type', '==', postType), orderBy('createdAt', 'desc'), limit(limitCount));
     }
 
+    if (lastVisible) {
+      q = query(q, startAfter(lastVisible));
+    }
+
     const snapshot = await getDocs(q);
-    return snapshot.docs.map((doc) => ({
+    const posts = snapshot.docs.map((doc) => ({
       id: doc.id,
       ...doc.data(),
       createdAt: (doc.data().createdAt as Timestamp)?.toDate() || new Date(),
       updatedAt: (doc.data().updatedAt as Timestamp)?.toDate() || new Date(),
       startAt: (doc.data().startAt as Timestamp)?.toDate(),
       voteCloseAt: (doc.data().voteCloseAt as Timestamp)?.toDate(),
-      closeAt: (doc.data().closeAt as Timestamp)?.toDate(),
-      recordingLockedAt: (doc.data().recordingLockedAt as Timestamp)?.toDate(),
       pushSentAt: (doc.data().pushSentAt as Timestamp)?.toDate(),
     })) as PostDoc[];
+
+    const lastDoc = snapshot.docs[snapshot.docs.length - 1] || null;
+    return { posts, lastDoc };
   } catch (error) {
     console.error('Error getting posts:', error);
-    return [];
+    return { posts: [], lastDoc: null };
   }
 }
 
@@ -89,7 +99,7 @@ export async function getPost(clubId: string, postId: string): Promise<PostDoc |
     const postDoc = await getDoc(getClubDoc(clubId, 'posts', postId));
     if (!postDoc.exists()) return null;
 
-    const data = postDoc.data();
+    const data = postDoc.data() as any;
     return {
       id: postDoc.id,
       ...data,
@@ -176,6 +186,22 @@ export async function getComments(clubId: string, postId: string): Promise<Comme
   } catch (error) {
     console.error('Error getting comments:', error);
     return [];
+  }
+}
+
+/**
+ * 댓글 업데이트
+ */
+export async function updateComment(clubId: string, postId: string, commentId: string, updates: Partial<CommentDoc>): Promise<void> {
+  try {
+    const commentRef = doc(db, 'clubs', clubId, 'posts', postId, 'comments', commentId);
+    await updateDoc(commentRef, {
+      ...updates,
+      updatedAt: serverTimestamp(),
+    });
+  } catch (error) {
+    console.error('Error updating comment:', error);
+    throw error;
   }
 }
 
@@ -305,6 +331,32 @@ export async function getAllMembers(clubId: string): Promise<any[]> {
 }
 
 /**
+ * 특정 멤버 조회 (clubs/{clubId}/members/{uid})
+ * ATOM-08: Access Gate에서 사용
+ */
+export async function getMember(clubId: string, uid: string): Promise<any | null> {
+  try {
+    const memberRef = getClubDoc(clubId, 'members', uid);
+    const memberDoc = await getDoc(memberRef);
+
+    if (!memberDoc.exists()) {
+      return null;
+    }
+
+    const data = memberDoc.data();
+    return {
+      id: memberDoc.id,
+      ...data,
+      createdAt: (data.createdAt as Timestamp)?.toDate(),
+      updatedAt: (data.updatedAt as Timestamp)?.toDate(),
+    };
+  } catch (error) {
+    console.error('Error getting member:', error);
+    return null;
+  }
+}
+
+/**
  * 멤버 정보 업데이트 (관리자)
  */
 export async function updateMember(clubId: string, userId: string, updates: any): Promise<void> {
@@ -320,220 +372,6 @@ export async function updateMember(clubId: string, userId: string, updates: any)
   }
 }
 
-// ===== INVITE CODES =====
-// PRD: `clubs/{clubId}/invites`
-
-/**
- * 초대 코드 생성
- */
-export async function createInviteCode(clubId: string, codeData: Omit<any, 'id' | 'createdAt'>): Promise<string> {
-  try {
-    // Standardizing on ROOT 'inviteCodes' collection to match auth.service.ts
-    const inviteRef = doc(db, 'inviteCodes', codeData.code); // Use code as ID
-
-    // Fix: Remove undefined values (specifically expiresAt)
-    const dataToSave = {
-      ...codeData,
-      clubId,
-      expiresAt: codeData.expiresAt || null, // Ensure not undefined
-      createdAt: serverTimestamp(),
-    };
-
-    await setDoc(inviteRef, dataToSave);
-    return codeData.code;
-  } catch (error) {
-    console.error('Error creating invite code:', error);
-    throw error;
-  }
-}
-
-/**
- * 초대 코드 목록 가져오기
- */
-export async function getInviteCodes(clubId: string): Promise<InviteCodeDoc[]> {
-  try {
-    const invitesRef = collection(db, 'inviteCodes');
-    // Filter by clubId
-    const q = query(invitesRef, where('clubId', '==', clubId), orderBy('createdAt', 'desc'));
-    const snapshot = await getDocs(q);
-
-    return snapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-      createdAt: (doc.data().createdAt as Timestamp)?.toDate(),
-      expiresAt: (doc.data().expiresAt as Timestamp)?.toDate(),
-      usedAt: (doc.data().usedAt as Timestamp)?.toDate(),
-    })) as unknown as InviteCodeDoc[];
-  } catch (error) {
-    console.error('Error getting invite codes:', error);
-    return [];
-  }
-}
-
-/**
- * 초대 코드 삭제
- */
-export async function deleteInviteCode(_clubId: string, code: string): Promise<void> {
-  try {
-    // Delete from root collection
-    await deleteDoc(doc(db, 'inviteCodes', code));
-  } catch (error) {
-    console.error('Error deleting invite code:', error);
-    throw error;
-  }
-}
-
-/**
- * 초대 코드 수정 (역할, 최대 사용 횟수, 만료일 등)
- */
-export async function updateInviteCode(
-  _clubId: string,
-  code: string,
-  updates: Partial<any>
-): Promise<void> {
-  try {
-    const inviteRef = doc(db, 'inviteCodes', code);
-    await updateDoc(inviteRef, {
-      ...updates,
-      // No updatedAt field in current schema, but good to have if we added it
-    });
-  } catch (error) {
-    console.error('Error updating invite code:', error);
-    throw error;
-  }
-}
-
-// ===== FINANCE (LEDGER) =====
-// PRD: `clubs/{clubId}/ledger` or `dues`.
-// Legacy expects `FinanceDoc`. I will map `ledger` to `FinanceDoc`.
-
-/**
- * 회비/회계 내역 추가
- */
-export async function addFinance(clubId: string, financeData: Omit<FinanceDoc, 'id' | 'createdAt'>): Promise<string> {
-  try {
-    // using 'ledger' collection to align with PRD, but keeping type compatibility via mapping
-    const ledgerRef = getClubCol(clubId, 'ledger');
-    const docRef = await addDoc(ledgerRef, {
-      ...financeData,
-      createdAt: serverTimestamp(),
-    });
-    return docRef.id;
-  } catch (error) {
-    console.error('Error adding finance:', error);
-    throw error;
-  }
-}
-
-/**
- * 회비/회계 내역 가져오기
- */
-export async function getFinances(clubId: string, limitCount: number = 100): Promise<FinanceDoc[]> {
-  try {
-    const ledgerRef = getClubCol(clubId, 'ledger');
-    const q = query(ledgerRef, orderBy('date', 'desc'), limit(limitCount));
-    const snapshot = await getDocs(q);
-
-    return snapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-      date: (doc.data().date as Timestamp)?.toDate() || new Date(),
-      createdAt: (doc.data().createdAt as Timestamp)?.toDate() || new Date(),
-    })) as FinanceDoc[];
-  } catch (error) {
-    console.error('Error getting finances:', error);
-    return [];
-  }
-}
-
-/**
- * 회비/회계 내역 삭제
- */
-export async function deleteFinance(clubId: string, financeId: string): Promise<void> {
-  try {
-    await deleteDoc(getClubDoc(clubId, 'ledger', financeId));
-  } catch (error) {
-    console.error('Error deleting finance:', error);
-    throw error;
-  }
-}
-
-// ===== GAME RECORDS =====
-// PRD: `clubs/{clubId}/posts/{postId}/record_batters/{playerId}` etc.
-// But legacy used `gameRecords` root collection.
-// Let's stick to legacy signature but move data under club -> post?
-// Actually, game records are usually tied to a game post.
-// PRD says: `clubs/{clubId}/posts/{postId}/record_lineup/...`
-// Legacy `saveBatterRecord`: saves to `gameRecords/batters/{gameId}`.
-// I'll change it to `clubs/{clubId}/posts/{gameId}/record_batters`.
-
-/**
- * 타자 기록 저장
- */
-export async function saveBatterRecord(clubId: string, recordData: Omit<BatterRecordDoc, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
-  try {
-    const recordsRef = collection(db, 'clubs', clubId, 'posts', recordData.gameId, 'record_batters');
-    const docRef = await addDoc(recordsRef, {
-      ...recordData,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    });
-    return docRef.id;
-  } catch (error) {
-    console.error('Error saving batter record:', error);
-    throw error;
-  }
-}
-
-/**
- * 투수 기록 저장
- */
-export async function savePitcherRecord(clubId: string, recordData: Omit<PitcherRecordDoc, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
-  try {
-    const recordsRef = collection(db, 'clubs', clubId, 'posts', recordData.gameId, 'record_pitchers');
-    const docRef = await addDoc(recordsRef, {
-      ...recordData,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    });
-    return docRef.id;
-  } catch (error) {
-    console.error('Error saving pitcher record:', error);
-    throw error;
-  }
-}
-
-/**
- * 경기 기록 가져오기
- */
-export async function getGameRecords(clubId: string, gameId: string): Promise<{ batters: BatterRecordDoc[]; pitchers: PitcherRecordDoc[] }> {
-  try {
-    // 타자 기록
-    const battersRef = collection(db, 'clubs', clubId, 'posts', gameId, 'record_batters');
-    const battersSnapshot = await getDocs(battersRef);
-    const batters = battersSnapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-      createdAt: (doc.data().createdAt as Timestamp)?.toDate() || new Date(),
-      updatedAt: (doc.data().updatedAt as Timestamp)?.toDate() || new Date(),
-    })) as BatterRecordDoc[];
-
-    // 투수 기록
-    const pitchersRef = collection(db, 'clubs', clubId, 'posts', gameId, 'record_pitchers');
-    const pitchersSnapshot = await getDocs(pitchersRef);
-    const pitchers = pitchersSnapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-      createdAt: (doc.data().createdAt as Timestamp)?.toDate() || new Date(),
-      updatedAt: (doc.data().updatedAt as Timestamp)?.toDate() || new Date(),
-    })) as PitcherRecordDoc[];
-
-    return { batters, pitchers };
-  } catch (error) {
-    console.error('Error getting game records:', error);
-    return { batters: [], pitchers: [] };
-  }
-}
 
 // ===== NOTIFICATIONS =====
 // PRD: Global or Post-based? Notifications are usually per user.
