@@ -25,7 +25,7 @@ const errors_1 = require("../shared/errors");
  * // TREASURER 지정 (PRESIDENT만 가능)
  * await setMemberRole({ clubId, targetUserId, role: 'TREASURER', requestId });
  */
-exports.setMemberRole = (0, https_1.onCall)(async (req) => {
+exports.setMemberRole = (0, https_1.onCall)({ region: 'asia-northeast3' }, async (req) => {
     const uid = (0, auth_1.requireAuth)(req);
     const clubId = (0, validate_1.reqString)(req.data?.clubId, 'clubId', 3, 64);
     const targetUserId = (0, validate_1.reqString)(req.data?.targetUserId, 'targetUserId', 1, 128);
@@ -131,7 +131,7 @@ exports.setMemberRole = (0, https_1.onCall)(async (req) => {
  *   requestId
  * });
  */
-exports.setMemberProfileByAdmin = (0, https_1.onCall)(async (req) => {
+exports.setMemberProfileByAdmin = (0, https_1.onCall)({ region: 'asia-northeast3' }, async (req) => {
     const uid = (0, auth_1.requireAuth)(req);
     const clubId = (0, validate_1.reqString)(req.data?.clubId, 'clubId', 3, 64);
     const targetUserId = (0, validate_1.reqString)(req.data?.targetUserId, 'targetUserId', 1, 128);

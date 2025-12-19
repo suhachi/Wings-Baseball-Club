@@ -23,7 +23,7 @@ import { Err } from '../shared/errors';
  * // TREASURER 지정 (PRESIDENT만 가능)
  * await setMemberRole({ clubId, targetUserId, role: 'TREASURER', requestId });
  */
-export const setMemberRole = onCall(async (req) => {
+export const setMemberRole = onCall({ region: 'asia-northeast3' }, async (req) => {
   const uid = requireAuth(req);
   const clubId = reqString(req.data?.clubId, 'clubId', 3, 64);
   const targetUserId = reqString(req.data?.targetUserId, 'targetUserId', 1, 128);
@@ -138,7 +138,7 @@ export const setMemberRole = onCall(async (req) => {
  *   requestId
  * });
  */
-export const setMemberProfileByAdmin = onCall(async (req) => {
+export const setMemberProfileByAdmin = onCall({ region: 'asia-northeast3' }, async (req) => {
   const uid = requireAuth(req);
   const clubId = reqString(req.data?.clubId, 'clubId', 3, 64);
   const targetUserId = reqString(req.data?.targetUserId, 'targetUserId', 1, 128);

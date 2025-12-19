@@ -45,7 +45,12 @@ export const BoardsPage: React.FC = () => {
     });
 
   const handleCreatePost = (type: PostType) => {
-    setCreatePostType(type);
+    // If Admin and on Notice tab, default to Notice type
+    if (activeTab === 'notice' && isAdmin()) {
+      setCreatePostType('notice');
+    } else {
+      setCreatePostType(type);
+    }
     setCreateModalOpen(true);
   };
 
@@ -97,7 +102,7 @@ export const BoardsPage: React.FC = () => {
         {/* 공지/연습·시합: adminLike만 버튼 노출 */}
         {/* 자유: 멤버면 버튼 노출 */}
         {((activeTab === 'notice' || activeTab === 'event') && isAdmin() && user?.status === 'active') ||
-         (activeTab === 'free' && user?.status === 'active') ? (
+          (activeTab === 'free' && user?.status === 'active') ? (
           <motion.button
             whileTap={{ scale: 0.95 }}
             className="fixed bottom-24 right-4 w-14 h-14 bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-full shadow-lg flex items-center justify-center z-40"
@@ -159,8 +164,8 @@ export const BoardsPage: React.FC = () => {
 const PostList: React.FC<{ posts: any[]; type: PostType; onPostClick: (post: Post) => void }> = ({ posts, type, onPostClick }) => {
   if (posts.length === 0) {
     return (
-      <EmptyState 
-        type="empty" 
+      <EmptyState
+        type="empty"
         message="게시글이 없습니다"
       />
     );

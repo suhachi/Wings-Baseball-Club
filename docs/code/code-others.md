@@ -33,3 +33,9 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   </React.StrictMode>
 );
 ```
+
+## src/vite-env.d.ts
+
+```ts
+/// <reference types="vite/client" />
+```

@@ -1,9 +1,8 @@
-# src/app – 앱 레이어 전체 코드
+# 91. Full Source Dump: src/
 
-> 이 문서는 `src-app` 그룹에 속한 모든 파일의 실제 코드를 100% 포함합니다.
+**Generated**: 2025-12-19T07:20:34.561Z
 
-## src/app/App.tsx
-
+## FILE: src\app\App.tsx
 ```tsx
 import React, { useState } from 'react';
 import { Toaster } from 'sonner';
@@ -26,24 +25,30 @@ import { InstallPage } from './pages/InstallPage'; // Added
 import { AccessDeniedPage } from './pages/AccessDeniedPage'; // ATOM-08
 import { useFcm } from './hooks/useFcm'; // ATOM-13: FCM 초기화
 import { Loader2 } from 'lucide-react';
+
 type PageType = 'home' | 'boards' | 'my' | 'settings' | 'notifications' | 'admin' | 'my-activity' | 'install';
+
 function AppContent() {
   // [DEBUG] Version Check
   console.log('%c Wings PWA v1.3-debug loaded ', 'background: #222; color: #ff00ff');
+
   const { user, loading, memberStatus } = useAuth(); // μATOM-0401~0402: memberStatus 추가
   const data = useData();
   useFcm(); // ATOM-13: FCM 초기화 (권한 확인, 토큰 등록, foreground 수신 핸들러)
   const [activeTab, setActiveTab] = useState<'home' | 'boards' | 'my'>('home');
   const [currentPage, setCurrentPage] = useState<PageType>('home');
   const [adminInitialTab, setAdminInitialTab] = useState<'members' | 'stats' | 'notices'>('members');
+
   // Simple URL routing for install page
   React.useEffect(() => {
     if (window.location.pathname === '/install') {
       setCurrentPage('install');
     }
   }, []);
+
   // Calculate unread notification count safely
   const unreadNotificationCount = data?.notifications ? data.notifications.filter((n) => !n.read).length : 0;
+
   // Loading state
   if (loading) {
     return (
@@ -55,10 +60,12 @@ function AppContent() {
       </div>
     );
   }
+
   // If not logged in, show login page
   if (!user && currentPage !== 'install') { // Allow access to install page without login
     return <LoginPage />;
   }
+
   // μATOM-0401: 로그인 후 members/{uid} 존재 체크
   // μATOM-0402: status==active 검증
   // μATOM-0403: Gate 실패 시 강제 이동(라우트 가드)
@@ -67,6 +74,7 @@ function AppContent() {
   if (user && memberStatus === 'denied') {
     return <AccessDeniedPage />;
   }
+
   // 멤버 상태 체크 중이면 로딩 표시
   if (user && memberStatus === 'checking') {
     return (
@@ -78,25 +86,21 @@ function AppContent() {
       </div>
     );
   }
+
   // μATOM-0403: Gate 실패 시 강제 이동(라우트 가드)
   // memberStatus가 'active'가 아니면 모든 보호 페이지 접근 차단
   if (user && memberStatus !== 'active' && currentPage !== 'install') {
     return <AccessDeniedPage />;
   }
+
+
+
   // Get page title and back button config
   const getPageConfig = () => {
     switch (currentPage) {
       case 'settings':
         return {
           title: '설정',
-          showBack: true,
-          onBack: () => handlePageChange('my'),
-          showNotification: false,
-          showSettings: false
-        };
-      case 'my-activity':
-        return {
-          title: '내 활동',
           showBack: true,
           onBack: () => handlePageChange('my'),
           showNotification: false,
@@ -127,26 +131,32 @@ function AppContent() {
         };
     }
   };
+
   const handleNavigate = (tab: 'home' | 'boards' | 'my') => {
     setActiveTab(tab);
     setCurrentPage(tab);
     // In a real app, you would also handle postId to show specific post details
   };
+
   const handlePageChange = (page: PageType) => {
     setCurrentPage(page);
     // Update activeTab if it's a main tab
-    if (page === 'home' || page === 'boards' || page === 'my') {
-      setActiveTab(page);
-    }
+      if (page !== 'settings' && page !== 'notifications' && page !== 'admin') {
+        setActiveTab(page as 'home' | 'boards' | 'my');
+      }
   };
+
   const handleNavigateToAdmin = (tab: 'members' | 'stats' | 'notices' = 'members') => {
     setAdminInitialTab(tab);
     handlePageChange('admin');
   };
+
   const pageConfig = getPageConfig();
+
   if (currentPage === 'install') {
     return <InstallPage />;
   }
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
       {/* Top Bar */}
@@ -160,6 +170,7 @@ function AppContent() {
         onLogoClick={() => handlePageChange('home')}
         unreadNotificationCount={unreadNotificationCount}
       />
+
       {/* Main Content */}
       <main className="min-h-screen">
         {currentPage === 'home' && <HomePage onNavigate={handleNavigate} />}
@@ -177,10 +188,13 @@ function AppContent() {
         {currentPage === 'notifications' && <NotificationPage onBack={() => handlePageChange('my')} />}
         {currentPage === 'admin' && <AdminPage initialTab={adminInitialTab} />}
       </main>
+
       {/* Bottom Navigation */}
       <BottomNav activeTab={activeTab} onTabChange={handleNavigate} />
+
       {/* Install Prompt */}
       <InstallPrompt />
+
       {/* Toast Notifications */}
       <Toaster
         position="top-center"
@@ -191,6 +205,7 @@ function AppContent() {
     </div>
   );
 }
+
 export default function App() {
   return (
     <ClubProvider>
@@ -204,6 +219,7 @@ export default function App() {
     </ClubProvider>
   );
 }
+
 // μATOM-0404: Gate 성공 시 clubId 컨텍스트 고정
 // ClubContext의 clubId를 AuthProvider에 전달
 const AuthProviderWithClub: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -212,22 +228,24 @@ const AuthProviderWithClub: React.FC<{ children: React.ReactNode }> = ({ childre
 };
 ```
 
-## src/app/components/BottomNav.tsx
-
+## FILE: src\app\components\BottomNav.tsx
 ```tsx
 import React from 'react';
 import { Home, MessageSquare, User } from 'lucide-react';
 import { motion } from 'motion/react';
+
 interface BottomNavProps {
   activeTab: 'home' | 'boards' | 'my';
   onTabChange: (tab: 'home' | 'boards' | 'my') => void;
 }
+
 export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, onTabChange }) => {
   const tabs = [
     { id: 'home', label: '홈', icon: Home },
     { id: 'boards', label: '게시판', icon: MessageSquare },
     { id: 'my', label: '내정보', icon: User },
   ] as const;
+
   return (
     <div className="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-xl border-t border-gray-200 dark:bg-gray-900/80 dark:border-gray-800 z-50 pb-safe">
       <div className="max-w-md mx-auto">
@@ -235,6 +253,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, onTabChange }) 
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
+            
             return (
               <button
                 key={tab.id}
@@ -281,10 +300,10 @@ export const BottomNav: React.FC<BottomNavProps> = ({ activeTab, onTabChange }) 
     </div>
   );
 };
+
 ```
 
-## src/app/components/CommentForm.tsx
-
+## FILE: src\app\components\CommentForm.tsx
 ```tsx
 import React, { useState } from 'react';
 import { Send } from 'lucide-react';
@@ -292,27 +311,35 @@ import { motion } from 'motion/react';
 import { useAuth } from '../contexts/AuthContext';
 import { useData } from '../contexts/DataContext';
 import { toast } from 'sonner';
+
 interface CommentFormProps {
   postId: string;
 }
+
 export const CommentForm: React.FC<CommentFormProps> = ({ postId }) => {
   const { user } = useAuth();
   const { addComment } = useData();
   const [content, setContent] = useState('');
   const [loading, setLoading] = useState(false);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
     if (!content.trim()) {
       toast.error('댓글 내용을 입력해주세요');
       return;
     }
+
     if (!user) {
       toast.error('로그인이 필요합니다');
       return;
     }
+
     setLoading(true);
+
     try {
       await addComment(postId, content.trim());
+
       setContent('');
       toast.success('댓글이 작성되었습니다');
     } catch (error) {
@@ -322,6 +349,7 @@ export const CommentForm: React.FC<CommentFormProps> = ({ postId }) => {
       setLoading(false);
     }
   };
+
   return (
     <form onSubmit={handleSubmit} className="mt-6">
       <div className="flex gap-3">
@@ -331,6 +359,7 @@ export const CommentForm: React.FC<CommentFormProps> = ({ postId }) => {
             {user?.realName?.charAt(0) || '?'}
           </div>
         </div>
+
         {/* Input */}
         <div className="flex-1 flex gap-2">
           <textarea
@@ -341,6 +370,7 @@ export const CommentForm: React.FC<CommentFormProps> = ({ postId }) => {
             rows={2}
             disabled={loading}
           />
+
           <motion.button
             type="submit"
             disabled={loading || !content.trim()}
@@ -354,10 +384,10 @@ export const CommentForm: React.FC<CommentFormProps> = ({ postId }) => {
     </form>
   );
 };
+
 ```
 
-## src/app/components/CommentList.tsx
-
+## FILE: src\app\components\CommentList.tsx
 ```tsx
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -368,21 +398,26 @@ import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { EmptyState } from './EmptyState';
+
 interface CommentListProps {
   postId: string;
 }
+
 export const CommentList: React.FC<CommentListProps> = ({ postId }) => {
   const { comments } = useData();
+
   const postComments = (comments[postId] || [])
     .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+
   if (postComments.length === 0) {
     return (
-      <EmptyState
-        type="empty"
+      <EmptyState 
+        type="empty" 
         message="첫 댓글을 작성해보세요!"
       />
     );
   }
+
   return (
     <div className="space-y-4 mb-6">
       <AnimatePresence>
@@ -397,29 +432,37 @@ export const CommentList: React.FC<CommentListProps> = ({ postId }) => {
     </div>
   );
 };
+
 interface CommentItemProps {
   comment: any;
   postId: string;
 }
+
 const CommentItem: React.FC<CommentItemProps> = ({ comment, postId }) => {
   const { user } = useAuth();
   const { members, deleteComment, updateComment } = useData();
   const [showMenu, setShowMenu] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState(comment.content);
+
   // ATOM-15: 작성자 확인
   const isAuthor = user?.id === comment.author.id;
+
   // ATOM-15: adminLike 확인 (PRESIDENT | DIRECTOR | ADMIN | TREASURER)
   const isAdminLike = user?.role && ['PRESIDENT', 'DIRECTOR', 'ADMIN', 'TREASURER'].includes(user.role);
+
   // ATOM-15: 수정/삭제 버튼 노출 조건 - 작성자만, 삭제는 adminLike도 가능
   const canEdit = isAuthor;
   const canDelete = isAuthor || isAdminLike;
+
   // Match author by ID from the nested author object
   const author = members.find(u => u.id === comment.author.id);
   const displayName = author?.realName || comment.author.name || '알 수 없음';
   const displayPhoto = author?.photoURL || comment.author.photoURL;
+
   const handleDelete = async () => {
     if (!confirm('댓글을 삭제하시겠습니까?')) return;
+
     try {
       await deleteComment(postId, comment.id);
       toast.success('댓글이 삭제되었습니다');
@@ -433,11 +476,13 @@ const CommentItem: React.FC<CommentItemProps> = ({ comment, postId }) => {
       }
     }
   };
+
   const handleUpdate = async () => {
     if (!editContent.trim()) {
       toast.error('댓글 내용을 입력해주세요');
       return;
     }
+
     try {
       await updateComment(postId, comment.id, editContent.trim());
       toast.success('댓글이 수정되었습니다');
@@ -452,10 +497,12 @@ const CommentItem: React.FC<CommentItemProps> = ({ comment, postId }) => {
       }
     }
   };
+
   const handleCancelEdit = () => {
     setEditContent(comment.content);
     setIsEditing(false);
   };
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -473,6 +520,7 @@ const CommentItem: React.FC<CommentItemProps> = ({ comment, postId }) => {
           )}
         </div>
       </div>
+
       {/* Content */}
       <div className="flex-1 min-w-0">
         {/* Header */}
@@ -493,6 +541,7 @@ const CommentItem: React.FC<CommentItemProps> = ({ comment, postId }) => {
               )}
             </div>
           </div>
+
           {/* ATOM-15: 작성자만 수정/삭제 버튼 노출, 삭제는 adminLike도 가능 */}
           {(canEdit || canDelete) && (
             <div className="relative">
@@ -503,6 +552,7 @@ const CommentItem: React.FC<CommentItemProps> = ({ comment, postId }) => {
               >
                 <MoreVertical className="w-4 h-4" />
               </button>
+
               {showMenu && (
                 <motion.div
                   initial={{ opacity: 0, scale: 0.95 }}
@@ -535,6 +585,7 @@ const CommentItem: React.FC<CommentItemProps> = ({ comment, postId }) => {
             </div>
           )}
         </div>
+
         {/* Comment Text or Edit Form */}
         {isEditing ? (
           <div className="space-y-2">
@@ -568,10 +619,10 @@ const CommentItem: React.FC<CommentItemProps> = ({ comment, postId }) => {
     </motion.div>
   );
 };
+
 ```
 
-## src/app/components/CreateNoticeModal.tsx
-
+## FILE: src\app\components\CreateNoticeModal.tsx
 ```tsx
 import React, { useState } from 'react';
 import { X, FileText } from 'lucide-react';
@@ -579,14 +630,16 @@ import { motion, AnimatePresence } from 'motion/react';
 import { useClub } from '../contexts/ClubContext';
 import { createNoticeWithPush } from '../../lib/firebase/notices.service';
 import { toast } from 'sonner';
+
 interface CreateNoticeModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess?: (postId: string) => void;
 }
+
 /**
  * ATOM-17: 공지 작성 모달 (Functions 호출 강제)
- *
+ * 
  * - Firestore addDoc로 공지 생성 코드 제거/차단
  * - UUID requestId 생성 후 createNoticeWithPush callable 호출
  * - 성공 시 pushStatus 표시 및 상세로 이동
@@ -597,21 +650,27 @@ export const CreateNoticeModal: React.FC<CreateNoticeModalProps> = ({
   onSuccess,
 }) => {
   const { currentClubId } = useClub();
+
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [pinned, setPinned] = useState(false);
   const [loading, setLoading] = useState(false);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
     if (!title.trim() || !content.trim()) {
       toast.error('제목과 내용을 입력해주세요');
       return;
     }
+
     if (!currentClubId) {
       toast.error('클럽이 선택되지 않았습니다');
       return;
     }
+
     setLoading(true);
+
     try {
       // ATOM-17: UUID requestId 생성 후 callable 호출
       const result = await createNoticeWithPush(
@@ -620,18 +679,22 @@ export const CreateNoticeModal: React.FC<CreateNoticeModalProps> = ({
         content.trim(),
         pinned
       );
+
       toast.success('공지가 작성되었습니다');
+      
       // pushStatus에 따른 메시지 표시
       if (result.pushStatus === 'FAILED') {
         toast.warning('공지는 작성되었지만 푸시 알림 발송에 실패했습니다. 관리자에게 문의하세요.');
       } else if (result.pushResult && result.pushResult.sent > 0) {
         toast.success(`${result.pushResult.sent}명에게 푸시 알림이 발송되었습니다`);
       }
+
       onClose();
       resetForm();
       onSuccess?.(result.postId);
     } catch (error: any) {
       console.error('Error creating notice:', error);
+      
       // 권한 오류 처리
       if (error.code === 'permission-denied') {
         toast.error('공지 작성 권한이 없습니다');
@@ -642,11 +705,13 @@ export const CreateNoticeModal: React.FC<CreateNoticeModalProps> = ({
       setLoading(false);
     }
   };
+
   const resetForm = () => {
     setTitle('');
     setContent('');
     setPinned(false);
   };
+
   return (
     <AnimatePresence>
       {isOpen && (
@@ -659,6 +724,7 @@ export const CreateNoticeModal: React.FC<CreateNoticeModalProps> = ({
             onClick={onClose}
             className="absolute inset-0 bg-black/50 backdrop-blur-sm"
           />
+
           {/* Modal */}
           <motion.div
             initial={{ opacity: 0, y: 100 }}
@@ -679,6 +745,7 @@ export const CreateNoticeModal: React.FC<CreateNoticeModalProps> = ({
                 <X className="w-5 h-5" />
               </button>
             </div>
+
             {/* Content */}
             <div className="flex-1 overflow-y-auto px-6 py-4">
               <form onSubmit={handleSubmit} className="space-y-4">
@@ -694,6 +761,7 @@ export const CreateNoticeModal: React.FC<CreateNoticeModalProps> = ({
                     disabled={loading}
                   />
                 </div>
+
                 {/* Content */}
                 <div>
                   <label className="block text-sm font-medium mb-2">내용</label>
@@ -706,6 +774,7 @@ export const CreateNoticeModal: React.FC<CreateNoticeModalProps> = ({
                     disabled={loading}
                   />
                 </div>
+
                 {/* Pinned */}
                 <div>
                   <label className="flex items-center gap-2">
@@ -719,12 +788,14 @@ export const CreateNoticeModal: React.FC<CreateNoticeModalProps> = ({
                     <span className="text-sm">상단 고정</span>
                   </label>
                 </div>
+
                 {/* Info */}
                 <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-sm text-blue-700 dark:text-blue-300">
                   작성 시 모든 멤버에게 푸시 알림이 발송됩니다.
                 </div>
               </form>
             </div>
+
             {/* Footer */}
             <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 dark:border-gray-800">
               <button
@@ -748,10 +819,11 @@ export const CreateNoticeModal: React.FC<CreateNoticeModalProps> = ({
     </AnimatePresence>
   );
 };
+
+
 ```
 
-## src/app/components/CreatePostModal.tsx
-
+## FILE: src\app\components\CreatePostModal.tsx
 ```tsx
 import React, { useState } from 'react';
 import { X, FileText, Users, Calendar, MapPin, Trophy } from 'lucide-react';
@@ -764,11 +836,13 @@ import type { PostType } from '../contexts/DataContext';
 import { createEventPost } from '../../lib/firebase/events.service';
 import { createNoticeWithPush } from '../../lib/firebase/notices.service';
 import { Bell } from 'lucide-react'; // Icon for notice
+
 interface CreatePostModalProps {
   isOpen: boolean;
   onClose: () => void;
   defaultType?: PostType;
 }
+
 export const CreatePostModal: React.FC<CreatePostModalProps> = ({
   isOpen,
   onClose,
@@ -777,32 +851,41 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
   const { addPost, refreshPosts } = useData();
   const { isAdmin } = useAuth();
   const { currentClubId } = useClub();
+
   const [postType, setPostType] = useState<PostType>(defaultType);
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [loading, setLoading] = useState(false);
   const [pinned, setPinned] = useState(false); // For notice
+
   // μATOM-0534: 이벤트 작성 화면 (최소 입력)
   const [eventType, setEventType] = useState<'PRACTICE' | 'GAME'>('PRACTICE');
   const [startDate, setStartDate] = useState('');
   const [startTime, setStartTime] = useState('');
   const [place, setPlace] = useState('');
   const [opponent, setOpponent] = useState('');
+
   // ATOM-14: free/event만 클라이언트에서 직접 생성 가능
   // notice 생성 UI는 이 ATOM에서 금지 -> v1.1.1: 관리자는 허용
   const basePostTypes: { id: PostType; label: string; icon: React.ElementType }[] = [
     { id: 'free', label: '자유게시판', icon: FileText },
     { id: 'event', label: '이벤트/정모', icon: Users },
   ];
+
   const postTypes = isAdmin()
     ? [{ id: 'notice' as PostType, label: '공지사항', icon: Bell }, ...basePostTypes]
     : basePostTypes;
+
+
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
     if (!title.trim() || !content.trim()) {
       toast.error('제목과 내용을 입력해주세요');
       return;
     }
+
     // Notice creation (Admin only)
     if (postType === 'notice') {
       setLoading(true);
@@ -825,12 +908,14 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
       }
       return;
     }
+
     // μATOM-0534: 이벤트 작성 화면(최소 입력) - 필수값 누락 방지
     if (postType === 'event') {
       if (!startDate || !startTime || !place.trim()) {
         toast.error('일시, 장소는 필수 입력 항목입니다');
         return;
       }
+
       // event는 callable로 생성
       setLoading(true);
       try {
@@ -840,6 +925,7 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
           setLoading(false);
           return;
         }
+
         await createEventPost(
           currentClubId,
           eventType,
@@ -850,6 +936,7 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
           opponent.trim() || undefined
         );
         await refreshPosts();
+
         toast.success('이벤트가 작성되었습니다');
         onClose();
         resetForm();
@@ -861,12 +948,15 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
       }
       return;
     }
+
     // free는 클라이언트에서 직접 생성
     if (postType !== 'free') {
       toast.error('이 게시글 타입은 클라이언트에서 직접 생성할 수 없습니다');
       return;
     }
+
     setLoading(true);
+
     try {
       const postData: any = {
         type: postType,
@@ -874,7 +964,9 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
         content: content.trim(),
         pinned: false, // free/event는 고정 불가
       };
+
       await addPost(postData);
+
       toast.success('게시글이 작성되었습니다');
       onClose();
       resetForm();
@@ -885,6 +977,7 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
       setLoading(false);
     }
   };
+
   const resetForm = () => {
     setTitle('');
     setContent('');
@@ -895,6 +988,7 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
     setOpponent('');
     setPinned(false);
   };
+
   return (
     <AnimatePresence>
       {isOpen && (
@@ -907,6 +1001,7 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
             onClick={onClose}
             className="absolute inset-0 bg-black/50 backdrop-blur-sm"
           />
+
           {/* Modal */}
           <motion.div
             initial={{ opacity: 0, y: 100 }}
@@ -924,6 +1019,7 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
                 <X className="w-5 h-5" />
               </button>
             </div>
+
             {/* Content */}
             <div className="flex-1 overflow-y-auto px-6 py-4">
               <form onSubmit={handleSubmit} className="space-y-4">
@@ -934,6 +1030,7 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
                     {postTypes.map((type) => {
                       const Icon = type.icon;
                       const isActive = postType === type.id;
+
                       return (
                         <button
                           key={type.id}
@@ -953,6 +1050,7 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
                     })}
                   </div>
                 </div>
+
                 {/* Pinned Checkbox (Notice Only) */}
                 {postType === 'notice' && (
                   <div className="flex items-center gap-2 mb-4 p-3 bg-red-50 dark:bg-red-900/10 rounded-lg border border-red-100 dark:border-red-900/30">
@@ -969,6 +1067,7 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
                     />
                   </div>
                 )}
+
                 {/* Title */}
                 <div>
                   <label className="block text-sm font-medium mb-2">제목</label>
@@ -980,6 +1079,7 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
                     placeholder="제목을 입력하세요"
                   />
                 </div>
+
                 {/* Content */}
                 <div>
                   <label className="block text-sm font-medium mb-2">내용</label>
@@ -991,6 +1091,7 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
                     placeholder="내용을 입력하세요"
                   />
                 </div>
+
                 {/* μATOM-0534: 이벤트 작성 화면(최소 입력) */}
                 {postType === 'event' && (
                   <div className="space-y-4 pt-2 border-t border-gray-200 dark:border-gray-700">
@@ -1022,6 +1123,7 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
                         </button>
                       </div>
                     </div>
+
                     {/* Start Date & Time */}
                     <div className="grid grid-cols-2 gap-2">
                       <div>
@@ -1045,6 +1147,7 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
                         />
                       </div>
                     </div>
+
                     {/* Place */}
                     <div>
                       <label className="block text-sm font-medium mb-2 flex items-center gap-2">
@@ -1060,6 +1163,7 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
                         required={postType === 'event'}
                       />
                     </div>
+
                     {/* Opponent (경기일 때만) */}
                     {eventType === 'GAME' && (
                       <div>
@@ -1080,6 +1184,7 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
                 )}
               </form>
             </div>
+
             {/* Footer */}
             <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 dark:border-gray-800">
               <button
@@ -1102,14 +1207,15 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
     </AnimatePresence>
   );
 };
+
 ```
 
-## src/app/components/DeleteConfirmDialog.tsx
-
+## FILE: src\app\components\DeleteConfirmDialog.tsx
 ```tsx
 import React from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+
 interface DeleteConfirmDialogProps {
   isOpen: boolean;
   title: string;
@@ -1118,6 +1224,7 @@ interface DeleteConfirmDialogProps {
   onCancel: () => void;
   loading?: boolean;
 }
+
 export const DeleteConfirmDialog: React.FC<DeleteConfirmDialogProps> = ({
   isOpen,
   title,
@@ -1127,6 +1234,7 @@ export const DeleteConfirmDialog: React.FC<DeleteConfirmDialogProps> = ({
   loading = false,
 }) => {
   if (!isOpen) return null;
+
   return (
     <AnimatePresence>
       <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
@@ -1138,6 +1246,7 @@ export const DeleteConfirmDialog: React.FC<DeleteConfirmDialogProps> = ({
           className="absolute inset-0 bg-black/60"
           onClick={onCancel}
         />
+        
         {/* Dialog */}
         <motion.div
           initial={{ opacity: 0, scale: 0.9 }}
@@ -1152,11 +1261,13 @@ export const DeleteConfirmDialog: React.FC<DeleteConfirmDialogProps> = ({
               <AlertTriangle className="w-8 h-8 text-red-600 dark:text-red-400" />
             </div>
           </div>
+
           {/* Content */}
           <div className="text-center mb-6">
             <h3 className="text-xl font-bold mb-2">{title}</h3>
             <p className="text-gray-600 dark:text-gray-400">{message}</p>
           </div>
+
           {/* Actions */}
           <div className="flex gap-3">
             <button
@@ -1179,30 +1290,34 @@ export const DeleteConfirmDialog: React.FC<DeleteConfirmDialogProps> = ({
     </AnimatePresence>
   );
 };
+
 ```
 
-## src/app/components/EditPostModal.tsx
-
+## FILE: src\app\components\EditPostModal.tsx
 ```tsx
 import React, { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useData, Post } from '../contexts/DataContext';
 import { toast } from 'sonner';
+
 interface EditPostModalProps {
   post: Post;
   isOpen: boolean;
   onClose: () => void;
 }
+
 export const EditPostModal: React.FC<EditPostModalProps> = ({
   post,
   isOpen,
   onClose,
 }) => {
   const { updatePost } = useData();
+
   const [title, setTitle] = useState(post.title);
   const [content, setContent] = useState(post.content);
   const [loading, setLoading] = useState(false);
+
   // Event fields
   const [eventType, setEventType] = useState<'PRACTICE' | 'GAME'>(post.eventType || 'PRACTICE');
   const [startDate, setStartDate] = useState(
@@ -1213,6 +1328,8 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
   );
   const [place, setPlace] = useState(post.place || '');
   const [opponent, setOpponent] = useState(post.opponent || '');
+
+
   useEffect(() => {
     if (isOpen) {
       // Reset form when modal opens
@@ -1225,23 +1342,29 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
       setOpponent(post.opponent || '');
     }
   }, [isOpen, post]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
     if (!title.trim()) {
       toast.error('제목을 입력해주세요');
       return;
     }
+
     if (!content.trim()) {
       toast.error('내용을 입력해주세요');
       return;
     }
+
     setLoading(true);
+
     try {
       const updates: Partial<Post> = {
         title: title.trim(),
         content: content.trim(),
         updatedAt: new Date(),
       };
+
       // Event specific fields
       if (post.type === 'event') {
         if (!startDate || !startTime) {
@@ -1254,6 +1377,7 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
           setLoading(false);
           return;
         }
+
         const eventDateTime = new Date(`${startDate}T${startTime}`);
         updates.eventType = eventType;
         updates.startAt = eventDateTime;
@@ -1262,6 +1386,8 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
           updates.opponent = opponent.trim();
         }
       }
+
+
       await updatePost(post.id, updates);
       toast.success('게시글이 수정되었습니다');
       onClose();
@@ -1272,7 +1398,10 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
       setLoading(false);
     }
   };
+
+
   if (!isOpen) return null;
+
   return (
     <AnimatePresence>
       <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center">
@@ -1284,6 +1413,7 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
           className="absolute inset-0 bg-black/50"
           onClick={onClose}
         />
+
         {/* Modal */}
         <motion.div
           initial={{ opacity: 0, y: '100%' }}
@@ -1302,6 +1432,7 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
               <X className="w-5 h-5" />
             </button>
           </div>
+
           {/* Form */}
           <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto">
             <div className="p-6 space-y-4 pb-64">
@@ -1317,6 +1448,7 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
                   required
                 />
               </div>
+
               {/* Event specific fields */}
               {post.type === 'event' && (
                 <>
@@ -1345,6 +1477,7 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
                       </button>
                     </div>
                   </div>
+
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-sm font-medium mb-2">날짜</label>
@@ -1367,6 +1500,7 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
                       />
                     </div>
                   </div>
+
                   <div>
                     <label className="block text-sm font-medium mb-2">장소</label>
                     <input
@@ -1378,6 +1512,7 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
                       required
                     />
                   </div>
+
                   {eventType === 'GAME' && (
                     <div>
                       <label className="block text-sm font-medium mb-2">상대팀</label>
@@ -1392,6 +1527,7 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
                   )}
                 </>
               )}
+
               {/* Content */}
               <div>
                 <label className="block text-sm font-medium mb-2">내용</label>
@@ -1405,6 +1541,7 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
                 />
               </div>
             </div>
+
             {/* Footer */}
             <div className="sticky bottom-0 px-6 py-4 bg-white dark:bg-gray-900 border-t">
               <div className="flex gap-3">
@@ -1431,27 +1568,30 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
     </AnimatePresence>
   );
 };
+
 ```
 
-## src/app/components/EmptyState.tsx
-
+## FILE: src\app\components\EmptyState.tsx
 ```tsx
 import React from 'react';
 import { FileText, AlertCircle } from 'lucide-react';
 import { Card } from './ui/card';
+
 interface EmptyStateProps {
   type?: 'empty' | 'error';
   message?: string;
   icon?: React.ElementType;
 }
+
 export const EmptyState: React.FC<EmptyStateProps> = ({
   type = 'empty',
   message,
   icon: Icon = FileText,
 }) => {
-  const defaultMessage = type === 'error'
+  const defaultMessage = type === 'error' 
     ? '데이터를 불러오는 중 오류가 발생했습니다'
     : '데이터가 없습니다';
+
   return (
     <Card className="p-8 text-center">
       <div className="flex flex-col items-center gap-3">
@@ -1467,10 +1607,11 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
     </Card>
   );
 };
+
+
 ```
 
-## src/app/components/FileUploadModal.tsx
-
+## FILE: src\app\components\FileUploadModal.tsx
 ```tsx
 import React, { useState, useRef } from 'react';
 import { X, Upload, Image as ImageIcon, Video, Trash2 } from 'lucide-react';
@@ -1479,6 +1620,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { toast } from 'sonner';
 import { Button } from './ui/button';
 import { uploadPostAttachment } from '../../lib/firebase/storage.service';
+
 interface FileUploadModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -1486,11 +1628,13 @@ interface FileUploadModalProps {
   postId?: string;
   onUploadComplete?: (urls: string[]) => void;
 }
+
 interface FilePreview {
   file: File;
   preview: string;
   type: 'image' | 'video';
 }
+
 export const FileUploadModal: React.FC<FileUploadModalProps> = ({
   isOpen,
   onClose,
@@ -1502,34 +1646,44 @@ export const FileUploadModal: React.FC<FileUploadModalProps> = ({
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
   const acceptedTypes = 'image/*';
   const maxFiles = 5;
+
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = Array.from(e.target.files || []);
+
     if (files.length + selectedFiles.length > maxFiles) {
       toast.error(`최대 ${maxFiles}개 파일만 업로드 가능합니다`);
       return;
     }
+
     const newPreviews: FilePreview[] = [];
+
     selectedFiles.forEach((file) => {
       // 파일 크기 체크 (20MB)
       if (file.size > 20 * 1024 * 1024) {
         toast.error(`${file.name}은(는) 20MB를 초과합니다`);
         return;
       }
+
       // 파일 타입 체크
       const fileType = file.type.startsWith('image/') ? 'image' :
         file.type.startsWith('video/') ? 'video' : null;
+
       if (!fileType) {
         toast.error(`${file.name}은(는) 지원하지 않는 형식입니다`);
         return;
       }
+
       // 미리보기 생성
       const preview = URL.createObjectURL(file);
       newPreviews.push({ file, preview, type: fileType });
     });
+
     setFiles(prev => [...prev, ...newPreviews]);
   };
+
   const removeFile = (index: number) => {
     setFiles(prev => {
       const newFiles = [...prev];
@@ -1538,33 +1692,43 @@ export const FileUploadModal: React.FC<FileUploadModalProps> = ({
       return newFiles;
     });
   };
+
   const handleUpload = async () => {
     if (files.length === 0) {
       toast.error('파일을 선택해주세요');
       return;
     }
+
+
     if (!user) {
       toast.error('로그인이 필요합니다');
       return;
     }
+
     setUploading(true);
     setProgress(0);
+
     try {
       const uploadedUrls: string[] = [];
       const totalFiles = files.length;
+
       for (let i = 0; i < files.length; i++) {
         const filePreview = files[i];
         let url = '';
+
         // Post attachment
         url = await uploadPostAttachment(postId || 'temp', filePreview.file, (p) => {
           const currentTotal = ((i * 100) + p) / totalFiles;
           setProgress(Math.round(currentTotal));
         });
+
         uploadedUrls.push(url);
       }
+
       // 게시글 첨부용
       onUploadComplete?.(uploadedUrls);
       toast.success('파일이 업로드되었습니다');
+
       // 초기화
       files.forEach(f => URL.revokeObjectURL(f.preview));
       setFiles([]);
@@ -1577,6 +1741,7 @@ export const FileUploadModal: React.FC<FileUploadModalProps> = ({
       setProgress(0);
     }
   };
+
   return (
     <AnimatePresence>
       {isOpen && (
@@ -1589,6 +1754,7 @@ export const FileUploadModal: React.FC<FileUploadModalProps> = ({
             onClick={onClose}
             className="absolute inset-0 bg-black/50 backdrop-blur-sm"
           />
+
           {/* Modal */}
           <motion.div
             initial={{ opacity: 0, y: '100%' }}
@@ -1610,8 +1776,10 @@ export const FileUploadModal: React.FC<FileUploadModalProps> = ({
                 </button>
               </div>
             </div>
+
             {/* Content */}
             <div className="flex-1 overflow-y-auto px-6 py-4">
+
               {/* File Upload Area */}
               <div
                 onClick={() => !uploading && fileInputRef.current?.click()}
@@ -1633,6 +1801,7 @@ export const FileUploadModal: React.FC<FileUploadModalProps> = ({
                     </p>
                   </div>
                 </div>
+
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -1643,6 +1812,7 @@ export const FileUploadModal: React.FC<FileUploadModalProps> = ({
                   disabled={uploading}
                 />
               </div>
+
               {/* File Previews */}
               {files.length > 0 && (
                 <div className="mt-6">
@@ -1662,6 +1832,7 @@ export const FileUploadModal: React.FC<FileUploadModalProps> = ({
                       </button>
                     )}
                   </div>
+
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                     {files.map((filePreview, index) => (
                       <motion.div
@@ -1681,6 +1852,7 @@ export const FileUploadModal: React.FC<FileUploadModalProps> = ({
                             <Video className="w-12 h-12 text-gray-400" />
                           </div>
                         )}
+
                         {!uploading && (
                           <button
                             onClick={() => removeFile(index)}
@@ -1689,6 +1861,7 @@ export const FileUploadModal: React.FC<FileUploadModalProps> = ({
                             <Trash2 className="w-4 h-4" />
                           </button>
                         )}
+
                         {/* File Type Badge */}
                         <div className="absolute bottom-2 left-2 px-2 py-1 bg-black/50 rounded text-xs text-white flex items-center gap-1">
                           {filePreview.type === 'image' ? (
@@ -1703,6 +1876,7 @@ export const FileUploadModal: React.FC<FileUploadModalProps> = ({
                   </div>
                 </div>
               )}
+
               {/* Upload Progress */}
               {uploading && (
                 <div className="mt-6">
@@ -1721,6 +1895,7 @@ export const FileUploadModal: React.FC<FileUploadModalProps> = ({
                 </div>
               )}
             </div>
+
             {/* Footer */}
             <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-800">
               <div className="flex gap-3">
@@ -1747,57 +1922,71 @@ export const FileUploadModal: React.FC<FileUploadModalProps> = ({
     </AnimatePresence>
   );
 };
+
 ```
 
-## src/app/components/InstallPrompt.tsx
-
+## FILE: src\app\components\InstallPrompt.tsx
 ```tsx
 import React, { useState, useEffect } from 'react';
 import { X, Download } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
+
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
 }
+
 export const InstallPrompt: React.FC = () => {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [showPrompt, setShowPrompt] = useState(false);
+
   useEffect(() => {
     const handler = (e: Event) => {
       e.preventDefault();
       setDeferredPrompt(e as BeforeInstallPromptEvent);
+      
       // 사용자가 이전에 설치를 거부한 적이 없으면 보여줌
       const dismissed = localStorage.getItem('pwa-install-dismissed');
       if (!dismissed) {
         setShowPrompt(true);
       }
     };
+
     window.addEventListener('beforeinstallprompt', handler);
+
     // 이미 설치된 경우 확인
     if (window.matchMedia('(display-mode: standalone)').matches) {
       setShowPrompt(false);
     }
+
     return () => {
       window.removeEventListener('beforeinstallprompt', handler);
     };
   }, []);
+
   const handleInstall = async () => {
     if (!deferredPrompt) return;
+
     deferredPrompt.prompt();
     const { outcome } = await deferredPrompt.userChoice;
+
     if (outcome === 'accepted') {
       console.log('User accepted the install prompt');
     }
+
     setDeferredPrompt(null);
     setShowPrompt(false);
   };
+
   const handleDismiss = () => {
     localStorage.setItem('pwa-install-dismissed', 'true');
     setShowPrompt(false);
   };
+
   if (!showPrompt || !deferredPrompt) return null;
+
   return (
     <AnimatePresence>
       <motion.div
@@ -1811,11 +2000,13 @@ export const InstallPrompt: React.FC = () => {
             <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center flex-shrink-0">
               <Download className="w-6 h-6" />
             </div>
+
             <div className="flex-1 min-w-0">
               <h3 className="font-bold mb-1">앱 설치하기</h3>
               <p className="text-sm text-white/90 mb-3">
                 홈 화면에 추가하여 더 빠르게 접근하세요
               </p>
+              
               <div className="flex gap-2">
                 <Button
                   onClick={handleInstall}
@@ -1834,6 +2025,7 @@ export const InstallPrompt: React.FC = () => {
                 </Button>
               </div>
             </div>
+
             <button
               onClick={handleDismiss}
               className="p-1 hover:bg-white/20 rounded-lg transition-colors"
@@ -1846,10 +2038,10 @@ export const InstallPrompt: React.FC = () => {
     </AnimatePresence>
   );
 };
+
 ```
 
-## src/app/components/PostDetailModal.tsx
-
+## FILE: src\app\components\PostDetailModal.tsx
 ```tsx
 import React, { useState, useEffect } from 'react';
 import { X, Share2, Edit, Trash2, Pin, Calendar, MapPin, Trophy, Users, MessageCircle, AlertCircle, Bell, Clock, CheckCircle2, XCircle, HelpCircle, ChevronLeft } from 'lucide-react';
@@ -1864,6 +2056,7 @@ import { CommentForm } from './CommentForm';
 import { DeleteConfirmDialog } from './DeleteConfirmDialog';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
+
 interface PostDetailModalProps {
   post: Post;
   isOpen: boolean;
@@ -1871,6 +2064,7 @@ interface PostDetailModalProps {
   onEdit?: (post: Post) => void;
   onDelete?: (postId: string) => void;
 }
+
 export const PostDetailModal: React.FC<PostDetailModalProps> = ({
   post,
   isOpen,
@@ -1882,6 +2076,7 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
   const { members, deletePost, loadComments, updateAttendance, getMyAttendance, loadAttendances } = useData();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [deleting, setDeleting] = useState(false);
+
   // μATOM-0304: 상세 공통 post fetch + comments fetch
   useEffect(() => {
     if (isOpen && post.id) {
@@ -1892,19 +2087,23 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
       }
     }
   }, [isOpen, post.id, loadComments, post.type, loadAttendances]);
+
   // μATOM-0502: 내 상태 표시
   const myAttendanceStatus = user ? getMyAttendance(post.id, user.id) : 'none';
+
   // μATOM-0503: YES/NO/MAYBE 투표 write
   const handleAttendanceChange = async (status: AttendanceStatus) => {
     if (!user) {
       toast.error('로그인이 필요합니다');
       return;
     }
+
     // μATOM-0505: voteClosed=true면 버튼 비활성
     if (post.voteClosed) {
       toast.error('투표가 마감되었습니다');
       return;
     }
+
     try {
       await updateAttendance(post.id, user.id, status);
       toast.success('출석 상태가 변경되었습니다');
@@ -1914,10 +2113,12 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
       toast.error(error.message || '출석 상태 변경에 실패했습니다');
     }
   };
+
   // Fix: use realName
   const author = members.find(u => u.id === post.author.id);
   const canEdit = user?.id === post.author.id || isAdmin();
   const canDelete = user?.id === post.author.id || isAdmin();
+
   const handleShare = async () => {
     if (navigator.share) {
       try {
@@ -1935,8 +2136,10 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
       toast.success('링크가 복사되었습니다');
     }
   };
+
   const confirmDelete = async () => {
     setDeleting(true);
+
     try {
       await deletePost(post.id);
       toast.success('게시글이 삭제되었습니다');
@@ -1950,6 +2153,7 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
       setDeleting(false);
     }
   };
+
   const getPostTypeLabel = (type: string) => {
     switch (type) {
       case 'notice': return '공지사항';
@@ -1958,6 +2162,7 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
       default: return type;
     }
   };
+
   const getPushStatusLabel = (status?: string) => {
     switch (status) {
       case 'SENT': return '푸시 발송 완료';
@@ -1966,6 +2171,7 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
       default: return null;
     }
   };
+
   const getPushStatusColor = (status?: string) => {
     switch (status) {
       case 'SENT': return 'bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400';
@@ -1974,6 +2180,7 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
       default: return '';
     }
   };
+
   const getPostTypeColor = (type: string) => {
     switch (type) {
       case 'notice': return 'bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400';
@@ -1982,6 +2189,7 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
       default: return 'bg-gray-100 text-gray-700 dark:bg-gray-900/20 dark:text-gray-400';
     }
   };
+
   return (
     <AnimatePresence>
       {isOpen && (
@@ -1994,6 +2202,7 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
             onClick={onClose}
             className="absolute inset-0 bg-black/50 backdrop-blur-sm"
           />
+
           {/* Modal */}
           <motion.div
             initial={{ opacity: 0, y: '100%' }}
@@ -2029,6 +2238,7 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
                     </Badge>
                   )}
                 </div>
+
                 <div className="flex items-center gap-2">
                   {(canEdit || canDelete) && (
                     <div className="flex gap-2">
@@ -2067,6 +2277,7 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
                 </div>
               </div>
             </div>
+
             {/* Content */}
             <div className="flex-1 overflow-y-auto">
               <div className="px-6 py-6 space-y-6">
@@ -2082,8 +2293,10 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
                     </div>
                   </div>
                 )}
+
                 {/* Title */}
                 <h1 className="text-2xl font-bold">{post.title}</h1>
+
                 {/* Author & Date */}
                 <div className="flex items-center justify-between text-sm text-gray-600 dark:text-gray-400">
                   <div className="flex items-center gap-2">
@@ -2103,6 +2316,7 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
                     {format(post.createdAt, 'yyyy.MM.dd HH:mm', { locale: ko })}
                   </div>
                 </div>
+
                 {/* Event Details */}
                 {post.type === 'event' && (
                   <div className="p-4 bg-gradient-to-br from-blue-50 to-green-50 dark:from-blue-900/20 dark:to-green-900/20 rounded-xl space-y-3">
@@ -2117,6 +2331,7 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
                         </div>
                       </div>
                     </div>
+
                     <div className="flex items-center gap-3">
                       <div className="p-2 bg-white dark:bg-gray-800 rounded-lg">
                         <MapPin className="w-5 h-5 text-green-600 dark:text-green-400" />
@@ -2126,6 +2341,7 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
                         <div className="font-medium">{post.place}</div>
                       </div>
                     </div>
+
                     {post.opponent && (
                       <div className="flex items-center gap-3">
                         <div className="p-2 bg-white dark:bg-gray-800 rounded-lg">
@@ -2137,6 +2353,7 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
                         </div>
                       </div>
                     )}
+
                     {/* μATOM-0501: voteCloseAt 표시 */}
                     {post.voteCloseAt && (
                       <div className="flex items-center gap-3">
@@ -2151,6 +2368,7 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
                         </div>
                       </div>
                     )}
+
                     {/* μATOM-0504: 집계 표시 */}
                     {post.attendanceSummary && (
                       <div className="flex items-center gap-3">
@@ -2173,6 +2391,7 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
                         </div>
                       </div>
                     )}
+
                     {/* μATOM-0502: 내 상태 표시 + μATOM-0503: YES/NO/MAYBE 투표 + μATOM-0505: voteClosed 비활성 */}
                     {user && user.status === 'active' && (
                       <div className="pt-3 border-t border-gray-200 dark:border-gray-700">
@@ -2221,12 +2440,15 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
                     )}
                   </div>
                 )}
+
+
                 {/* Content */}
                 <div className="prose dark:prose-invert max-w-none">
                   <p className="whitespace-pre-wrap text-gray-700 dark:text-gray-300">
                     {post.content}
                   </p>
                 </div>
+
                 {/* Actions */}
                 <div className="flex items-center gap-4 pt-4 border-t border-gray-200 dark:border-gray-800">
                   <button
@@ -2237,6 +2459,7 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
                       {post.commentCount || 0}
                     </span>
                   </button>
+
                   <button
                     onClick={handleShare}
                     className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
@@ -2245,12 +2468,15 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
                     <span className="text-sm font-medium">공유</span>
                   </button>
                 </div>
+
                 {/* Comments Section */}
                 <div className="pt-6 border-t border-gray-200 dark:border-gray-800">
                   <h3 className="font-bold text-lg mb-4">
                     댓글 {post.commentCount || 0}
                   </h3>
+
                   <CommentList postId={post.id} />
+
                   {/* Comment Form (Restricted) */}
                   {user && user.status !== 'pending' && <CommentForm postId={post.id} />}
                   {user && user.status === 'pending' && (
@@ -2262,6 +2488,7 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
               </div>
             </div>
           </motion.div>
+
           {/* Delete Confirmation Dialog */}
           <DeleteConfirmDialog
             isOpen={showDeleteDialog}
@@ -2278,8 +2505,7 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
 };
 ```
 
-## src/app/components/ProfileEditModal.tsx
-
+## FILE: src\app\components\ProfileEditModal.tsx
 ```tsx
 import React, { useState, useRef } from 'react';
 import { X, Camera, Loader2 } from 'lucide-react';
@@ -2287,16 +2513,19 @@ import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '../contexts/AuthContext';
 import { uploadProfilePhoto } from '../../lib/firebase/storage.service';
 import { toast } from 'sonner';
+
 interface ProfileEditModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
+
 export const ProfileEditModal: React.FC<ProfileEditModalProps> = ({
   isOpen,
   onClose,
 }) => {
   const { user, updateUser } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
+
   const [nickname, setNickname] = useState(user?.nickname || '');
   const [phone, setPhone] = useState(user?.phone || '');
   const [position, setPosition] = useState(user?.position || '');
@@ -2304,23 +2533,29 @@ export const ProfileEditModal: React.FC<ProfileEditModalProps> = ({
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState(user?.photoURL || '');
   const [loading, setLoading] = useState(false);
+
   const positions = [
     '투수', '포수', '1루수', '2루수', '3루수', '유격수', '좌익수', '중견수', '우익수'
   ];
+
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
     // Validate file type
     if (!file.type.startsWith('image/')) {
       toast.error('이미지 파일만 업로드 가능합니다');
       return;
     }
+
     // Validate file size (5MB)
     if (file.size > 5 * 1024 * 1024) {
       toast.error('파일 크기는 5MB 이하여야 합니다');
       return;
     }
+
     setPhotoFile(file);
+
     // Create preview
     const reader = new FileReader();
     reader.onloadend = () => {
@@ -2328,27 +2563,34 @@ export const ProfileEditModal: React.FC<ProfileEditModalProps> = ({
     };
     reader.readAsDataURL(file);
   };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
     if (!user) return;
+
     setLoading(true);
+
     try {
       // Explicitly construct updates to prevent undefined values
       const safeNickname = nickname.trim() || user.nickname || '';
       const safePhone = phone.trim() || user.phone || '';
       const safePosition = position || user.position || '';
       const safeBackNumber = backNumber ? parseInt(backNumber) : (user.backNumber || null);
+
       const updates: any = {
         nickname: safeNickname,
         phone: safePhone,
         position: safePosition,
         backNumber: safeBackNumber,
       };
+
       // Upload photo if selected
       if (photoFile) {
         const photoURL = await uploadProfilePhoto(user.id, photoFile);
         updates.photoURL = photoURL;
       }
+
       // Final safety check: remove any keys that are strictly undefined
       // (Though the above logic ensures strict types, this is a double-check)
       Object.keys(updates).forEach(key => {
@@ -2356,6 +2598,7 @@ export const ProfileEditModal: React.FC<ProfileEditModalProps> = ({
           delete updates[key];
         }
       });
+
       console.log('[ProfileEditModal] Sending updates:', updates);
       await updateUser(updates);
       toast.success('프로필이 업데이트되었습니다');
@@ -2367,7 +2610,9 @@ export const ProfileEditModal: React.FC<ProfileEditModalProps> = ({
       setLoading(false);
     }
   };
+
   if (!isOpen || !user) return null;
+
   return (
     <AnimatePresence>
       <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center pointer-events-none">
@@ -2379,6 +2624,7 @@ export const ProfileEditModal: React.FC<ProfileEditModalProps> = ({
           className="absolute inset-0 bg-black/50 pointer-events-auto"
           onClick={onClose}
         />
+
         {/* Modal - Clicks here do NOT bubble to backdrop due to structure, but we add stopPropagation for safety */}
         <motion.div
           initial={{ opacity: 0, y: '100%' }}
@@ -2397,6 +2643,7 @@ export const ProfileEditModal: React.FC<ProfileEditModalProps> = ({
               <X className="w-6 h-6" />
             </button>
           </div>
+
           {/* Form */}
           <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto">
             <div className="p-6 space-y-6">
@@ -2427,6 +2674,7 @@ export const ProfileEditModal: React.FC<ProfileEditModalProps> = ({
                 </div>
                 <p className="text-xs text-gray-500 mt-2">클릭하여 사진 변경 (최대 5MB)</p>
               </div>
+
               {/* Name (Read-only) */}
               <div>
                 <label className="block text-sm font-medium mb-2">이름</label>
@@ -2438,6 +2686,7 @@ export const ProfileEditModal: React.FC<ProfileEditModalProps> = ({
                 />
                 <p className="text-xs text-gray-500 mt-1">실명은 변경할 수 없습니다</p>
               </div>
+
               {/* Nickname */}
               <div>
                 <label className="block text-sm font-medium mb-2">닉네임</label>
@@ -2449,6 +2698,7 @@ export const ProfileEditModal: React.FC<ProfileEditModalProps> = ({
                   placeholder="닉네임을 입력하세요"
                 />
               </div>
+
               {/* Phone */}
               <div>
                 <label className="block text-sm font-medium mb-2">연락처</label>
@@ -2460,6 +2710,7 @@ export const ProfileEditModal: React.FC<ProfileEditModalProps> = ({
                   placeholder="010-1234-5678"
                 />
               </div>
+
               {/* Position */}
               <div>
                 <label className="block text-sm font-medium mb-2">포지션</label>
@@ -2476,6 +2727,7 @@ export const ProfileEditModal: React.FC<ProfileEditModalProps> = ({
                   ))}
                 </select>
               </div>
+
               {/* Back Number */}
               <div>
                 <label className="block text-sm font-medium mb-2">등번호</label>
@@ -2489,6 +2741,7 @@ export const ProfileEditModal: React.FC<ProfileEditModalProps> = ({
                   max="99"
                 />
               </div>
+
               {/* Role (Read-only) */}
               <div>
                 <label className="block text-sm font-medium mb-2">역할</label>
@@ -2504,6 +2757,7 @@ export const ProfileEditModal: React.FC<ProfileEditModalProps> = ({
                 <p className="text-xs text-gray-500 mt-1">역할은 관리자만 변경할 수 있습니다</p>
               </div>
             </div>
+
             {/* Footer */}
             <div className="sticky bottom-0 px-6 py-4 bg-white dark:bg-gray-900 border-t">
               <div className="flex gap-3">
@@ -2533,13 +2787,13 @@ export const ProfileEditModal: React.FC<ProfileEditModalProps> = ({
 };
 ```
 
-## src/app/components/TopBar.tsx
-
+## FILE: src\app\components\TopBar.tsx
 ```tsx
 import React from 'react';
 import { Bell, Settings, ArrowLeft } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useAuth } from '../contexts/AuthContext';
+
 interface TopBarProps {
   title?: string;
   showBack?: boolean;
@@ -2550,6 +2804,7 @@ interface TopBarProps {
   onLogoClick?: () => void;
   unreadNotificationCount?: number;
 }
+
 export const TopBar: React.FC<TopBarProps> = ({
   title = 'WINGS BASEBALL CLUB',
   showBack = false,
@@ -2561,6 +2816,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   unreadNotificationCount,
 }) => {
   const { isAdmin } = useAuth();
+
   return (
     <div className="fixed top-0 left-0 right-0 bg-gradient-to-r from-blue-600 to-blue-500 dark:from-blue-700 dark:to-blue-600 z-40 pt-safe">
       <div className="max-w-md mx-auto">
@@ -2577,6 +2833,7 @@ export const TopBar: React.FC<TopBarProps> = ({
               </motion.button>
             )}
           </div>
+
           {/* Center */}
           <div className="flex-1 text-center">
             <div
@@ -2589,6 +2846,7 @@ export const TopBar: React.FC<TopBarProps> = ({
               </h1>
             </div>
           </div>
+
           {/* Right */}
           <div className="flex items-center gap-2">
             {showNotification && (
@@ -2619,18 +2877,22 @@ export const TopBar: React.FC<TopBarProps> = ({
 };
 ```
 
-## src/app/components/figma/ImageWithFallback.tsx
-
+## FILE: src\app\components\figma\ImageWithFallback.tsx
 ```tsx
 import React, { useState } from 'react'
+
 const ERROR_IMG_SRC =
   'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iODgiIGhlaWdodD0iODgiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgc3Ryb2tlPSIjMDAwIiBzdHJva2UtbGluZWpvaW49InJvdW5kIiBvcGFjaXR5PSIuMyIgZmlsbD0ibm9uZSIgc3Ryb2tlLXdpZHRoPSIzLjciPjxyZWN0IHg9IjE2IiB5PSIxNiIgd2lkdGg9IjU2IiBoZWlnaHQ9IjU2IiByeD0iNiIvPjxwYXRoIGQ9Im0xNiA1OCAxNi0xOCAzMiAzMiIvPjxjaXJjbGUgY3g9IjUzIiBjeT0iMzUiIHI9IjciLz48L3N2Zz4KCg=='
+
 export function ImageWithFallback(props: React.ImgHTMLAttributes<HTMLImageElement>) {
   const [didError, setDidError] = useState(false)
+
   const handleError = () => {
     setDidError(true)
   }
+
   const { src, alt, style, className, ...rest } = props
+
   return didError ? (
     <div
       className={`inline-block bg-gray-100 text-center align-middle ${className ?? ''}`}
@@ -2644,21 +2906,25 @@ export function ImageWithFallback(props: React.ImgHTMLAttributes<HTMLImageElemen
     <img src={src} alt={alt} className={className} style={style} {...rest} onError={handleError} />
   )
 }
+
 ```
 
-## src/app/components/ui/accordion.tsx
-
+## FILE: src\app\components\ui\accordion.tsx
 ```tsx
 "use client";
+
 import * as React from "react";
 import * as AccordionPrimitive from "@radix-ui/react-accordion";
 import { ChevronDownIcon } from "lucide-react";
+
 import { cn } from "./utils";
+
 function Accordion({
   ...props
 }: React.ComponentProps<typeof AccordionPrimitive.Root>) {
   return <AccordionPrimitive.Root data-slot="accordion" {...props} />;
 }
+
 function AccordionItem({
   className,
   ...props
@@ -2671,6 +2937,7 @@ function AccordionItem({
     />
   );
 }
+
 function AccordionTrigger({
   className,
   children,
@@ -2692,6 +2959,7 @@ function AccordionTrigger({
     </AccordionPrimitive.Header>
   );
 }
+
 function AccordionContent({
   className,
   children,
@@ -2707,22 +2975,27 @@ function AccordionContent({
     </AccordionPrimitive.Content>
   );
 }
+
 export { Accordion, AccordionItem, AccordionTrigger, AccordionContent };
+
 ```
 
-## src/app/components/ui/alert-dialog.tsx
-
+## FILE: src\app\components\ui\alert-dialog.tsx
 ```tsx
 "use client";
+
 import * as React from "react";
 import * as AlertDialogPrimitive from "@radix-ui/react-alert-dialog";
+
 import { cn } from "./utils";
 import { buttonVariants } from "./button";
+
 function AlertDialog({
   ...props
 }: React.ComponentProps<typeof AlertDialogPrimitive.Root>) {
   return <AlertDialogPrimitive.Root data-slot="alert-dialog" {...props} />;
 }
+
 function AlertDialogTrigger({
   ...props
 }: React.ComponentProps<typeof AlertDialogPrimitive.Trigger>) {
@@ -2730,6 +3003,7 @@ function AlertDialogTrigger({
     <AlertDialogPrimitive.Trigger data-slot="alert-dialog-trigger" {...props} />
   );
 }
+
 function AlertDialogPortal({
   ...props
 }: React.ComponentProps<typeof AlertDialogPrimitive.Portal>) {
@@ -2737,6 +3011,7 @@ function AlertDialogPortal({
     <AlertDialogPrimitive.Portal data-slot="alert-dialog-portal" {...props} />
   );
 }
+
 function AlertDialogOverlay({
   className,
   ...props
@@ -2752,6 +3027,7 @@ function AlertDialogOverlay({
     />
   );
 }
+
 function AlertDialogContent({
   className,
   ...props
@@ -2770,6 +3046,7 @@ function AlertDialogContent({
     </AlertDialogPortal>
   );
 }
+
 function AlertDialogHeader({
   className,
   ...props
@@ -2782,6 +3059,7 @@ function AlertDialogHeader({
     />
   );
 }
+
 function AlertDialogFooter({
   className,
   ...props
@@ -2797,6 +3075,7 @@ function AlertDialogFooter({
     />
   );
 }
+
 function AlertDialogTitle({
   className,
   ...props
@@ -2809,6 +3088,7 @@ function AlertDialogTitle({
     />
   );
 }
+
 function AlertDialogDescription({
   className,
   ...props
@@ -2821,6 +3101,7 @@ function AlertDialogDescription({
     />
   );
 }
+
 function AlertDialogAction({
   className,
   ...props
@@ -2832,6 +3113,7 @@ function AlertDialogAction({
     />
   );
 }
+
 function AlertDialogCancel({
   className,
   ...props
@@ -2843,6 +3125,7 @@ function AlertDialogCancel({
     />
   );
 }
+
 export {
   AlertDialog,
   AlertDialogPortal,
@@ -2856,14 +3139,16 @@ export {
   AlertDialogAction,
   AlertDialogCancel,
 };
+
 ```
 
-## src/app/components/ui/alert.tsx
-
+## FILE: src\app\components\ui\alert.tsx
 ```tsx
 import * as React from "react";
 import { cva, type VariantProps } from "class-variance-authority";
+
 import { cn } from "./utils";
+
 const alertVariants = cva(
   "relative w-full rounded-lg border px-4 py-3 text-sm grid has-[>svg]:grid-cols-[calc(var(--spacing)*4)_1fr] grid-cols-[0_1fr] has-[>svg]:gap-x-3 gap-y-0.5 items-start [&>svg]:size-4 [&>svg]:translate-y-0.5 [&>svg]:text-current",
   {
@@ -2879,6 +3164,7 @@ const alertVariants = cva(
     },
   },
 );
+
 function Alert({
   className,
   variant,
@@ -2893,6 +3179,7 @@ function Alert({
     />
   );
 }
+
 function AlertTitle({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
@@ -2905,6 +3192,7 @@ function AlertTitle({ className, ...props }: React.ComponentProps<"div">) {
     />
   );
 }
+
 function AlertDescription({
   className,
   ...props
@@ -2920,29 +3208,36 @@ function AlertDescription({
     />
   );
 }
+
 export { Alert, AlertTitle, AlertDescription };
+
 ```
 
-## src/app/components/ui/aspect-ratio.tsx
-
+## FILE: src\app\components\ui\aspect-ratio.tsx
 ```tsx
 "use client";
+
 import * as AspectRatioPrimitive from "@radix-ui/react-aspect-ratio";
+
 function AspectRatio({
   ...props
 }: React.ComponentProps<typeof AspectRatioPrimitive.Root>) {
   return <AspectRatioPrimitive.Root data-slot="aspect-ratio" {...props} />;
 }
+
 export { AspectRatio };
+
 ```
 
-## src/app/components/ui/avatar.tsx
-
+## FILE: src\app\components\ui\avatar.tsx
 ```tsx
 "use client";
+
 import * as React from "react";
 import * as AvatarPrimitive from "@radix-ui/react-avatar";
+
 import { cn } from "./utils";
+
 function Avatar({
   className,
   ...props
@@ -2958,6 +3253,7 @@ function Avatar({
     />
   );
 }
+
 function AvatarImage({
   className,
   ...props
@@ -2970,6 +3266,7 @@ function AvatarImage({
     />
   );
 }
+
 function AvatarFallback({
   className,
   ...props
@@ -2985,16 +3282,19 @@ function AvatarFallback({
     />
   );
 }
+
 export { Avatar, AvatarImage, AvatarFallback };
+
 ```
 
-## src/app/components/ui/badge.tsx
-
+## FILE: src\app\components\ui\badge.tsx
 ```tsx
 import * as React from "react";
 import { Slot } from "@radix-ui/react-slot";
 import { cva, type VariantProps } from "class-variance-authority";
+
 import { cn } from "./utils";
+
 const badgeVariants = cva(
   "inline-flex items-center justify-center rounded-md border px-2 py-0.5 text-xs font-medium w-fit whitespace-nowrap shrink-0 [&>svg]:size-3 gap-1 [&>svg]:pointer-events-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive transition-[color,box-shadow] overflow-hidden",
   {
@@ -3015,6 +3315,7 @@ const badgeVariants = cva(
     },
   },
 );
+
 function Badge({
   className,
   variant,
@@ -3023,6 +3324,7 @@ function Badge({
 }: React.ComponentProps<"span"> &
   VariantProps<typeof badgeVariants> & { asChild?: boolean }) {
   const Comp = asChild ? Slot : "span";
+
   return (
     <Comp
       data-slot="badge"
@@ -3031,19 +3333,23 @@ function Badge({
     />
   );
 }
+
 export { Badge, badgeVariants };
+
 ```
 
-## src/app/components/ui/breadcrumb.tsx
-
+## FILE: src\app\components\ui\breadcrumb.tsx
 ```tsx
 import * as React from "react";
 import { Slot } from "@radix-ui/react-slot";
 import { ChevronRight, MoreHorizontal } from "lucide-react";
+
 import { cn } from "./utils";
+
 function Breadcrumb({ ...props }: React.ComponentProps<"nav">) {
   return <nav aria-label="breadcrumb" data-slot="breadcrumb" {...props} />;
 }
+
 function BreadcrumbList({ className, ...props }: React.ComponentProps<"ol">) {
   return (
     <ol
@@ -3056,6 +3362,7 @@ function BreadcrumbList({ className, ...props }: React.ComponentProps<"ol">) {
     />
   );
 }
+
 function BreadcrumbItem({ className, ...props }: React.ComponentProps<"li">) {
   return (
     <li
@@ -3065,6 +3372,7 @@ function BreadcrumbItem({ className, ...props }: React.ComponentProps<"li">) {
     />
   );
 }
+
 function BreadcrumbLink({
   asChild,
   className,
@@ -3073,6 +3381,7 @@ function BreadcrumbLink({
   asChild?: boolean;
 }) {
   const Comp = asChild ? Slot : "a";
+
   return (
     <Comp
       data-slot="breadcrumb-link"
@@ -3081,6 +3390,7 @@ function BreadcrumbLink({
     />
   );
 }
+
 function BreadcrumbPage({ className, ...props }: React.ComponentProps<"span">) {
   return (
     <span
@@ -3093,6 +3403,7 @@ function BreadcrumbPage({ className, ...props }: React.ComponentProps<"span">) {
     />
   );
 }
+
 function BreadcrumbSeparator({
   children,
   className,
@@ -3110,6 +3421,7 @@ function BreadcrumbSeparator({
     </li>
   );
 }
+
 function BreadcrumbEllipsis({
   className,
   ...props
@@ -3127,6 +3439,7 @@ function BreadcrumbEllipsis({
     </span>
   );
 }
+
 export {
   Breadcrumb,
   BreadcrumbList,
@@ -3136,15 +3449,17 @@ export {
   BreadcrumbSeparator,
   BreadcrumbEllipsis,
 };
+
 ```
 
-## src/app/components/ui/button.tsx
-
+## FILE: src\app\components\ui\button.tsx
 ```tsx
 import * as React from "react";
 import { Slot } from "@radix-ui/react-slot";
 import { cva, type VariantProps } from "class-variance-authority";
+
 import { cn } from "./utils";
+
 const buttonVariants = cva(
   "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-all disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 [&_svg]:shrink-0 outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive",
   {
@@ -3174,6 +3489,7 @@ const buttonVariants = cva(
     },
   },
 );
+
 function Button({
   className,
   variant,
@@ -3185,6 +3501,7 @@ function Button({
     asChild?: boolean;
   }) {
   const Comp = asChild ? Slot : "button";
+
   return (
     <Comp
       data-slot="button"
@@ -3193,18 +3510,22 @@ function Button({
     />
   );
 }
+
 export { Button, buttonVariants };
+
 ```
 
-## src/app/components/ui/calendar.tsx
-
+## FILE: src\app\components\ui\calendar.tsx
 ```tsx
 "use client";
+
 import * as React from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { DayPicker } from "react-day-picker";
+
 import { cn } from "./utils";
 import { buttonVariants } from "./button";
+
 function Calendar({
   className,
   classNames,
@@ -3269,14 +3590,17 @@ function Calendar({
     />
   );
 }
+
 export { Calendar };
+
 ```
 
-## src/app/components/ui/card.tsx
-
+## FILE: src\app\components\ui\card.tsx
 ```tsx
 import * as React from "react";
+
 import { cn } from "./utils";
+
 function Card({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
@@ -3289,6 +3613,7 @@ function Card({ className, ...props }: React.ComponentProps<"div">) {
     />
   );
 }
+
 function CardHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
@@ -3301,6 +3626,7 @@ function CardHeader({ className, ...props }: React.ComponentProps<"div">) {
     />
   );
 }
+
 function CardTitle({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <h4
@@ -3310,6 +3636,7 @@ function CardTitle({ className, ...props }: React.ComponentProps<"div">) {
     />
   );
 }
+
 function CardDescription({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <p
@@ -3319,6 +3646,7 @@ function CardDescription({ className, ...props }: React.ComponentProps<"div">) {
     />
   );
 }
+
 function CardAction({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
@@ -3331,6 +3659,7 @@ function CardAction({ className, ...props }: React.ComponentProps<"div">) {
     />
   );
 }
+
 function CardContent({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
@@ -3340,6 +3669,7 @@ function CardContent({ className, ...props }: React.ComponentProps<"div">) {
     />
   );
 }
+
 function CardFooter({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
@@ -3349,6 +3679,7 @@ function CardFooter({ className, ...props }: React.ComponentProps<"div">) {
     />
   );
 }
+
 export {
   Card,
   CardHeader,
@@ -3358,29 +3689,34 @@ export {
   CardDescription,
   CardContent,
 };
+
 ```
 
-## src/app/components/ui/carousel.tsx
-
+## FILE: src\app\components\ui\carousel.tsx
 ```tsx
 "use client";
+
 import * as React from "react";
 import useEmblaCarousel, {
   type UseEmblaCarouselType,
 } from "embla-carousel-react";
 import { ArrowLeft, ArrowRight } from "lucide-react";
+
 import { cn } from "./utils";
 import { Button } from "./button";
+
 type CarouselApi = UseEmblaCarouselType[1];
 type UseCarouselParameters = Parameters<typeof useEmblaCarousel>;
 type CarouselOptions = UseCarouselParameters[0];
 type CarouselPlugin = UseCarouselParameters[1];
+
 type CarouselProps = {
   opts?: CarouselOptions;
   plugins?: CarouselPlugin;
   orientation?: "horizontal" | "vertical";
   setApi?: (api: CarouselApi) => void;
 };
+
 type CarouselContextProps = {
   carouselRef: ReturnType<typeof useEmblaCarousel>[0];
   api: ReturnType<typeof useEmblaCarousel>[1];
@@ -3389,14 +3725,19 @@ type CarouselContextProps = {
   canScrollPrev: boolean;
   canScrollNext: boolean;
 } & CarouselProps;
+
 const CarouselContext = React.createContext<CarouselContextProps | null>(null);
+
 function useCarousel() {
   const context = React.useContext(CarouselContext);
+
   if (!context) {
     throw new Error("useCarousel must be used within a <Carousel />");
   }
+
   return context;
 }
+
 function Carousel({
   orientation = "horizontal",
   opts,
@@ -3415,17 +3756,21 @@ function Carousel({
   );
   const [canScrollPrev, setCanScrollPrev] = React.useState(false);
   const [canScrollNext, setCanScrollNext] = React.useState(false);
+
   const onSelect = React.useCallback((api: CarouselApi) => {
     if (!api) return;
     setCanScrollPrev(api.canScrollPrev());
     setCanScrollNext(api.canScrollNext());
   }, []);
+
   const scrollPrev = React.useCallback(() => {
     api?.scrollPrev();
   }, [api]);
+
   const scrollNext = React.useCallback(() => {
     api?.scrollNext();
   }, [api]);
+
   const handleKeyDown = React.useCallback(
     (event: React.KeyboardEvent<HTMLDivElement>) => {
       if (event.key === "ArrowLeft") {
@@ -3438,19 +3783,23 @@ function Carousel({
     },
     [scrollPrev, scrollNext],
   );
+
   React.useEffect(() => {
     if (!api || !setApi) return;
     setApi(api);
   }, [api, setApi]);
+
   React.useEffect(() => {
     if (!api) return;
     onSelect(api);
     api.on("reInit", onSelect);
     api.on("select", onSelect);
+
     return () => {
       api?.off("select", onSelect);
     };
   }, [api, onSelect]);
+
   return (
     <CarouselContext.Provider
       value={{
@@ -3478,8 +3827,10 @@ function Carousel({
     </CarouselContext.Provider>
   );
 }
+
 function CarouselContent({ className, ...props }: React.ComponentProps<"div">) {
   const { carouselRef, orientation } = useCarousel();
+
   return (
     <div
       ref={carouselRef}
@@ -3497,8 +3848,10 @@ function CarouselContent({ className, ...props }: React.ComponentProps<"div">) {
     </div>
   );
 }
+
 function CarouselItem({ className, ...props }: React.ComponentProps<"div">) {
   const { orientation } = useCarousel();
+
   return (
     <div
       role="group"
@@ -3513,6 +3866,7 @@ function CarouselItem({ className, ...props }: React.ComponentProps<"div">) {
     />
   );
 }
+
 function CarouselPrevious({
   className,
   variant = "outline",
@@ -3520,6 +3874,7 @@ function CarouselPrevious({
   ...props
 }: React.ComponentProps<typeof Button>) {
   const { orientation, scrollPrev, canScrollPrev } = useCarousel();
+
   return (
     <Button
       data-slot="carousel-previous"
@@ -3541,6 +3896,7 @@ function CarouselPrevious({
     </Button>
   );
 }
+
 function CarouselNext({
   className,
   variant = "outline",
@@ -3548,6 +3904,7 @@ function CarouselNext({
   ...props
 }: React.ComponentProps<typeof Button>) {
   const { orientation, scrollNext, canScrollNext } = useCarousel();
+
   return (
     <Button
       data-slot="carousel-next"
@@ -3569,6 +3926,7 @@ function CarouselNext({
     </Button>
   );
 }
+
 export {
   type CarouselApi,
   Carousel,
@@ -3577,17 +3935,21 @@ export {
   CarouselPrevious,
   CarouselNext,
 };
+
 ```
 
-## src/app/components/ui/chart.tsx
-
+## FILE: src\app\components\ui\chart.tsx
 ```tsx
 "use client";
+
 import * as React from "react";
 import * as RechartsPrimitive from "recharts";
+
 import { cn } from "./utils";
+
 // Format: { THEME_NAME: CSS_SELECTOR }
 const THEMES = { light: "", dark: ".dark" } as const;
+
 export type ChartConfig = {
   [k in string]: {
     label?: React.ReactNode;
@@ -3597,17 +3959,23 @@ export type ChartConfig = {
     | { color?: never; theme: Record<keyof typeof THEMES, string> }
   );
 };
+
 type ChartContextProps = {
   config: ChartConfig;
 };
+
 const ChartContext = React.createContext<ChartContextProps | null>(null);
+
 function useChart() {
   const context = React.useContext(ChartContext);
+
   if (!context) {
     throw new Error("useChart must be used within a <ChartContainer />");
   }
+
   return context;
 }
+
 function ChartContainer({
   id,
   className,
@@ -3622,6 +3990,7 @@ function ChartContainer({
 }) {
   const uniqueId = React.useId();
   const chartId = `chart-${id || uniqueId.replace(/:/g, "")}`;
+
   return (
     <ChartContext.Provider value={{ config }}>
       <div
@@ -3641,13 +4010,16 @@ function ChartContainer({
     </ChartContext.Provider>
   );
 }
+
 const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
   const colorConfig = Object.entries(config).filter(
     ([, config]) => config.theme || config.color,
   );
+
   if (!colorConfig.length) {
     return null;
   }
+
   return (
     <style
       dangerouslySetInnerHTML={{
@@ -3671,7 +4043,9 @@ ${colorConfig
     />
   );
 };
+
 const ChartTooltip = RechartsPrimitive.Tooltip;
+
 function ChartTooltipContent({
   active,
   payload,
@@ -3695,10 +4069,12 @@ function ChartTooltipContent({
     labelKey?: string;
   }) {
   const { config } = useChart();
+
   const tooltipLabel = React.useMemo(() => {
     if (hideLabel || !payload?.length) {
       return null;
     }
+
     const [item] = payload;
     const key = `${labelKey || item?.dataKey || item?.name || "value"}`;
     const itemConfig = getPayloadConfigFromPayload(config, item, key);
@@ -3706,6 +4082,7 @@ function ChartTooltipContent({
       !labelKey && typeof label === "string"
         ? config[label as keyof typeof config]?.label || label
         : itemConfig?.label;
+
     if (labelFormatter) {
       return (
         <div className={cn("font-medium", labelClassName)}>
@@ -3713,9 +4090,11 @@ function ChartTooltipContent({
         </div>
       );
     }
+
     if (!value) {
       return null;
     }
+
     return <div className={cn("font-medium", labelClassName)}>{value}</div>;
   }, [
     label,
@@ -3726,10 +4105,13 @@ function ChartTooltipContent({
     config,
     labelKey,
   ]);
+
   if (!active || !payload?.length) {
     return null;
   }
+
   const nestLabel = payload.length === 1 && indicator !== "dot";
+
   return (
     <div
       className={cn(
@@ -3743,6 +4125,7 @@ function ChartTooltipContent({
           const key = `${nameKey || item.name || item.dataKey || "value"}`;
           const itemConfig = getPayloadConfigFromPayload(config, item, key);
           const indicatorColor = color || item.payload.fill || item.color;
+
           return (
             <div
               key={item.dataKey}
@@ -3806,7 +4189,9 @@ function ChartTooltipContent({
     </div>
   );
 }
+
 const ChartLegend = RechartsPrimitive.Legend;
+
 function ChartLegendContent({
   className,
   hideIcon = false,
@@ -3819,9 +4204,11 @@ function ChartLegendContent({
     nameKey?: string;
   }) {
   const { config } = useChart();
+
   if (!payload?.length) {
     return null;
   }
+
   return (
     <div
       className={cn(
@@ -3833,6 +4220,7 @@ function ChartLegendContent({
       {payload.map((item) => {
         const key = `${nameKey || item.dataKey || "value"}`;
         const itemConfig = getPayloadConfigFromPayload(config, item, key);
+
         return (
           <div
             key={item.value}
@@ -3857,6 +4245,7 @@ function ChartLegendContent({
     </div>
   );
 }
+
 // Helper to extract item config from a payload.
 function getPayloadConfigFromPayload(
   config: ChartConfig,
@@ -3866,13 +4255,16 @@ function getPayloadConfigFromPayload(
   if (typeof payload !== "object" || payload === null) {
     return undefined;
   }
+
   const payloadPayload =
     "payload" in payload &&
     typeof payload.payload === "object" &&
     payload.payload !== null
       ? payload.payload
       : undefined;
+
   let configLabelKey: string = key;
+
   if (
     key in payload &&
     typeof payload[key as keyof typeof payload] === "string"
@@ -3887,10 +4279,12 @@ function getPayloadConfigFromPayload(
       key as keyof typeof payloadPayload
     ] as string;
   }
+
   return configLabelKey in config
     ? config[configLabelKey]
     : config[key as keyof typeof config];
 }
+
 export {
   ChartContainer,
   ChartTooltip,
@@ -3899,16 +4293,19 @@ export {
   ChartLegendContent,
   ChartStyle,
 };
+
 ```
 
-## src/app/components/ui/checkbox.tsx
-
+## FILE: src\app\components\ui\checkbox.tsx
 ```tsx
 "use client";
+
 import * as React from "react";
 import * as CheckboxPrimitive from "@radix-ui/react-checkbox";
 import { CheckIcon } from "lucide-react";
+
 import { cn } from "./utils";
+
 function Checkbox({
   className,
   ...props
@@ -3931,19 +4328,23 @@ function Checkbox({
     </CheckboxPrimitive.Root>
   );
 }
+
 export { Checkbox };
+
 ```
 
-## src/app/components/ui/collapsible.tsx
-
+## FILE: src\app\components\ui\collapsible.tsx
 ```tsx
 "use client";
+
 import * as CollapsiblePrimitive from "@radix-ui/react-collapsible";
+
 function Collapsible({
   ...props
 }: React.ComponentProps<typeof CollapsiblePrimitive.Root>) {
   return <CollapsiblePrimitive.Root data-slot="collapsible" {...props} />;
 }
+
 function CollapsibleTrigger({
   ...props
 }: React.ComponentProps<typeof CollapsiblePrimitive.CollapsibleTrigger>) {
@@ -3954,6 +4355,7 @@ function CollapsibleTrigger({
     />
   );
 }
+
 function CollapsibleContent({
   ...props
 }: React.ComponentProps<typeof CollapsiblePrimitive.CollapsibleContent>) {
@@ -3964,16 +4366,19 @@ function CollapsibleContent({
     />
   );
 }
+
 export { Collapsible, CollapsibleTrigger, CollapsibleContent };
+
 ```
 
-## src/app/components/ui/command.tsx
-
+## FILE: src\app\components\ui\command.tsx
 ```tsx
 "use client";
+
 import * as React from "react";
 import { Command as CommandPrimitive } from "cmdk";
 import { SearchIcon } from "lucide-react";
+
 import { cn } from "./utils";
 import {
   Dialog,
@@ -3982,6 +4387,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "./dialog";
+
 function Command({
   className,
   ...props
@@ -3997,6 +4403,7 @@ function Command({
     />
   );
 }
+
 function CommandDialog({
   title = "Command Palette",
   description = "Search for a command to run...",
@@ -4020,6 +4427,7 @@ function CommandDialog({
     </Dialog>
   );
 }
+
 function CommandInput({
   className,
   ...props
@@ -4041,6 +4449,7 @@ function CommandInput({
     </div>
   );
 }
+
 function CommandList({
   className,
   ...props
@@ -4056,6 +4465,7 @@ function CommandList({
     />
   );
 }
+
 function CommandEmpty({
   ...props
 }: React.ComponentProps<typeof CommandPrimitive.Empty>) {
@@ -4067,6 +4477,7 @@ function CommandEmpty({
     />
   );
 }
+
 function CommandGroup({
   className,
   ...props
@@ -4082,6 +4493,7 @@ function CommandGroup({
     />
   );
 }
+
 function CommandSeparator({
   className,
   ...props
@@ -4094,6 +4506,7 @@ function CommandSeparator({
     />
   );
 }
+
 function CommandItem({
   className,
   ...props
@@ -4109,6 +4522,7 @@ function CommandItem({
     />
   );
 }
+
 function CommandShortcut({
   className,
   ...props
@@ -4124,6 +4538,7 @@ function CommandShortcut({
     />
   );
 }
+
 export {
   Command,
   CommandDialog,
@@ -4135,21 +4550,25 @@ export {
   CommandShortcut,
   CommandSeparator,
 };
+
 ```
 
-## src/app/components/ui/context-menu.tsx
-
+## FILE: src\app\components\ui\context-menu.tsx
 ```tsx
 "use client";
+
 import * as React from "react";
 import * as ContextMenuPrimitive from "@radix-ui/react-context-menu";
 import { CheckIcon, ChevronRightIcon, CircleIcon } from "lucide-react";
+
 import { cn } from "./utils";
+
 function ContextMenu({
   ...props
 }: React.ComponentProps<typeof ContextMenuPrimitive.Root>) {
   return <ContextMenuPrimitive.Root data-slot="context-menu" {...props} />;
 }
+
 function ContextMenuTrigger({
   ...props
 }: React.ComponentProps<typeof ContextMenuPrimitive.Trigger>) {
@@ -4157,6 +4576,7 @@ function ContextMenuTrigger({
     <ContextMenuPrimitive.Trigger data-slot="context-menu-trigger" {...props} />
   );
 }
+
 function ContextMenuGroup({
   ...props
 }: React.ComponentProps<typeof ContextMenuPrimitive.Group>) {
@@ -4164,6 +4584,7 @@ function ContextMenuGroup({
     <ContextMenuPrimitive.Group data-slot="context-menu-group" {...props} />
   );
 }
+
 function ContextMenuPortal({
   ...props
 }: React.ComponentProps<typeof ContextMenuPrimitive.Portal>) {
@@ -4171,11 +4592,13 @@ function ContextMenuPortal({
     <ContextMenuPrimitive.Portal data-slot="context-menu-portal" {...props} />
   );
 }
+
 function ContextMenuSub({
   ...props
 }: React.ComponentProps<typeof ContextMenuPrimitive.Sub>) {
   return <ContextMenuPrimitive.Sub data-slot="context-menu-sub" {...props} />;
 }
+
 function ContextMenuRadioGroup({
   ...props
 }: React.ComponentProps<typeof ContextMenuPrimitive.RadioGroup>) {
@@ -4186,6 +4609,7 @@ function ContextMenuRadioGroup({
     />
   );
 }
+
 function ContextMenuSubTrigger({
   className,
   inset,
@@ -4209,6 +4633,7 @@ function ContextMenuSubTrigger({
     </ContextMenuPrimitive.SubTrigger>
   );
 }
+
 function ContextMenuSubContent({
   className,
   ...props
@@ -4224,6 +4649,7 @@ function ContextMenuSubContent({
     />
   );
 }
+
 function ContextMenuContent({
   className,
   ...props
@@ -4241,6 +4667,7 @@ function ContextMenuContent({
     </ContextMenuPrimitive.Portal>
   );
 }
+
 function ContextMenuItem({
   className,
   inset,
@@ -4263,6 +4690,7 @@ function ContextMenuItem({
     />
   );
 }
+
 function ContextMenuCheckboxItem({
   className,
   children,
@@ -4288,6 +4716,7 @@ function ContextMenuCheckboxItem({
     </ContextMenuPrimitive.CheckboxItem>
   );
 }
+
 function ContextMenuRadioItem({
   className,
   children,
@@ -4311,6 +4740,7 @@ function ContextMenuRadioItem({
     </ContextMenuPrimitive.RadioItem>
   );
 }
+
 function ContextMenuLabel({
   className,
   inset,
@@ -4330,6 +4760,7 @@ function ContextMenuLabel({
     />
   );
 }
+
 function ContextMenuSeparator({
   className,
   ...props
@@ -4342,6 +4773,7 @@ function ContextMenuSeparator({
     />
   );
 }
+
 function ContextMenuShortcut({
   className,
   ...props
@@ -4357,6 +4789,7 @@ function ContextMenuShortcut({
     />
   );
 }
+
 export {
   ContextMenu,
   ContextMenuTrigger,
@@ -4374,36 +4807,43 @@ export {
   ContextMenuSubTrigger,
   ContextMenuRadioGroup,
 };
+
 ```
 
-## src/app/components/ui/dialog.tsx
-
+## FILE: src\app\components\ui\dialog.tsx
 ```tsx
 "use client";
+
 import * as React from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { XIcon } from "lucide-react";
+
 import { cn } from "./utils";
+
 function Dialog({
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Root>) {
   return <DialogPrimitive.Root data-slot="dialog" {...props} />;
 }
+
 function DialogTrigger({
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Trigger>) {
   return <DialogPrimitive.Trigger data-slot="dialog-trigger" {...props} />;
 }
+
 function DialogPortal({
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Portal>) {
   return <DialogPrimitive.Portal data-slot="dialog-portal" {...props} />;
 }
+
 function DialogClose({
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Close>) {
   return <DialogPrimitive.Close data-slot="dialog-close" {...props} />;
 }
+
 function DialogOverlay({
   className,
   ...props
@@ -4419,6 +4859,7 @@ function DialogOverlay({
     />
   );
 }
+
 function DialogContent({
   className,
   children,
@@ -4444,6 +4885,7 @@ function DialogContent({
     </DialogPortal>
   );
 }
+
 function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
@@ -4453,6 +4895,7 @@ function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
     />
   );
 }
+
 function DialogFooter({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
@@ -4465,6 +4908,7 @@ function DialogFooter({ className, ...props }: React.ComponentProps<"div">) {
     />
   );
 }
+
 function DialogTitle({
   className,
   ...props
@@ -4477,6 +4921,7 @@ function DialogTitle({
     />
   );
 }
+
 function DialogDescription({
   className,
   ...props
@@ -4489,6 +4934,7 @@ function DialogDescription({
     />
   );
 }
+
 export {
   Dialog,
   DialogClose,
@@ -4501,35 +4947,42 @@ export {
   DialogTitle,
   DialogTrigger,
 };
+
 ```
 
-## src/app/components/ui/drawer.tsx
-
+## FILE: src\app\components\ui\drawer.tsx
 ```tsx
 "use client";
+
 import * as React from "react";
 import { Drawer as DrawerPrimitive } from "vaul";
+
 import { cn } from "./utils";
+
 function Drawer({
   ...props
 }: React.ComponentProps<typeof DrawerPrimitive.Root>) {
   return <DrawerPrimitive.Root data-slot="drawer" {...props} />;
 }
+
 function DrawerTrigger({
   ...props
 }: React.ComponentProps<typeof DrawerPrimitive.Trigger>) {
   return <DrawerPrimitive.Trigger data-slot="drawer-trigger" {...props} />;
 }
+
 function DrawerPortal({
   ...props
 }: React.ComponentProps<typeof DrawerPrimitive.Portal>) {
   return <DrawerPrimitive.Portal data-slot="drawer-portal" {...props} />;
 }
+
 function DrawerClose({
   ...props
 }: React.ComponentProps<typeof DrawerPrimitive.Close>) {
   return <DrawerPrimitive.Close data-slot="drawer-close" {...props} />;
 }
+
 function DrawerOverlay({
   className,
   ...props
@@ -4545,6 +4998,7 @@ function DrawerOverlay({
     />
   );
 }
+
 function DrawerContent({
   className,
   children,
@@ -4571,6 +5025,7 @@ function DrawerContent({
     </DrawerPortal>
   );
 }
+
 function DrawerHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
@@ -4580,6 +5035,7 @@ function DrawerHeader({ className, ...props }: React.ComponentProps<"div">) {
     />
   );
 }
+
 function DrawerFooter({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
@@ -4589,6 +5045,7 @@ function DrawerFooter({ className, ...props }: React.ComponentProps<"div">) {
     />
   );
 }
+
 function DrawerTitle({
   className,
   ...props
@@ -4601,6 +5058,7 @@ function DrawerTitle({
     />
   );
 }
+
 function DrawerDescription({
   className,
   ...props
@@ -4613,6 +5071,7 @@ function DrawerDescription({
     />
   );
 }
+
 export {
   Drawer,
   DrawerPortal,
@@ -4625,21 +5084,25 @@ export {
   DrawerTitle,
   DrawerDescription,
 };
+
 ```
 
-## src/app/components/ui/dropdown-menu.tsx
-
+## FILE: src\app\components\ui\dropdown-menu.tsx
 ```tsx
 "use client";
+
 import * as React from "react";
 import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu";
 import { CheckIcon, ChevronRightIcon, CircleIcon } from "lucide-react";
+
 import { cn } from "./utils";
+
 function DropdownMenu({
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Root>) {
   return <DropdownMenuPrimitive.Root data-slot="dropdown-menu" {...props} />;
 }
+
 function DropdownMenuPortal({
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Portal>) {
@@ -4647,6 +5110,7 @@ function DropdownMenuPortal({
     <DropdownMenuPrimitive.Portal data-slot="dropdown-menu-portal" {...props} />
   );
 }
+
 function DropdownMenuTrigger({
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Trigger>) {
@@ -4657,6 +5121,7 @@ function DropdownMenuTrigger({
     />
   );
 }
+
 function DropdownMenuContent({
   className,
   sideOffset = 4,
@@ -4676,6 +5141,7 @@ function DropdownMenuContent({
     </DropdownMenuPrimitive.Portal>
   );
 }
+
 function DropdownMenuGroup({
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Group>) {
@@ -4683,6 +5149,7 @@ function DropdownMenuGroup({
     <DropdownMenuPrimitive.Group data-slot="dropdown-menu-group" {...props} />
   );
 }
+
 function DropdownMenuItem({
   className,
   inset,
@@ -4705,6 +5172,7 @@ function DropdownMenuItem({
     />
   );
 }
+
 function DropdownMenuCheckboxItem({
   className,
   children,
@@ -4730,6 +5198,7 @@ function DropdownMenuCheckboxItem({
     </DropdownMenuPrimitive.CheckboxItem>
   );
 }
+
 function DropdownMenuRadioGroup({
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.RadioGroup>) {
@@ -4740,6 +5209,7 @@ function DropdownMenuRadioGroup({
     />
   );
 }
+
 function DropdownMenuRadioItem({
   className,
   children,
@@ -4763,6 +5233,7 @@ function DropdownMenuRadioItem({
     </DropdownMenuPrimitive.RadioItem>
   );
 }
+
 function DropdownMenuLabel({
   className,
   inset,
@@ -4782,6 +5253,7 @@ function DropdownMenuLabel({
     />
   );
 }
+
 function DropdownMenuSeparator({
   className,
   ...props
@@ -4794,6 +5266,7 @@ function DropdownMenuSeparator({
     />
   );
 }
+
 function DropdownMenuShortcut({
   className,
   ...props
@@ -4809,11 +5282,13 @@ function DropdownMenuShortcut({
     />
   );
 }
+
 function DropdownMenuSub({
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Sub>) {
   return <DropdownMenuPrimitive.Sub data-slot="dropdown-menu-sub" {...props} />;
 }
+
 function DropdownMenuSubTrigger({
   className,
   inset,
@@ -4837,6 +5312,7 @@ function DropdownMenuSubTrigger({
     </DropdownMenuPrimitive.SubTrigger>
   );
 }
+
 function DropdownMenuSubContent({
   className,
   ...props
@@ -4852,6 +5328,7 @@ function DropdownMenuSubContent({
     />
   );
 }
+
 export {
   DropdownMenu,
   DropdownMenuPortal,
@@ -4869,12 +5346,13 @@ export {
   DropdownMenuSubTrigger,
   DropdownMenuSubContent,
 };
+
 ```
 
-## src/app/components/ui/form.tsx
-
+## FILE: src\app\components\ui\form.tsx
 ```tsx
 "use client";
+
 import * as React from "react";
 import * as LabelPrimitive from "@radix-ui/react-label";
 import { Slot } from "@radix-ui/react-slot";
@@ -4887,18 +5365,23 @@ import {
   type FieldPath,
   type FieldValues,
 } from "react-hook-form";
+
 import { cn } from "./utils";
 import { Label } from "./label";
+
 const Form = FormProvider;
+
 type FormFieldContextValue<
   TFieldValues extends FieldValues = FieldValues,
   TName extends FieldPath<TFieldValues> = FieldPath<TFieldValues>,
 > = {
   name: TName;
 };
+
 const FormFieldContext = React.createContext<FormFieldContextValue>(
   {} as FormFieldContextValue,
 );
+
 const FormField = <
   TFieldValues extends FieldValues = FieldValues,
   TName extends FieldPath<TFieldValues> = FieldPath<TFieldValues>,
@@ -4911,16 +5394,20 @@ const FormField = <
     </FormFieldContext.Provider>
   );
 };
+
 const useFormField = () => {
   const fieldContext = React.useContext(FormFieldContext);
   const itemContext = React.useContext(FormItemContext);
   const { getFieldState } = useFormContext();
   const formState = useFormState({ name: fieldContext.name });
   const fieldState = getFieldState(fieldContext.name, formState);
+
   if (!fieldContext) {
     throw new Error("useFormField should be used within <FormField>");
   }
+
   const { id } = itemContext;
+
   return {
     id,
     name: fieldContext.name,
@@ -4930,14 +5417,18 @@ const useFormField = () => {
     ...fieldState,
   };
 };
+
 type FormItemContextValue = {
   id: string;
 };
+
 const FormItemContext = React.createContext<FormItemContextValue>(
   {} as FormItemContextValue,
 );
+
 function FormItem({ className, ...props }: React.ComponentProps<"div">) {
   const id = React.useId();
+
   return (
     <FormItemContext.Provider value={{ id }}>
       <div
@@ -4948,11 +5439,13 @@ function FormItem({ className, ...props }: React.ComponentProps<"div">) {
     </FormItemContext.Provider>
   );
 }
+
 function FormLabel({
   className,
   ...props
 }: React.ComponentProps<typeof LabelPrimitive.Root>) {
   const { error, formItemId } = useFormField();
+
   return (
     <Label
       data-slot="form-label"
@@ -4963,9 +5456,11 @@ function FormLabel({
     />
   );
 }
+
 function FormControl({ ...props }: React.ComponentProps<typeof Slot>) {
   const { error, formItemId, formDescriptionId, formMessageId } =
     useFormField();
+
   return (
     <Slot
       data-slot="form-control"
@@ -4980,8 +5475,10 @@ function FormControl({ ...props }: React.ComponentProps<typeof Slot>) {
     />
   );
 }
+
 function FormDescription({ className, ...props }: React.ComponentProps<"p">) {
   const { formDescriptionId } = useFormField();
+
   return (
     <p
       data-slot="form-description"
@@ -4991,12 +5488,15 @@ function FormDescription({ className, ...props }: React.ComponentProps<"p">) {
     />
   );
 }
+
 function FormMessage({ className, ...props }: React.ComponentProps<"p">) {
   const { error, formMessageId } = useFormField();
   const body = error ? String(error?.message ?? "") : props.children;
+
   if (!body) {
     return null;
   }
+
   return (
     <p
       data-slot="form-message"
@@ -5008,6 +5508,7 @@ function FormMessage({ className, ...props }: React.ComponentProps<"p">) {
     </p>
   );
 }
+
 export {
   useFormField,
   Form,
@@ -5018,20 +5519,24 @@ export {
   FormMessage,
   FormField,
 };
+
 ```
 
-## src/app/components/ui/hover-card.tsx
-
+## FILE: src\app\components\ui\hover-card.tsx
 ```tsx
 "use client";
+
 import * as React from "react";
 import * as HoverCardPrimitive from "@radix-ui/react-hover-card";
+
 import { cn } from "./utils";
+
 function HoverCard({
   ...props
 }: React.ComponentProps<typeof HoverCardPrimitive.Root>) {
   return <HoverCardPrimitive.Root data-slot="hover-card" {...props} />;
 }
+
 function HoverCardTrigger({
   ...props
 }: React.ComponentProps<typeof HoverCardPrimitive.Trigger>) {
@@ -5039,6 +5544,7 @@ function HoverCardTrigger({
     <HoverCardPrimitive.Trigger data-slot="hover-card-trigger" {...props} />
   );
 }
+
 function HoverCardContent({
   className,
   align = "center",
@@ -5060,17 +5566,21 @@ function HoverCardContent({
     </HoverCardPrimitive.Portal>
   );
 }
+
 export { HoverCard, HoverCardTrigger, HoverCardContent };
+
 ```
 
-## src/app/components/ui/input-otp.tsx
-
+## FILE: src\app\components\ui\input-otp.tsx
 ```tsx
 "use client";
+
 import * as React from "react";
 import { OTPInput, OTPInputContext } from "input-otp";
 import { MinusIcon } from "lucide-react";
+
 import { cn } from "./utils";
+
 function InputOTP({
   className,
   containerClassName,
@@ -5090,6 +5600,7 @@ function InputOTP({
     />
   );
 }
+
 function InputOTPGroup({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
@@ -5099,6 +5610,7 @@ function InputOTPGroup({ className, ...props }: React.ComponentProps<"div">) {
     />
   );
 }
+
 function InputOTPSlot({
   index,
   className,
@@ -5108,6 +5620,7 @@ function InputOTPSlot({
 }) {
   const inputOTPContext = React.useContext(OTPInputContext);
   const { char, hasFakeCaret, isActive } = inputOTPContext?.slots[index] ?? {};
+
   return (
     <div
       data-slot="input-otp-slot"
@@ -5127,6 +5640,7 @@ function InputOTPSlot({
     </div>
   );
 }
+
 function InputOTPSeparator({ ...props }: React.ComponentProps<"div">) {
   return (
     <div data-slot="input-otp-separator" role="separator" {...props}>
@@ -5134,14 +5648,17 @@ function InputOTPSeparator({ ...props }: React.ComponentProps<"div">) {
     </div>
   );
 }
+
 export { InputOTP, InputOTPGroup, InputOTPSlot, InputOTPSeparator };
+
 ```
 
-## src/app/components/ui/input.tsx
-
+## FILE: src\app\components\ui\input.tsx
 ```tsx
 import * as React from "react";
+
 import { cn } from "./utils";
+
 function Input({ className, type, ...props }: React.ComponentProps<"input">) {
   return (
     <input
@@ -5157,16 +5674,20 @@ function Input({ className, type, ...props }: React.ComponentProps<"input">) {
     />
   );
 }
+
 export { Input };
+
 ```
 
-## src/app/components/ui/label.tsx
-
+## FILE: src\app\components\ui\label.tsx
 ```tsx
 "use client";
+
 import * as React from "react";
 import * as LabelPrimitive from "@radix-ui/react-label";
+
 import { cn } from "./utils";
+
 function Label({
   className,
   ...props
@@ -5182,17 +5703,21 @@ function Label({
     />
   );
 }
+
 export { Label };
+
 ```
 
-## src/app/components/ui/menubar.tsx
-
+## FILE: src\app\components\ui\menubar.tsx
 ```tsx
 "use client";
+
 import * as React from "react";
 import * as MenubarPrimitive from "@radix-ui/react-menubar";
 import { CheckIcon, ChevronRightIcon, CircleIcon } from "lucide-react";
+
 import { cn } from "./utils";
+
 function Menubar({
   className,
   ...props
@@ -5208,21 +5733,25 @@ function Menubar({
     />
   );
 }
+
 function MenubarMenu({
   ...props
 }: React.ComponentProps<typeof MenubarPrimitive.Menu>) {
   return <MenubarPrimitive.Menu data-slot="menubar-menu" {...props} />;
 }
+
 function MenubarGroup({
   ...props
 }: React.ComponentProps<typeof MenubarPrimitive.Group>) {
   return <MenubarPrimitive.Group data-slot="menubar-group" {...props} />;
 }
+
 function MenubarPortal({
   ...props
 }: React.ComponentProps<typeof MenubarPrimitive.Portal>) {
   return <MenubarPrimitive.Portal data-slot="menubar-portal" {...props} />;
 }
+
 function MenubarRadioGroup({
   ...props
 }: React.ComponentProps<typeof MenubarPrimitive.RadioGroup>) {
@@ -5230,6 +5759,7 @@ function MenubarRadioGroup({
     <MenubarPrimitive.RadioGroup data-slot="menubar-radio-group" {...props} />
   );
 }
+
 function MenubarTrigger({
   className,
   ...props
@@ -5245,6 +5775,7 @@ function MenubarTrigger({
     />
   );
 }
+
 function MenubarContent({
   className,
   align = "start",
@@ -5268,6 +5799,7 @@ function MenubarContent({
     </MenubarPortal>
   );
 }
+
 function MenubarItem({
   className,
   inset,
@@ -5290,6 +5822,7 @@ function MenubarItem({
     />
   );
 }
+
 function MenubarCheckboxItem({
   className,
   children,
@@ -5315,6 +5848,7 @@ function MenubarCheckboxItem({
     </MenubarPrimitive.CheckboxItem>
   );
 }
+
 function MenubarRadioItem({
   className,
   children,
@@ -5338,6 +5872,7 @@ function MenubarRadioItem({
     </MenubarPrimitive.RadioItem>
   );
 }
+
 function MenubarLabel({
   className,
   inset,
@@ -5357,6 +5892,7 @@ function MenubarLabel({
     />
   );
 }
+
 function MenubarSeparator({
   className,
   ...props
@@ -5369,6 +5905,7 @@ function MenubarSeparator({
     />
   );
 }
+
 function MenubarShortcut({
   className,
   ...props
@@ -5384,11 +5921,13 @@ function MenubarShortcut({
     />
   );
 }
+
 function MenubarSub({
   ...props
 }: React.ComponentProps<typeof MenubarPrimitive.Sub>) {
   return <MenubarPrimitive.Sub data-slot="menubar-sub" {...props} />;
 }
+
 function MenubarSubTrigger({
   className,
   inset,
@@ -5412,6 +5951,7 @@ function MenubarSubTrigger({
     </MenubarPrimitive.SubTrigger>
   );
 }
+
 function MenubarSubContent({
   className,
   ...props
@@ -5427,6 +5967,7 @@ function MenubarSubContent({
     />
   );
 }
+
 export {
   Menubar,
   MenubarPortal,
@@ -5445,16 +5986,18 @@ export {
   MenubarSubTrigger,
   MenubarSubContent,
 };
+
 ```
 
-## src/app/components/ui/navigation-menu.tsx
-
+## FILE: src\app\components\ui\navigation-menu.tsx
 ```tsx
 import * as React from "react";
 import * as NavigationMenuPrimitive from "@radix-ui/react-navigation-menu";
 import { cva } from "class-variance-authority";
 import { ChevronDownIcon } from "lucide-react";
+
 import { cn } from "./utils";
+
 function NavigationMenu({
   className,
   children,
@@ -5478,6 +6021,7 @@ function NavigationMenu({
     </NavigationMenuPrimitive.Root>
   );
 }
+
 function NavigationMenuList({
   className,
   ...props
@@ -5493,6 +6037,7 @@ function NavigationMenuList({
     />
   );
 }
+
 function NavigationMenuItem({
   className,
   ...props
@@ -5505,9 +6050,11 @@ function NavigationMenuItem({
     />
   );
 }
+
 const navigationMenuTriggerStyle = cva(
   "group inline-flex h-9 w-max items-center justify-center rounded-md bg-background px-4 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground disabled:pointer-events-none disabled:opacity-50 data-[state=open]:hover:bg-accent data-[state=open]:text-accent-foreground data-[state=open]:focus:bg-accent data-[state=open]:bg-accent/50 focus-visible:ring-ring/50 outline-none transition-[color,box-shadow] focus-visible:ring-[3px] focus-visible:outline-1",
 );
+
 function NavigationMenuTrigger({
   className,
   children,
@@ -5527,6 +6074,7 @@ function NavigationMenuTrigger({
     </NavigationMenuPrimitive.Trigger>
   );
 }
+
 function NavigationMenuContent({
   className,
   ...props
@@ -5543,6 +6091,7 @@ function NavigationMenuContent({
     />
   );
 }
+
 function NavigationMenuViewport({
   className,
   ...props
@@ -5564,6 +6113,7 @@ function NavigationMenuViewport({
     </div>
   );
 }
+
 function NavigationMenuLink({
   className,
   ...props
@@ -5579,6 +6129,7 @@ function NavigationMenuLink({
     />
   );
 }
+
 function NavigationMenuIndicator({
   className,
   ...props
@@ -5596,6 +6147,7 @@ function NavigationMenuIndicator({
     </NavigationMenuPrimitive.Indicator>
   );
 }
+
 export {
   NavigationMenu,
   NavigationMenuList,
@@ -5607,10 +6159,10 @@ export {
   NavigationMenuViewport,
   navigationMenuTriggerStyle,
 };
+
 ```
 
-## src/app/components/ui/pagination.tsx
-
+## FILE: src\app\components\ui\pagination.tsx
 ```tsx
 import * as React from "react";
 import {
@@ -5618,8 +6170,10 @@ import {
   ChevronRightIcon,
   MoreHorizontalIcon,
 } from "lucide-react";
+
 import { cn } from "./utils";
 import { Button, buttonVariants } from "./button";
+
 function Pagination({ className, ...props }: React.ComponentProps<"nav">) {
   return (
     <nav
@@ -5631,6 +6185,7 @@ function Pagination({ className, ...props }: React.ComponentProps<"nav">) {
     />
   );
 }
+
 function PaginationContent({
   className,
   ...props
@@ -5643,13 +6198,16 @@ function PaginationContent({
     />
   );
 }
+
 function PaginationItem({ ...props }: React.ComponentProps<"li">) {
   return <li data-slot="pagination-item" {...props} />;
 }
+
 type PaginationLinkProps = {
   isActive?: boolean;
 } & Pick<React.ComponentProps<typeof Button>, "size"> &
   React.ComponentProps<"a">;
+
 function PaginationLink({
   className,
   isActive,
@@ -5672,6 +6230,7 @@ function PaginationLink({
     />
   );
 }
+
 function PaginationPrevious({
   className,
   ...props
@@ -5688,6 +6247,7 @@ function PaginationPrevious({
     </PaginationLink>
   );
 }
+
 function PaginationNext({
   className,
   ...props
@@ -5704,6 +6264,7 @@ function PaginationNext({
     </PaginationLink>
   );
 }
+
 function PaginationEllipsis({
   className,
   ...props
@@ -5720,6 +6281,7 @@ function PaginationEllipsis({
     </span>
   );
 }
+
 export {
   Pagination,
   PaginationContent,
@@ -5729,25 +6291,30 @@ export {
   PaginationNext,
   PaginationEllipsis,
 };
+
 ```
 
-## src/app/components/ui/popover.tsx
-
+## FILE: src\app\components\ui\popover.tsx
 ```tsx
 "use client";
+
 import * as React from "react";
 import * as PopoverPrimitive from "@radix-ui/react-popover";
+
 import { cn } from "./utils";
+
 function Popover({
   ...props
 }: React.ComponentProps<typeof PopoverPrimitive.Root>) {
   return <PopoverPrimitive.Root data-slot="popover" {...props} />;
 }
+
 function PopoverTrigger({
   ...props
 }: React.ComponentProps<typeof PopoverPrimitive.Trigger>) {
   return <PopoverPrimitive.Trigger data-slot="popover-trigger" {...props} />;
 }
+
 function PopoverContent({
   className,
   align = "center",
@@ -5769,21 +6336,26 @@ function PopoverContent({
     </PopoverPrimitive.Portal>
   );
 }
+
 function PopoverAnchor({
   ...props
 }: React.ComponentProps<typeof PopoverPrimitive.Anchor>) {
   return <PopoverPrimitive.Anchor data-slot="popover-anchor" {...props} />;
 }
+
 export { Popover, PopoverTrigger, PopoverContent, PopoverAnchor };
+
 ```
 
-## src/app/components/ui/progress.tsx
-
+## FILE: src\app\components\ui\progress.tsx
 ```tsx
 "use client";
+
 import * as React from "react";
 import * as ProgressPrimitive from "@radix-ui/react-progress";
+
 import { cn } from "./utils";
+
 function Progress({
   className,
   value,
@@ -5806,17 +6378,21 @@ function Progress({
     </ProgressPrimitive.Root>
   );
 }
+
 export { Progress };
+
 ```
 
-## src/app/components/ui/radio-group.tsx
-
+## FILE: src\app\components\ui\radio-group.tsx
 ```tsx
 "use client";
+
 import * as React from "react";
 import * as RadioGroupPrimitive from "@radix-ui/react-radio-group";
 import { CircleIcon } from "lucide-react";
+
 import { cn } from "./utils";
+
 function RadioGroup({
   className,
   ...props
@@ -5829,6 +6405,7 @@ function RadioGroup({
     />
   );
 }
+
 function RadioGroupItem({
   className,
   ...props
@@ -5851,17 +6428,21 @@ function RadioGroupItem({
     </RadioGroupPrimitive.Item>
   );
 }
+
 export { RadioGroup, RadioGroupItem };
+
 ```
 
-## src/app/components/ui/resizable.tsx
-
+## FILE: src\app\components\ui\resizable.tsx
 ```tsx
 "use client";
+
 import * as React from "react";
 import { GripVerticalIcon } from "lucide-react";
 import * as ResizablePrimitive from "react-resizable-panels";
+
 import { cn } from "./utils";
+
 function ResizablePanelGroup({
   className,
   ...props
@@ -5877,11 +6458,13 @@ function ResizablePanelGroup({
     />
   );
 }
+
 function ResizablePanel({
   ...props
 }: React.ComponentProps<typeof ResizablePrimitive.Panel>) {
   return <ResizablePrimitive.Panel data-slot="resizable-panel" {...props} />;
 }
+
 function ResizableHandle({
   withHandle,
   className,
@@ -5906,16 +6489,20 @@ function ResizableHandle({
     </ResizablePrimitive.PanelResizeHandle>
   );
 }
+
 export { ResizablePanelGroup, ResizablePanel, ResizableHandle };
+
 ```
 
-## src/app/components/ui/scroll-area.tsx
-
+## FILE: src\app\components\ui\scroll-area.tsx
 ```tsx
 "use client";
+
 import * as React from "react";
 import * as ScrollAreaPrimitive from "@radix-ui/react-scroll-area";
+
 import { cn } from "./utils";
+
 function ScrollArea({
   className,
   children,
@@ -5938,6 +6525,7 @@ function ScrollArea({
     </ScrollAreaPrimitive.Root>
   );
 }
+
 function ScrollBar({
   className,
   orientation = "vertical",
@@ -5964,13 +6552,15 @@ function ScrollBar({
     </ScrollAreaPrimitive.ScrollAreaScrollbar>
   );
 }
+
 export { ScrollArea, ScrollBar };
+
 ```
 
-## src/app/components/ui/select.tsx
-
+## FILE: src\app\components\ui\select.tsx
 ```tsx
 "use client";
+
 import * as React from "react";
 import * as SelectPrimitive from "@radix-ui/react-select";
 import {
@@ -5978,22 +6568,27 @@ import {
   ChevronDownIcon,
   ChevronUpIcon,
 } from "lucide-react";
+
 import { cn } from "./utils";
+
 function Select({
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Root>) {
   return <SelectPrimitive.Root data-slot="select" {...props} />;
 }
+
 function SelectGroup({
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Group>) {
   return <SelectPrimitive.Group data-slot="select-group" {...props} />;
 }
+
 function SelectValue({
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Value>) {
   return <SelectPrimitive.Value data-slot="select-value" {...props} />;
 }
+
 function SelectTrigger({
   className,
   size = "default",
@@ -6019,6 +6614,7 @@ function SelectTrigger({
     </SelectPrimitive.Trigger>
   );
 }
+
 function SelectContent({
   className,
   children,
@@ -6053,6 +6649,7 @@ function SelectContent({
     </SelectPrimitive.Portal>
   );
 }
+
 function SelectLabel({
   className,
   ...props
@@ -6065,6 +6662,7 @@ function SelectLabel({
     />
   );
 }
+
 function SelectItem({
   className,
   children,
@@ -6088,6 +6686,7 @@ function SelectItem({
     </SelectPrimitive.Item>
   );
 }
+
 function SelectSeparator({
   className,
   ...props
@@ -6100,6 +6699,7 @@ function SelectSeparator({
     />
   );
 }
+
 function SelectScrollUpButton({
   className,
   ...props
@@ -6117,6 +6717,7 @@ function SelectScrollUpButton({
     </SelectPrimitive.ScrollUpButton>
   );
 }
+
 function SelectScrollDownButton({
   className,
   ...props
@@ -6134,6 +6735,7 @@ function SelectScrollDownButton({
     </SelectPrimitive.ScrollDownButton>
   );
 }
+
 export {
   Select,
   SelectContent,
@@ -6146,15 +6748,18 @@ export {
   SelectTrigger,
   SelectValue,
 };
+
 ```
 
-## src/app/components/ui/separator.tsx
-
+## FILE: src\app\components\ui\separator.tsx
 ```tsx
 "use client";
+
 import * as React from "react";
 import * as SeparatorPrimitive from "@radix-ui/react-separator";
+
 import { cn } from "./utils";
+
 function Separator({
   className,
   orientation = "horizontal",
@@ -6174,35 +6779,43 @@ function Separator({
     />
   );
 }
+
 export { Separator };
+
 ```
 
-## src/app/components/ui/sheet.tsx
-
+## FILE: src\app\components\ui\sheet.tsx
 ```tsx
 "use client";
+
 import * as React from "react";
 import * as SheetPrimitive from "@radix-ui/react-dialog";
 import { XIcon } from "lucide-react";
+
 import { cn } from "./utils";
+
 function Sheet({ ...props }: React.ComponentProps<typeof SheetPrimitive.Root>) {
   return <SheetPrimitive.Root data-slot="sheet" {...props} />;
 }
+
 function SheetTrigger({
   ...props
 }: React.ComponentProps<typeof SheetPrimitive.Trigger>) {
   return <SheetPrimitive.Trigger data-slot="sheet-trigger" {...props} />;
 }
+
 function SheetClose({
   ...props
 }: React.ComponentProps<typeof SheetPrimitive.Close>) {
   return <SheetPrimitive.Close data-slot="sheet-close" {...props} />;
 }
+
 function SheetPortal({
   ...props
 }: React.ComponentProps<typeof SheetPrimitive.Portal>) {
   return <SheetPrimitive.Portal data-slot="sheet-portal" {...props} />;
 }
+
 function SheetOverlay({
   className,
   ...props
@@ -6218,6 +6831,7 @@ function SheetOverlay({
     />
   );
 }
+
 function SheetContent({
   className,
   children,
@@ -6254,6 +6868,7 @@ function SheetContent({
     </SheetPortal>
   );
 }
+
 function SheetHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
@@ -6263,6 +6878,7 @@ function SheetHeader({ className, ...props }: React.ComponentProps<"div">) {
     />
   );
 }
+
 function SheetFooter({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
@@ -6272,6 +6888,7 @@ function SheetFooter({ className, ...props }: React.ComponentProps<"div">) {
     />
   );
 }
+
 function SheetTitle({
   className,
   ...props
@@ -6284,6 +6901,7 @@ function SheetTitle({
     />
   );
 }
+
 function SheetDescription({
   className,
   ...props
@@ -6296,6 +6914,7 @@ function SheetDescription({
     />
   );
 }
+
 export {
   Sheet,
   SheetTrigger,
@@ -6306,16 +6925,18 @@ export {
   SheetTitle,
   SheetDescription,
 };
+
 ```
 
-## src/app/components/ui/sidebar.tsx
-
+## FILE: src\app\components\ui\sidebar.tsx
 ```tsx
 "use client";
+
 import * as React from "react";
 import { Slot } from "@radix-ui/react-slot";
 import { VariantProps, cva } from "class-variance-authority";
 import { PanelLeftIcon } from "lucide-react";
+
 import { useIsMobile } from "./use-mobile";
 import { cn } from "./utils";
 import { Button } from "./button";
@@ -6335,12 +6956,14 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "./tooltip";
+
 const SIDEBAR_COOKIE_NAME = "sidebar_state";
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7;
 const SIDEBAR_WIDTH = "16rem";
 const SIDEBAR_WIDTH_MOBILE = "18rem";
 const SIDEBAR_WIDTH_ICON = "3rem";
 const SIDEBAR_KEYBOARD_SHORTCUT = "b";
+
 type SidebarContextProps = {
   state: "expanded" | "collapsed";
   open: boolean;
@@ -6350,14 +6973,18 @@ type SidebarContextProps = {
   isMobile: boolean;
   toggleSidebar: () => void;
 };
+
 const SidebarContext = React.createContext<SidebarContextProps | null>(null);
+
 function useSidebar() {
   const context = React.useContext(SidebarContext);
   if (!context) {
     throw new Error("useSidebar must be used within a SidebarProvider.");
   }
+
   return context;
 }
+
 function SidebarProvider({
   defaultOpen = true,
   open: openProp,
@@ -6373,6 +7000,7 @@ function SidebarProvider({
 }) {
   const isMobile = useIsMobile();
   const [openMobile, setOpenMobile] = React.useState(false);
+
   // This is the internal state of the sidebar.
   // We use openProp and setOpenProp for control from outside the component.
   const [_open, _setOpen] = React.useState(defaultOpen);
@@ -6385,15 +7013,18 @@ function SidebarProvider({
       } else {
         _setOpen(openState);
       }
+
       // This sets the cookie to keep the sidebar state.
       document.cookie = `${SIDEBAR_COOKIE_NAME}=${openState}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`;
     },
     [setOpenProp, open],
   );
+
   // Helper to toggle the sidebar.
   const toggleSidebar = React.useCallback(() => {
     return isMobile ? setOpenMobile((open) => !open) : setOpen((open) => !open);
   }, [isMobile, setOpen, setOpenMobile]);
+
   // Adds a keyboard shortcut to toggle the sidebar.
   React.useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -6405,12 +7036,15 @@ function SidebarProvider({
         toggleSidebar();
       }
     };
+
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [toggleSidebar]);
+
   // We add a state so that we can do data-state="expanded" or "collapsed".
   // This makes it easier to style the sidebar with Tailwind classes.
   const state = open ? "expanded" : "collapsed";
+
   const contextValue = React.useMemo<SidebarContextProps>(
     () => ({
       state,
@@ -6423,6 +7057,7 @@ function SidebarProvider({
     }),
     [state, open, setOpen, isMobile, openMobile, setOpenMobile, toggleSidebar],
   );
+
   return (
     <SidebarContext.Provider value={contextValue}>
       <TooltipProvider delayDuration={0}>
@@ -6447,6 +7082,7 @@ function SidebarProvider({
     </SidebarContext.Provider>
   );
 }
+
 function Sidebar({
   side = "left",
   variant = "sidebar",
@@ -6460,6 +7096,7 @@ function Sidebar({
   collapsible?: "offcanvas" | "icon" | "none";
 }) {
   const { isMobile, state, openMobile, setOpenMobile } = useSidebar();
+
   if (collapsible === "none") {
     return (
       <div
@@ -6474,6 +7111,7 @@ function Sidebar({
       </div>
     );
   }
+
   if (isMobile) {
     return (
       <Sheet open={openMobile} onOpenChange={setOpenMobile} {...props}>
@@ -6498,6 +7136,7 @@ function Sidebar({
       </Sheet>
     );
   }
+
   return (
     <div
       className="group peer text-sidebar-foreground hidden md:block"
@@ -6545,12 +7184,14 @@ function Sidebar({
     </div>
   );
 }
+
 function SidebarTrigger({
   className,
   onClick,
   ...props
 }: React.ComponentProps<typeof Button>) {
   const { toggleSidebar } = useSidebar();
+
   return (
     <Button
       data-sidebar="trigger"
@@ -6569,8 +7210,10 @@ function SidebarTrigger({
     </Button>
   );
 }
+
 function SidebarRail({ className, ...props }: React.ComponentProps<"button">) {
   const { toggleSidebar } = useSidebar();
+
   return (
     <button
       data-sidebar="rail"
@@ -6592,6 +7235,7 @@ function SidebarRail({ className, ...props }: React.ComponentProps<"button">) {
     />
   );
 }
+
 function SidebarInset({ className, ...props }: React.ComponentProps<"main">) {
   return (
     <main
@@ -6605,6 +7249,7 @@ function SidebarInset({ className, ...props }: React.ComponentProps<"main">) {
     />
   );
 }
+
 function SidebarInput({
   className,
   ...props
@@ -6618,6 +7263,7 @@ function SidebarInput({
     />
   );
 }
+
 function SidebarHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
@@ -6628,6 +7274,7 @@ function SidebarHeader({ className, ...props }: React.ComponentProps<"div">) {
     />
   );
 }
+
 function SidebarFooter({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
@@ -6638,6 +7285,7 @@ function SidebarFooter({ className, ...props }: React.ComponentProps<"div">) {
     />
   );
 }
+
 function SidebarSeparator({
   className,
   ...props
@@ -6651,6 +7299,7 @@ function SidebarSeparator({
     />
   );
 }
+
 function SidebarContent({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
@@ -6664,6 +7313,7 @@ function SidebarContent({ className, ...props }: React.ComponentProps<"div">) {
     />
   );
 }
+
 function SidebarGroup({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
@@ -6674,12 +7324,14 @@ function SidebarGroup({ className, ...props }: React.ComponentProps<"div">) {
     />
   );
 }
+
 function SidebarGroupLabel({
   className,
   asChild = false,
   ...props
 }: React.ComponentProps<"div"> & { asChild?: boolean }) {
   const Comp = asChild ? Slot : "div";
+
   return (
     <Comp
       data-slot="sidebar-group-label"
@@ -6693,12 +7345,14 @@ function SidebarGroupLabel({
     />
   );
 }
+
 function SidebarGroupAction({
   className,
   asChild = false,
   ...props
 }: React.ComponentProps<"button"> & { asChild?: boolean }) {
   const Comp = asChild ? Slot : "button";
+
   return (
     <Comp
       data-slot="sidebar-group-action"
@@ -6714,6 +7368,7 @@ function SidebarGroupAction({
     />
   );
 }
+
 function SidebarGroupContent({
   className,
   ...props
@@ -6727,6 +7382,7 @@ function SidebarGroupContent({
     />
   );
 }
+
 function SidebarMenu({ className, ...props }: React.ComponentProps<"ul">) {
   return (
     <ul
@@ -6737,6 +7393,7 @@ function SidebarMenu({ className, ...props }: React.ComponentProps<"ul">) {
     />
   );
 }
+
 function SidebarMenuItem({ className, ...props }: React.ComponentProps<"li">) {
   return (
     <li
@@ -6747,6 +7404,7 @@ function SidebarMenuItem({ className, ...props }: React.ComponentProps<"li">) {
     />
   );
 }
+
 const sidebarMenuButtonVariants = cva(
   "peer/menu-button flex w-full items-center gap-2 overflow-hidden rounded-md p-2 text-left text-sm outline-hidden ring-sidebar-ring transition-[width,height,padding] hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 active:bg-sidebar-accent active:text-sidebar-accent-foreground disabled:pointer-events-none disabled:opacity-50 group-has-data-[sidebar=menu-action]/menu-item:pr-8 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-[active=true]:bg-sidebar-accent data-[active=true]:font-medium data-[active=true]:text-sidebar-accent-foreground data-[state=open]:hover:bg-sidebar-accent data-[state=open]:hover:text-sidebar-accent-foreground group-data-[collapsible=icon]:size-8! group-data-[collapsible=icon]:p-2! [&>span:last-child]:truncate [&>svg]:size-4 [&>svg]:shrink-0",
   {
@@ -6768,6 +7426,7 @@ const sidebarMenuButtonVariants = cva(
     },
   },
 );
+
 function SidebarMenuButton({
   asChild = false,
   isActive = false,
@@ -6783,6 +7442,7 @@ function SidebarMenuButton({
 } & VariantProps<typeof sidebarMenuButtonVariants>) {
   const Comp = asChild ? Slot : "button";
   const { isMobile, state } = useSidebar();
+
   const button = (
     <Comp
       data-slot="sidebar-menu-button"
@@ -6793,14 +7453,17 @@ function SidebarMenuButton({
       {...props}
     />
   );
+
   if (!tooltip) {
     return button;
   }
+
   if (typeof tooltip === "string") {
     tooltip = {
       children: tooltip,
     };
   }
+
   return (
     <Tooltip>
       <TooltipTrigger asChild>{button}</TooltipTrigger>
@@ -6813,6 +7476,7 @@ function SidebarMenuButton({
     </Tooltip>
   );
 }
+
 function SidebarMenuAction({
   className,
   asChild = false,
@@ -6823,6 +7487,7 @@ function SidebarMenuAction({
   showOnHover?: boolean;
 }) {
   const Comp = asChild ? Slot : "button";
+
   return (
     <Comp
       data-slot="sidebar-menu-action"
@@ -6843,6 +7508,7 @@ function SidebarMenuAction({
     />
   );
 }
+
 function SidebarMenuBadge({
   className,
   ...props
@@ -6864,6 +7530,7 @@ function SidebarMenuBadge({
     />
   );
 }
+
 function SidebarMenuSkeleton({
   className,
   showIcon = false,
@@ -6875,6 +7542,7 @@ function SidebarMenuSkeleton({
   const width = React.useMemo(() => {
     return `${Math.floor(Math.random() * 40) + 50}%`;
   }, []);
+
   return (
     <div
       data-slot="sidebar-menu-skeleton"
@@ -6900,6 +7568,7 @@ function SidebarMenuSkeleton({
     </div>
   );
 }
+
 function SidebarMenuSub({ className, ...props }: React.ComponentProps<"ul">) {
   return (
     <ul
@@ -6914,6 +7583,7 @@ function SidebarMenuSub({ className, ...props }: React.ComponentProps<"ul">) {
     />
   );
 }
+
 function SidebarMenuSubItem({
   className,
   ...props
@@ -6927,6 +7597,7 @@ function SidebarMenuSubItem({
     />
   );
 }
+
 function SidebarMenuSubButton({
   asChild = false,
   size = "md",
@@ -6939,6 +7610,7 @@ function SidebarMenuSubButton({
   isActive?: boolean;
 }) {
   const Comp = asChild ? Slot : "a";
+
   return (
     <Comp
       data-slot="sidebar-menu-sub-button"
@@ -6957,6 +7629,7 @@ function SidebarMenuSubButton({
     />
   );
 }
+
 export {
   Sidebar,
   SidebarContent,
@@ -6983,12 +7656,13 @@ export {
   SidebarTrigger,
   useSidebar,
 };
+
 ```
 
-## src/app/components/ui/skeleton.tsx
-
+## FILE: src\app\components\ui\skeleton.tsx
 ```tsx
 import { cn } from "./utils";
+
 function Skeleton({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
@@ -6998,16 +7672,20 @@ function Skeleton({ className, ...props }: React.ComponentProps<"div">) {
     />
   );
 }
+
 export { Skeleton };
+
 ```
 
-## src/app/components/ui/slider.tsx
-
+## FILE: src\app\components\ui\slider.tsx
 ```tsx
 "use client";
+
 import * as React from "react";
 import * as SliderPrimitive from "@radix-ui/react-slider";
+
 import { cn } from "./utils";
+
 function Slider({
   className,
   defaultValue,
@@ -7025,6 +7703,7 @@ function Slider({
           : [min, max],
     [value, defaultValue, min, max],
   );
+
   return (
     <SliderPrimitive.Root
       data-slot="slider"
@@ -7061,17 +7740,21 @@ function Slider({
     </SliderPrimitive.Root>
   );
 }
+
 export { Slider };
+
 ```
 
-## src/app/components/ui/sonner.tsx
-
+## FILE: src\app\components\ui\sonner.tsx
 ```tsx
 "use client";
+
 import { useTheme } from "next-themes";
 import { Toaster as Sonner, ToasterProps } from "sonner";
+
 const Toaster = ({ ...props }: ToasterProps) => {
   const { theme = "system" } = useTheme();
+
   return (
     <Sonner
       theme={theme as ToasterProps["theme"]}
@@ -7087,16 +7770,20 @@ const Toaster = ({ ...props }: ToasterProps) => {
     />
   );
 };
+
 export { Toaster };
+
 ```
 
-## src/app/components/ui/switch.tsx
-
+## FILE: src\app\components\ui\switch.tsx
 ```tsx
 "use client";
+
 import * as React from "react";
 import * as SwitchPrimitive from "@radix-ui/react-switch";
+
 import { cn } from "./utils";
+
 function Switch({
   className,
   ...props
@@ -7119,15 +7806,19 @@ function Switch({
     </SwitchPrimitive.Root>
   );
 }
+
 export { Switch };
+
 ```
 
-## src/app/components/ui/table.tsx
-
+## FILE: src\app\components\ui\table.tsx
 ```tsx
 "use client";
+
 import * as React from "react";
+
 import { cn } from "./utils";
+
 function Table({ className, ...props }: React.ComponentProps<"table">) {
   return (
     <div
@@ -7142,6 +7833,7 @@ function Table({ className, ...props }: React.ComponentProps<"table">) {
     </div>
   );
 }
+
 function TableHeader({ className, ...props }: React.ComponentProps<"thead">) {
   return (
     <thead
@@ -7151,6 +7843,7 @@ function TableHeader({ className, ...props }: React.ComponentProps<"thead">) {
     />
   );
 }
+
 function TableBody({ className, ...props }: React.ComponentProps<"tbody">) {
   return (
     <tbody
@@ -7160,6 +7853,7 @@ function TableBody({ className, ...props }: React.ComponentProps<"tbody">) {
     />
   );
 }
+
 function TableFooter({ className, ...props }: React.ComponentProps<"tfoot">) {
   return (
     <tfoot
@@ -7172,6 +7866,7 @@ function TableFooter({ className, ...props }: React.ComponentProps<"tfoot">) {
     />
   );
 }
+
 function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
   return (
     <tr
@@ -7184,6 +7879,7 @@ function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
     />
   );
 }
+
 function TableHead({ className, ...props }: React.ComponentProps<"th">) {
   return (
     <th
@@ -7196,6 +7892,7 @@ function TableHead({ className, ...props }: React.ComponentProps<"th">) {
     />
   );
 }
+
 function TableCell({ className, ...props }: React.ComponentProps<"td">) {
   return (
     <td
@@ -7208,6 +7905,7 @@ function TableCell({ className, ...props }: React.ComponentProps<"td">) {
     />
   );
 }
+
 function TableCaption({
   className,
   ...props
@@ -7220,6 +7918,7 @@ function TableCaption({
     />
   );
 }
+
 export {
   Table,
   TableHeader,
@@ -7230,15 +7929,18 @@ export {
   TableCell,
   TableCaption,
 };
+
 ```
 
-## src/app/components/ui/tabs.tsx
-
+## FILE: src\app\components\ui\tabs.tsx
 ```tsx
 "use client";
+
 import * as React from "react";
 import * as TabsPrimitive from "@radix-ui/react-tabs";
+
 import { cn } from "./utils";
+
 function Tabs({
   className,
   ...props
@@ -7251,6 +7953,7 @@ function Tabs({
     />
   );
 }
+
 function TabsList({
   className,
   ...props
@@ -7266,6 +7969,7 @@ function TabsList({
     />
   );
 }
+
 function TabsTrigger({
   className,
   ...props
@@ -7281,6 +7985,7 @@ function TabsTrigger({
     />
   );
 }
+
 function TabsContent({
   className,
   ...props
@@ -7293,14 +7998,17 @@ function TabsContent({
     />
   );
 }
+
 export { Tabs, TabsList, TabsTrigger, TabsContent };
+
 ```
 
-## src/app/components/ui/textarea.tsx
-
+## FILE: src\app\components\ui\textarea.tsx
 ```tsx
 import * as React from "react";
+
 import { cn } from "./utils";
+
 function Textarea({ className, ...props }: React.ComponentProps<"textarea">) {
   return (
     <textarea
@@ -7313,24 +8021,29 @@ function Textarea({ className, ...props }: React.ComponentProps<"textarea">) {
     />
   );
 }
+
 export { Textarea };
+
 ```
 
-## src/app/components/ui/toggle-group.tsx
-
+## FILE: src\app\components\ui\toggle-group.tsx
 ```tsx
 "use client";
+
 import * as React from "react";
 import * as ToggleGroupPrimitive from "@radix-ui/react-toggle-group";
 import { type VariantProps } from "class-variance-authority";
+
 import { cn } from "./utils";
 import { toggleVariants } from "./toggle";
+
 const ToggleGroupContext = React.createContext<
   VariantProps<typeof toggleVariants>
 >({
   size: "default",
   variant: "default",
 });
+
 function ToggleGroup({
   className,
   variant,
@@ -7356,6 +8069,7 @@ function ToggleGroup({
     </ToggleGroupPrimitive.Root>
   );
 }
+
 function ToggleGroupItem({
   className,
   children,
@@ -7365,6 +8079,7 @@ function ToggleGroupItem({
 }: React.ComponentProps<typeof ToggleGroupPrimitive.Item> &
   VariantProps<typeof toggleVariants>) {
   const context = React.useContext(ToggleGroupContext);
+
   return (
     <ToggleGroupPrimitive.Item
       data-slot="toggle-group-item"
@@ -7384,17 +8099,21 @@ function ToggleGroupItem({
     </ToggleGroupPrimitive.Item>
   );
 }
+
 export { ToggleGroup, ToggleGroupItem };
+
 ```
 
-## src/app/components/ui/toggle.tsx
-
+## FILE: src\app\components\ui\toggle.tsx
 ```tsx
 "use client";
+
 import * as React from "react";
 import * as TogglePrimitive from "@radix-ui/react-toggle";
 import { cva, type VariantProps } from "class-variance-authority";
+
 import { cn } from "./utils";
+
 const toggleVariants = cva(
   "inline-flex items-center justify-center gap-2 rounded-md text-sm font-medium hover:bg-muted hover:text-muted-foreground disabled:pointer-events-none disabled:opacity-50 data-[state=on]:bg-accent data-[state=on]:text-accent-foreground [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 [&_svg]:shrink-0 focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] outline-none transition-[color,box-shadow] aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive whitespace-nowrap",
   {
@@ -7416,6 +8135,7 @@ const toggleVariants = cva(
     },
   },
 );
+
 function Toggle({
   className,
   variant,
@@ -7431,16 +8151,20 @@ function Toggle({
     />
   );
 }
+
 export { Toggle, toggleVariants };
+
 ```
 
-## src/app/components/ui/tooltip.tsx
-
+## FILE: src\app\components\ui\tooltip.tsx
 ```tsx
 "use client";
+
 import * as React from "react";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
+
 import { cn } from "./utils";
+
 function TooltipProvider({
   delayDuration = 0,
   ...props
@@ -7453,6 +8177,7 @@ function TooltipProvider({
     />
   );
 }
+
 function Tooltip({
   ...props
 }: React.ComponentProps<typeof TooltipPrimitive.Root>) {
@@ -7462,11 +8187,13 @@ function Tooltip({
     </TooltipProvider>
   );
 }
+
 function TooltipTrigger({
   ...props
 }: React.ComponentProps<typeof TooltipPrimitive.Trigger>) {
   return <TooltipPrimitive.Trigger data-slot="tooltip-trigger" {...props} />;
 }
+
 function TooltipContent({
   className,
   sideOffset = 0,
@@ -7490,18 +8217,22 @@ function TooltipContent({
     </TooltipPrimitive.Portal>
   );
 }
+
 export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider };
+
 ```
 
-## src/app/components/ui/use-mobile.ts
-
+## FILE: src\app\components\ui\use-mobile.ts
 ```ts
 import * as React from "react";
+
 const MOBILE_BREAKPOINT = 768;
+
 export function useIsMobile() {
   const [isMobile, setIsMobile] = React.useState<boolean | undefined>(
     undefined,
   );
+
   React.useEffect(() => {
     const mql = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`);
     const onChange = () => {
@@ -7511,22 +8242,24 @@ export function useIsMobile() {
     setIsMobile(window.innerWidth < MOBILE_BREAKPOINT);
     return () => mql.removeEventListener("change", onChange);
   }, []);
+
   return !!isMobile;
 }
+
 ```
 
-## src/app/components/ui/utils.ts
-
+## FILE: src\app\components\ui\utils.ts
 ```ts
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
+
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
+
 ```
 
-## src/app/contexts/AuthContext.tsx
-
+## FILE: src\app\contexts\AuthContext.tsx
 ```tsx
 // Firebase Authentication Context
 import React, { createContext, useContext, useState, useEffect } from 'react';
@@ -7543,11 +8276,14 @@ import {
 } from '../../lib/firebase/auth.service';
 import { getMember } from '../../lib/firebase/firestore.service';
 import type { UserRole } from '../../lib/firebase/types';
+
 // μATOM-0404: Gate 성공 시 clubId 컨텍스트 고정
 // 기본값은 ClubContext에서 전달받도록 변경 예정
 const DEFAULT_CLUB_ID = 'default-club';
+
 // User roles and constraints re-export
 export type { UserRole };
+
 export interface User {
   id: string; // using uid from firebase auth
   realName: string;
@@ -7560,42 +8296,52 @@ export interface User {
   status: 'pending' | 'active' | 'rejected' | 'withdrawn';
   createdAt: Date;
 }
+
 interface AuthContextType {
   user: User | null;
   loading: boolean;
   memberStatus: 'checking' | 'active' | 'denied' | null; // μATOM-0401~0402: 멤버 상태 체크
   currentClubId: string; // μATOM-0404: Gate 성공 시 clubId 컨텍스트 고정
+
   // New Auth Methods
   loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
   createMsgAccount: (firebaseUser: FirebaseUser, realName: string, nickname?: string, phone?: string) => Promise<void>;
+
   // Utils
   updateUser: (updates: Partial<User>) => void;
   isAdmin: () => boolean;
   isTreasury: () => boolean;
 }
+
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
 interface AuthProviderProps {
   children: React.ReactNode;
   clubId?: string; // μATOM-0404: Gate 성공 시 clubId 컨텍스트 고정
 }
+
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children, clubId = DEFAULT_CLUB_ID }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [memberStatus, setMemberStatus] = useState<'checking' | 'active' | 'denied' | null>(null);
   const [currentClubId] = useState<string>(clubId); // μATOM-0404: clubId 컨텍스트 고정
+
   // μATOM-0401: 로그인 후 members/{uid} 존재 체크
   // μATOM-0402: status==active 검증
   const checkMemberAccess = async (uid: string, clubId: string): Promise<'active' | 'denied'> => {
     try {
       const memberData = await getMember(clubId, uid);
+
       if (!memberData) {
         // 멤버 문서가 없음
         return 'denied';
       }
+
       if (memberData.status === 'active') {
         return 'active';
       }
+
       // status가 'active'가 아님 (pending, rejected, withdrawn 등)
       return 'denied';
     } catch (error) {
@@ -7603,6 +8349,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, clubId = D
       return 'denied';
     }
   };
+
   useEffect(() => {
     const unsubscribe = onAuthStateChange(async (firebaseUser: FirebaseUser | null) => {
       if (firebaseUser) {
@@ -7621,6 +8368,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, clubId = D
             createdAt: userData.createdAt,
           };
           setUser(userObj);
+
           // μATOM-0401: 멤버 상태 체크 (members/{uid} 존재 확인)
           // μATOM-0402: status==active 검증
           setMemberStatus('checking');
@@ -7637,9 +8385,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, clubId = D
       }
       setLoading(false);
     });
+
     return () => unsubscribe();
   }, []);
+
   // --- New Methods ---
+
   const handleLoginWithGoogle = async () => {
     setLoading(true);
     try {
@@ -7652,6 +8403,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, clubId = D
       setLoading(false);
     }
   };
+
   // Finalize account creation (link auth user with firestore user doc)
   const createMsgAccount = async (
     firebaseUser: FirebaseUser,
@@ -7687,7 +8439,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, clubId = D
       setLoading(false);
     }
   };
+
   // --- Legacy Methods ---
+
   // μATOM-0405: 로그아웃 시 상태 초기화
   const logout = async () => {
     try {
@@ -7700,6 +8454,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, clubId = D
       console.error('Logout error:', error);
     }
   };
+
   const updateUser = async (updates: Partial<User>) => {
     if (user) {
       try {
@@ -7711,12 +8466,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, clubId = D
       }
     }
   };
+
   const isAdmin = () => {
     return user ? checkIsAdmin(user.role) : false;
   };
+
   const isTreasury = () => {
     return user ? checkIsTreasury(user.role) : false;
   };
+
   return (
     <AuthContext.Provider value={{
       user,
@@ -7734,6 +8492,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, clubId = D
     </AuthContext.Provider>
   );
 };
+
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (context === undefined) {
@@ -7743,25 +8502,29 @@ export const useAuth = () => {
 };
 ```
 
-## src/app/contexts/ClubContext.tsx
-
+## FILE: src\app\contexts\ClubContext.tsx
 ```tsx
 import React, { createContext, useContext, useState } from 'react';
+
 interface ClubContextType {
   currentClubId: string;
   setCurrentClubId: (id: string) => void;
 }
+
 const ClubContext = createContext<ClubContextType | undefined>(undefined);
+
 export const ClubProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // Default to a hardcoded club ID for the prototype/v1.0
   // In a real multi-club app, this would be determined by URL or user selection
   const [currentClubId, setCurrentClubId] = useState<string>('default-club');
+
   return (
     <ClubContext.Provider value={{ currentClubId, setCurrentClubId }}>
       {children}
     </ClubContext.Provider>
   );
 };
+
 export const useClub = () => {
   const context = useContext(ClubContext);
   if (context === undefined) {
@@ -7769,10 +8532,10 @@ export const useClub = () => {
   }
   return context;
 };
+
 ```
 
-## src/app/contexts/DataContext.tsx
-
+## FILE: src\app\contexts\DataContext.tsx
 ```tsx
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useAuth } from './AuthContext';
@@ -7795,10 +8558,13 @@ import {
 } from '../../lib/firebase/firestore.service';
 import { PostDoc, CommentDoc, AttendanceDoc, AttendanceStatus, PostType } from '../../lib/firebase/types';
 import type { UserRole } from '../../lib/firebase/types';
+
 // ATOM-08: Access Gate - default club ID (나중에 ClubContext와 통합 가능)
 // const DEFAULT_CLUB_ID = 'default-club';
+
 // Re-export types
 export type { PostType, AttendanceStatus, UserRole };
+
 export interface Post {
   id: string;
   type: PostType;
@@ -7813,6 +8579,7 @@ export interface Post {
   updatedAt: Date;
   pinned?: boolean;
   commentCount?: number;
+
   // Event specific
   eventType?: 'PRACTICE' | 'GAME';
   startAt?: Date;
@@ -7825,10 +8592,12 @@ export interface Post {
     absent: number;
     maybe: number;
   };
+
   pushStatus?: 'SENT' | 'FAILED' | 'PENDING';
   pushError?: string;
   pushSentAt?: Date;
 }
+
 export interface Comment {
   id: string;
   postId: string;
@@ -7841,12 +8610,14 @@ export interface Comment {
   createdAt: Date;
   updatedAt: Date;
 }
+
 export interface Attendance {
   postId: string;
   userId: string;
   status: AttendanceStatus;
   updatedAt: Date;
 }
+
 export interface AttendanceRecord {
   id: string;
   postId: string;
@@ -7855,6 +8626,7 @@ export interface AttendanceRecord {
   status: AttendanceStatus;
   updatedAt: Date;
 }
+
 export interface Member {
   id: string;
   realName: string;
@@ -7866,6 +8638,7 @@ export interface Member {
   status: 'pending' | 'active' | 'rejected' | 'withdrawn';
   createdAt: Date;
 }
+
 export interface Notification {
   id: string;
   type: string;
@@ -7875,6 +8648,7 @@ export interface Notification {
   read: boolean;
   createdAt: Date;
 }
+
 interface DataContextType {
   posts: Post[];
   comments: Record<string, Comment[]>;
@@ -7899,7 +8673,9 @@ interface DataContextType {
   markAllNotificationsAsRead: () => Promise<void>;
   refreshMembers: () => Promise<void>; // Added
 }
+
 const DataContext = createContext<DataContextType | undefined>(undefined);
+
 export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user } = useAuth();
   const { currentClubId } = useClub();
@@ -7910,11 +8686,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [members, setMembers] = useState<Member[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
+
   // 게시글 로드
   const refreshPosts = async () => {
     try {
       setLoading(true);
       const { posts: postsData } = await getPosts(currentClubId);
+
       // Firebase PostDoc을 Post로 변환
       const transformedPosts: Post[] = postsData.map((postDoc) => {
         const post: Post = {
@@ -7932,6 +8710,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           pinned: postDoc.pinned,
           commentCount: 0, // 나중에 계산
         };
+
         // Event specific
         if (postDoc.eventType) {
           post.eventType = postDoc.eventType;
@@ -7941,15 +8720,19 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
           post.voteCloseAt = postDoc.voteCloseAt || undefined;
           post.voteClosed = postDoc.voteClosed;
         }
+
         // Push specific (notice only)
         if (postDoc.pushStatus) {
           post.pushStatus = postDoc.pushStatus;
           post.pushError = postDoc.pushError;
           post.pushSentAt = postDoc.pushSentAt;
         }
+
         return post;
       });
+
       setPosts(transformedPosts);
+
       // 각 게시글의 출석 현황 로드 (이벤트 타입만)
       for (const post of transformedPosts) {
         if (post.type === 'event') {
@@ -7962,6 +8745,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setLoading(false);
     }
   };
+
   // 멤버 로드 (exposed as refreshMembers)
   const refreshMembers = async () => {
     try {
@@ -7971,11 +8755,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.error('Error loading members:', error);
     }
   };
+
   // Keep loadMembers for internal useEffect usage if needed, or just use refreshMembers
   const loadMembers = refreshMembers;
+
   // 알림 로드
   const loadNotifications = async () => {
     if (!user) return;
+
     try {
       const notificationsData = await getUserNotifications(user.id);
       const transformedNotifications: Notification[] = notificationsData.map((notificationDoc) => ({
@@ -7987,11 +8774,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         read: notificationDoc.read,
         createdAt: notificationDoc.createdAt,
       }));
+
       setNotifications(transformedNotifications);
     } catch (error) {
       console.error('Error loading notifications:', error);
     }
   };
+
   // 초기 로드
   useEffect(() => {
     if (user) {
@@ -8009,9 +8798,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setNotifications([]);
     }
   }, [user]);
+
   // 게시글 추가
   const addPost = async (postData: Omit<Post, 'id' | 'createdAt' | 'updatedAt' | 'author'>) => {
     if (!user) return;
+
     try {
       const newPostData: Omit<PostDoc, 'id' | 'createdAt' | 'updatedAt'> = {
         type: postData.type,
@@ -8022,6 +8813,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         authorPhotoURL: user.photoURL || undefined,
         pinned: postData.pinned,
       };
+
       // Event specific
       if (postData.eventType) {
         newPostData.eventType = postData.eventType;
@@ -8031,6 +8823,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         newPostData.voteCloseAt = postData.voteCloseAt ?? undefined;
         newPostData.voteClosed = false;
       }
+
+
       await createPostInDb(currentClubId, newPostData);
       await refreshPosts();
     } catch (error) {
@@ -8038,6 +8832,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       throw error;
     }
   };
+
   // 게시글 업데이트
   const updatePost = async (id: string, updates: Partial<Post>) => {
     try {
@@ -8048,6 +8843,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       throw error;
     }
   };
+
   // 게시글 삭제
   const deletePost = async (id: string) => {
     try {
@@ -8058,6 +8854,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       throw error;
     }
   };
+
   // 댓글 로드
   const loadComments = async (postId: string) => {
     try {
@@ -8074,10 +8871,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         createdAt: commentDoc.createdAt,
         updatedAt: commentDoc.updatedAt,
       }));
+
       setComments((prev) => ({
         ...prev,
         [postId]: transformedComments,
       }));
+
       // 댓글 수 업데이트
       setPosts((prev) =>
         prev.map((post) =>
@@ -8088,9 +8887,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.error('Error loading comments:', error);
     }
   };
+
   // 댓글 추가
   const addComment = async (postId: string, content: string) => {
     if (!user) return;
+
     try {
       // Note: addCommentInDb(clubId, postId, data)
       const commentDataForDb: Omit<CommentDoc, 'id' | 'createdAt' | 'updatedAt' | 'postId'> = {
@@ -8099,6 +8900,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         authorName: user.realName,
         authorPhotoURL: user.photoURL ?? undefined,
       };
+
       await addCommentInDb(currentClubId, postId, commentDataForDb);
       await loadComments(postId);
     } catch (error) {
@@ -8106,9 +8908,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       throw error;
     }
   };
+
   // 댓글 업데이트
   const updateComment = async (postId: string, commentId: string, content: string) => {
     if (!user) return;
+
     try {
       await updateCommentInDb(currentClubId, postId, commentId, { content });
       await loadComments(postId);
@@ -8117,6 +8921,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       throw error;
     }
   };
+
   // 댓글 삭제
   const deleteComment = async (postId: string, commentId: string) => {
     try {
@@ -8127,6 +8932,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       throw error;
     }
   };
+
   // 출석 현황 로드
   const loadAttendances = async (postId: string) => {
     try {
@@ -8137,10 +8943,12 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         status: attendanceDoc.status,
         updatedAt: attendanceDoc.updatedAt,
       }));
+
       setAttendances((prev) => ({
         ...prev,
         [postId]: transformedAttendances,
       }));
+
       // 출석 기록 업데이트 (플랫 배열)
       const transformedRecords: AttendanceRecord[] = attendancesData.map((attendanceDoc) => ({
         id: attendanceDoc.id,
@@ -8150,17 +8958,20 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
         status: attendanceDoc.status,
         updatedAt: attendanceDoc.updatedAt,
       }));
+
       setAttendanceRecords((prev) => {
         // 기존 기록에서 같은 postId의 기록을 제거하고 새로운 기록을 추가
         const filtered = prev.filter((record) => record.postId !== postId);
         return [...filtered, ...transformedRecords];
       });
+
       // 출석 요약 계산
       const summary = {
         attending: transformedAttendances.filter((a) => a.status === 'attending').length,
         absent: transformedAttendances.filter((a) => a.status === 'absent').length,
         maybe: transformedAttendances.filter((a) => a.status === 'maybe').length,
       };
+
       // 게시글 업데이트
       setPosts((prev) =>
         prev.map((post) =>
@@ -8171,15 +8982,18 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.error('Error loading attendances:', error);
     }
   };
+
   // 출석 업데이트
   const updateAttendance = async (postId: string, userId: string, status: AttendanceStatus) => {
     if (!user) return;
+
     try {
       // Note: updateAttendanceInDb(clubId, postId, userId, data)
       const attendanceDataForDb: Omit<AttendanceDoc, 'id' | 'updatedAt' | 'postId' | 'userId'> = {
         userName: user.realName,
         status,
       };
+
       await updateAttendanceInDb(currentClubId, postId, userId, attendanceDataForDb);
       await loadAttendances(postId);
     } catch (error) {
@@ -8187,15 +9001,18 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       throw error;
     }
   };
+
   // 내 출석 상태 가져오기
   const getMyAttendance = (postId: string, userId: string): AttendanceStatus => {
     const postAttendances = attendances[postId] || [];
     const myAttendance = postAttendances.find((a) => a.userId === userId);
     return myAttendance?.status || 'none';
   };
+
   // 알림 읽음 표시
   const markNotificationAsRead = async (notificationId: string) => {
     if (!user) return;
+
     try {
       await markNotificationAsReadInDb(notificationId);
       await loadNotifications();
@@ -8204,9 +9021,11 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       throw error;
     }
   };
+
   // 모든 알림 읽음 표시
   const markAllNotificationsAsRead = async () => {
     if (!user) return;
+
     try {
       await markAllNotificationsAsReadInDb(user.id);
       await loadNotifications();
@@ -8215,6 +9034,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       throw error;
     }
   };
+
   return (
     <DataContext.Provider
       value={{
@@ -8246,6 +9066,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     </DataContext.Provider>
   );
 };
+
 export const useData = () => {
   const context = useContext(DataContext);
   if (context === undefined) {
@@ -8255,28 +9076,34 @@ export const useData = () => {
 };
 ```
 
-## src/app/contexts/ThemeContext.tsx
-
+## FILE: src\app\contexts\ThemeContext.tsx
 ```tsx
 import React, { createContext, useContext, useState, useEffect } from 'react';
+
 type Theme = 'light' | 'dark';
+
 interface ThemeContextType {
   theme: Theme;
   toggleTheme: () => void;
   setTheme: (theme: Theme) => void;
 }
+
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
+
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [theme, setThemeState] = useState<Theme>(() => {
     // Check localStorage first
     const savedTheme = localStorage.getItem('theme') as Theme;
     if (savedTheme) return savedTheme;
+
     // Check system preference
     if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
       return 'dark';
     }
+
     return 'light';
   });
+
   useEffect(() => {
     // Update document class and localStorage
     const root = document.documentElement;
@@ -8287,18 +9114,22 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
     localStorage.setItem('theme', theme);
   }, [theme]);
+
   const toggleTheme = () => {
     setThemeState((prev) => (prev === 'light' ? 'dark' : 'light'));
   };
+
   const setTheme = (newTheme: Theme) => {
     setThemeState(newTheme);
   };
+
   return (
     <ThemeContext.Provider value={{ theme, toggleTheme, setTheme }}>
       {children}
     </ThemeContext.Provider>
   );
 };
+
 export const useTheme = () => {
   const context = useContext(ThemeContext);
   if (!context) {
@@ -8306,10 +9137,10 @@ export const useTheme = () => {
   }
   return context;
 };
+
 ```
 
-## src/app/hooks/useFcm.ts
-
+## FILE: src\app\hooks\useFcm.ts
 ```ts
 import { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
@@ -8321,9 +9152,10 @@ import {
   onForegroundMessage,
 } from '../../lib/firebase/messaging.service';
 import { toast } from 'sonner';
+
 /**
  * FCM 훅 (ATOM-13)
- *
+ * 
  * 기능:
  * - 알림 권한 확인/요청
  * - FCM 토큰 발급 및 등록
@@ -8336,26 +9168,32 @@ export function useFcm() {
   const [permission, setPermission] = useState<NotificationPermission | 'unsupported'>('default');
   const [tokenRegistered, setTokenRegistered] = useState(false);
   const [tokenError, setTokenError] = useState<string | null>(null);
+
   // 권한 상태 확인
   useEffect(() => {
     if (typeof window === 'undefined' || !('Notification' in window)) {
       setPermission('unsupported');
       return;
     }
+
     getNotificationPermission().then(setPermission);
   }, []);
+
   // 토큰 등록 (내부 함수)
   const registerToken = useCallback(async (): Promise<boolean> => {
     if (!user || !currentClubId) {
       return false;
     }
+
     if (permission !== 'granted') {
       console.warn('알림 권한이 허용되지 않아 토큰을 등록할 수 없습니다');
       return false;
     }
+
     try {
       setTokenError(null);
       const token = await registerFcmToken(currentClubId);
+
       if (token) {
         setTokenRegistered(true);
         console.log('FCM 토큰 등록 완료');
@@ -8373,15 +9211,18 @@ export function useFcm() {
       return false;
     }
   }, [user, currentClubId, permission]);
+
   // 권한 요청
   const requestPermission = useCallback(async (): Promise<boolean> => {
     if (typeof window === 'undefined' || !('Notification' in window)) {
       toast.error('이 브라우저는 알림을 지원하지 않습니다');
       return false;
     }
+
     try {
       const newPermission = await requestNotificationPermission();
       setPermission(newPermission);
+
       if (newPermission === 'granted') {
         toast.success('알림 권한이 허용되었습니다');
         // 권한 허용 후 자동으로 토큰 등록 시도
@@ -8391,6 +9232,7 @@ export function useFcm() {
         toast.error('알림 권한이 거부되었습니다. 브라우저 설정에서 허용해주세요');
         return false;
       }
+
       return false;
     } catch (error: any) {
       console.error('알림 권한 요청 실패:', error);
@@ -8398,21 +9240,25 @@ export function useFcm() {
       return false;
     }
   }, [registerToken]);
+
   // 재시도
   const retryRegister = useCallback(async (): Promise<boolean> => {
     return await registerToken();
   }, [registerToken]);
+
   // 사용자가 로그인하고 권한이 허용되면 자동으로 토큰 등록
   useEffect(() => {
     if (user && permission === 'granted' && !tokenRegistered && !tokenError) {
       registerToken();
     }
   }, [user, permission, tokenRegistered, tokenError, registerToken]);
+
   // Foreground 메시지 수신 핸들러 등록
   useEffect(() => {
     if (permission !== 'granted') {
       return;
     }
+
     const unsubscribe = onForegroundMessage((payload) => {
       // Foreground에서 메시지 수신 시 토스트 표시
       if (payload.title || payload.body) {
@@ -8421,16 +9267,19 @@ export function useFcm() {
           duration: 5000,
         });
       }
+
       // 데이터가 있으면 추가 처리 (예: 게시글로 이동 등)
       if (payload.data?.postId) {
         // 필요시 라우팅 처리
         console.log('알림 데이터:', payload.data);
       }
     });
+
     return () => {
       unsubscribe();
     };
   }, [permission]);
+
   return {
     permission,
     tokenRegistered,
@@ -8439,18 +9288,20 @@ export function useFcm() {
     retryRegister,
   };
 }
+
 ```
 
-## src/app/hooks/usePagination.ts
-
+## FILE: src\app\hooks\usePagination.ts
 ```ts
 import { useState, useCallback } from 'react';
 import { QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';
+
 export interface PaginationState {
   lastDoc: QueryDocumentSnapshot<DocumentData> | null;
   hasMore: boolean;
   loading: boolean;
 }
+
 export interface UsePaginationReturn {
   pagination: PaginationState;
   setLastDoc: (doc: QueryDocumentSnapshot<DocumentData> | null) => void;
@@ -8458,21 +9309,26 @@ export interface UsePaginationReturn {
   setLoading: (loading: boolean) => void;
   reset: () => void;
 }
+
 export const usePagination = (): UsePaginationReturn => {
   const [pagination, setPagination] = useState<PaginationState>({
     lastDoc: null,
     hasMore: true,
     loading: false,
   });
+
   const setLastDoc = useCallback((doc: QueryDocumentSnapshot<DocumentData> | null) => {
     setPagination((prev) => ({ ...prev, lastDoc: doc }));
   }, []);
+
   const setHasMore = useCallback((hasMore: boolean) => {
     setPagination((prev) => ({ ...prev, hasMore }));
   }, []);
+
   const setLoading = useCallback((loading: boolean) => {
     setPagination((prev) => ({ ...prev, loading }));
   }, []);
+
   const reset = useCallback(() => {
     setPagination({
       lastDoc: null,
@@ -8480,6 +9336,7 @@ export const usePagination = (): UsePaginationReturn => {
       loading: false,
     });
   }, []);
+
   return {
     pagination,
     setLastDoc,
@@ -8488,39 +9345,46 @@ export const usePagination = (): UsePaginationReturn => {
     reset,
   };
 };
+
+
 ```
 
-## src/app/pages/AccessDeniedPage.tsx
-
+## FILE: src\app\pages\AccessDeniedPage.tsx
 ```tsx
 import React from 'react';
 import { AlertCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+
 /**
  * Access Denied Page
- *
+ * 
  * ATOM-08: 구글 로그인은 되었지만 멤버로 등록되지 않았거나
  * status가 'active'가 아닌 사용자를 차단하는 페이지
- *
+ * 
  * 가입/승인 요청 생성 기능은 포함하지 않음 (운영으로 처리)
  */
 export const AccessDeniedPage: React.FC = () => {
   const { user, logout } = useAuth();
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center p-6">
       <div className="max-w-md w-full bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-8 text-center">
         <div className="w-20 h-20 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-6">
           <AlertCircle className="w-10 h-10 text-red-600 dark:text-red-400" />
         </div>
+
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
           접근 권한이 없습니다
         </h1>
+
         <p className="text-gray-600 dark:text-gray-300 mb-2">
           현재 계정으로는 앱에 접근할 수 없습니다.
         </p>
+
         <p className="text-gray-600 dark:text-gray-300 mb-6">
           관리자에게 문의해주세요.
         </p>
+
         {user && (
           <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4 mb-6 text-left">
             <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">
@@ -8536,6 +9400,7 @@ export const AccessDeniedPage: React.FC = () => {
             )}
           </div>
         )}
+
         <button
           onClick={logout}
           className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-lg transition-colors"
@@ -8546,10 +9411,11 @@ export const AccessDeniedPage: React.FC = () => {
     </div>
   );
 };
+
+
 ```
 
-## src/app/pages/AdminPage.tsx
-
+## FILE: src\app\pages\AdminPage.tsx
 ```tsx
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
@@ -8583,10 +9449,15 @@ import { toast } from 'sonner';
 import { formatDistanceToNow } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import type { UserRole } from '../../lib/firebase/types';
+
 type TabType = 'members' | 'stats' | 'notices';
+
+
+
 interface AdminPageProps {
   initialTab?: TabType;
 }
+
 const roleLabels: Record<UserRole, string> = {
   PRESIDENT: '회장',
   DIRECTOR: '감독',
@@ -8594,6 +9465,7 @@ const roleLabels: Record<UserRole, string> = {
   ADMIN: '관리자',
   MEMBER: '일반',
 };
+
 const roleColors: Record<UserRole, string> = {
   PRESIDENT: 'from-yellow-500 to-orange-500',
   DIRECTOR: 'from-blue-500 to-cyan-500',
@@ -8601,6 +9473,7 @@ const roleColors: Record<UserRole, string> = {
   ADMIN: 'from-purple-500 to-pink-500',
   MEMBER: 'from-gray-500 to-gray-600',
 };
+
 export const AdminPage: React.FC<AdminPageProps> = ({ initialTab = 'members' }) => {
   const { user, isAdmin } = useAuth();
   const { members, refreshMembers } = useData(); // Use members from context
@@ -8611,6 +9484,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ initialTab = 'members' }) 
   const [searchQuery] = useState('');
   const [loading] = useState(false);
   const [editingMember, setEditingMember] = useState<string | null>(null);
+
   const filteredMembers = members.filter((member) => {
     const searchLower = searchQuery.toLowerCase();
     return (
@@ -8618,6 +9492,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ initialTab = 'members' }) 
       member.nickname?.toLowerCase().includes(searchLower)
     );
   });
+
   // 관리자 권한 확인 및 데이터 로드
   // 관리자 권한 확인
   useEffect(() => {
@@ -8626,6 +9501,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ initialTab = 'members' }) 
       return;
     }
   }, []);
+
   // Self repair logic moved here
   useEffect(() => {
     if (currentClubId && user && members.length > 0) {
@@ -8638,8 +9514,10 @@ export const AdminPage: React.FC<AdminPageProps> = ({ initialTab = 'members' }) 
       }
     }
   }, [currentClubId, members, user]);
+
   // Replace loadData with simple effect or remove.
   // We should keep self-repair logic but adapt it.
+
   useEffect(() => {
     if (currentClubId && user && members.length > 0) {
       // Self-Repair logic
@@ -8668,7 +9546,9 @@ export const AdminPage: React.FC<AdminPageProps> = ({ initialTab = 'members' }) 
       }
     }
   }, [currentClubId, members.length, user]);
+
   // Filtering is now handled in the MembersTab component or via the filteredMembers defined above.
+
   const handleUpdateMember = async (
     memberId: string,
     updates: Partial<Member>
@@ -8683,12 +9563,14 @@ export const AdminPage: React.FC<AdminPageProps> = ({ initialTab = 'members' }) 
       toast.error('업데이트 실패');
     }
   };
+
   // 통계 계산
   const stats = {
     totalMembers: members.length,
     activeMembers: members.filter((m) => m.status === 'active').length,
     rejectedMembers: members.filter((m) => m.status === 'rejected' || m.status === 'withdrawn').length,
   };
+
   if (!isAdmin()) {
     return (
       <div className="min-h-screen flex items-center justify-center p-4">
@@ -8700,6 +9582,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ initialTab = 'members' }) 
       </div>
     );
   }
+
   return (
     <div className="pb-20 pt-16">
       {/* Header */}
@@ -8710,6 +9593,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ initialTab = 'members' }) 
         </div>
         <p className="text-purple-100">멤버 관리</p>
       </div>
+
       {/* Tabs */}
       <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
         <div className="flex">
@@ -8745,6 +9629,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ initialTab = 'members' }) 
           </button>
         </div>
       </div>
+
       <div className="p-4">
         {loading ? (
           <div className="flex items-center justify-center py-20">
@@ -8761,10 +9646,12 @@ export const AdminPage: React.FC<AdminPageProps> = ({ initialTab = 'members' }) 
                 onUpdateMember={handleUpdateMember}
               />
             )}
+
             {/* Notices Tab */}
             {activeTab === 'notices' && (
               <NoticesTab currentClubId={currentClubId} user={user} />
             )}
+
             {/* Stats Tab */}
             {activeTab === 'stats' && <StatsTab stats={stats} />}
           </>
@@ -8773,6 +9660,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ initialTab = 'members' }) 
     </div>
   );
 };
+
 // Members Tab Component
 function MembersTab({ members, editingMember, setEditingMember, onUpdateMember }: {
   members: Member[];
@@ -8780,7 +9668,9 @@ function MembersTab({ members, editingMember, setEditingMember, onUpdateMember }
   setEditingMember: (id: string | null) => void;
   onUpdateMember: (id: string, updates: Partial<Member>) => void;
 }) {
+
   const activeMembers = members.filter(m => m.status === 'active');
+
   return (
     <div className="space-y-6">
       {/* Active Members List */}
@@ -8814,6 +9704,7 @@ function MembersTab({ members, editingMember, setEditingMember, onUpdateMember }
                     <X className="w-6 h-6" />
                   </button>
                 </div>
+
                 <div className="space-y-4">
                   <div>
                     <Label className="text-gray-700 dark:text-gray-300">역할</Label>
@@ -8833,6 +9724,7 @@ function MembersTab({ members, editingMember, setEditingMember, onUpdateMember }
                       <option value="PRESIDENT" className="bg-white dark:bg-gray-800 text-gray-900 dark:text-white">회장</option>
                     </select>
                   </div>
+
                   <div>
                     <Label className="text-gray-700 dark:text-gray-300">포지션</Label>
                     <Input
@@ -8844,6 +9736,7 @@ function MembersTab({ members, editingMember, setEditingMember, onUpdateMember }
                       className="mt-1 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white border-gray-200 dark:border-gray-700"
                     />
                   </div>
+
                   <div>
                     <Label className="text-gray-700 dark:text-gray-300">등번호</Label>
                     <Input
@@ -8855,6 +9748,7 @@ function MembersTab({ members, editingMember, setEditingMember, onUpdateMember }
                       className="mt-1 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white border-gray-200 dark:border-gray-700"
                     />
                   </div>
+
                   <div>
                     <Label className="text-gray-700 dark:text-gray-300">상태</Label>
                     <select
@@ -8920,6 +9814,7 @@ function MembersTab({ members, editingMember, setEditingMember, onUpdateMember }
     </div>
   );
 }
+
 // Stats Tab Component
 function StatsTab({ stats }: { stats: any }) {
   const statCards = [
@@ -8942,6 +9837,7 @@ function StatsTab({ stats }: { stats: any }) {
       color: 'from-purple-500 to-pink-500',
     },
   ];
+
   return (
     <div className="grid grid-cols-2 gap-4">
       {statCards.map((card, index) => (
@@ -8962,6 +9858,7 @@ function StatsTab({ stats }: { stats: any }) {
     </div>
   );
 }
+
 // NoticesTab Component
 function NoticesTab({
   currentClubId,
@@ -8972,14 +9869,17 @@ function NoticesTab({
   const [content, setContent] = useState('');
   const [sendPush, setSendPush] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
   // Filter only NOTICE type posts
   const notices = posts.filter(p => p.type === 'notice').sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+
   const handleCreateNotice = async () => {
     if (!title.trim() || !content.trim()) {
       toast.error('제목과 내용을 입력해주세요');
       return;
     }
     if (!currentClubId || !user) return;
+
     setIsSubmitting(true);
     try {
       // Use createPost service
@@ -8991,6 +9891,7 @@ function NoticesTab({
         type: 'notice',
         title: title,
       });
+
       if (sendPush) {
         toast.success('공지사항이 등록되었습니다 (푸시 발송)');
       } else {
@@ -9012,6 +9913,7 @@ function NoticesTab({
       setIsSubmitting(false);
     }
   };
+
   return (
     <div className="space-y-6">
       <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800">
@@ -9056,6 +9958,7 @@ function NoticesTab({
           </div>
         </div>
       </div>
+
       <div className="space-y-4">
         {notices.map((notice) => (
           <div key={notice.id} className="bg-white dark:bg-gray-900 p-5 rounded-xl shadow-sm border border-gray-100 dark:border-gray-800">
@@ -9086,9 +9989,8 @@ function NoticesTab({
 }
 ```
 
-## src/app/pages/AdminPage.tsx_append
-
-```
+## FILE: src\app\pages\AdminPage.tsx_append
+```tsx_append
 
 // Notices Tab Component
 const NoticesTab: React.FC<{ currentClubId: string; user: any }> = ({
@@ -9099,14 +10001,17 @@ const NoticesTab: React.FC<{ currentClubId: string; user: any }> = ({
   const [content, setContent] = useState('');
   const [sendPush, setSendPush] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
   const handleSubmit = async () => {
     if (!title.trim() || !content.trim()) {
       toast.error('제목과 내용을 입력하세요');
       return;
     }
+
     if (!confirm('공지사항을 등록하시겠습니까?' + (sendPush ? '\n(멤버들에게 푸시 알림이 발송됩니다)' : ''))) {
       return;
     }
+
     setIsSubmitting(true);
     try {
       // Create Post with type 'notice'
@@ -9120,7 +10025,9 @@ const NoticesTab: React.FC<{ currentClubId: string; user: any }> = ({
         // Push Notification Meta
         pushStatus: sendPush ? 'PENDING' : undefined,
       };
+
       await createPost(currentClubId, postData);
+      
       toast.success('공지사항이 등록되었습니다');
       setTitle('');
       setContent('');
@@ -9132,6 +10039,7 @@ const NoticesTab: React.FC<{ currentClubId: string; user: any }> = ({
       setIsSubmitting(false);
     }
   };
+
   return (
     <div className="space-y-6">
       <motion.div
@@ -9143,6 +10051,7 @@ const NoticesTab: React.FC<{ currentClubId: string; user: any }> = ({
           <Bell className="w-5 h-5 text-purple-600" />
           <h2 className="text-lg font-bold">새 공지 작성</h2>
         </div>
+
         <div className="space-y-4">
           <div>
             <Label htmlFor="notice-title">제목</Label>
@@ -9154,6 +10063,7 @@ const NoticesTab: React.FC<{ currentClubId: string; user: any }> = ({
               className="mt-1"
             />
           </div>
+
           <div>
             <Label htmlFor="notice-content">내용</Label>
             <Textarea
@@ -9164,6 +10074,7 @@ const NoticesTab: React.FC<{ currentClubId: string; user: any }> = ({
               className="mt-1 min-h-[150px]"
             />
           </div>
+
           <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-xl">
             <div className="flex items-center gap-3">
               <div className={`p-2 rounded-full ${sendPush ? 'bg-purple-100 text-purple-600' : 'bg-gray-200 text-gray-500'}`}>
@@ -9179,8 +10090,9 @@ const NoticesTab: React.FC<{ currentClubId: string; user: any }> = ({
               onCheckedChange={setSendPush}
             />
           </div>
-          <Button
-            onClick={handleSubmit}
+
+          <Button 
+            onClick={handleSubmit} 
             className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white"
             disabled={isSubmitting}
           >
@@ -9198,6 +10110,7 @@ const NoticesTab: React.FC<{ currentClubId: string; user: any }> = ({
           </Button>
         </div>
       </motion.div>
+
       <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-xl flex gap-3 text-sm text-blue-700 dark:text-blue-300">
         <Activity className="w-5 h-5 flex-shrink-0" />
         <p>
@@ -9207,10 +10120,10 @@ const NoticesTab: React.FC<{ currentClubId: string; user: any }> = ({
     </div>
   );
 };
+
 ```
 
-## src/app/pages/BoardsPage.tsx
-
+## FILE: src\app\pages\BoardsPage.tsx
 ```tsx
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
@@ -9226,8 +10139,11 @@ import { PostDetailModal } from '../components/PostDetailModal';
 import { EmptyState } from '../components/EmptyState';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
+
 import { toast } from 'sonner';
+
 import { useAuth } from '../contexts/AuthContext'; // Import Added
+
 export const BoardsPage: React.FC = () => {
   const { user, isAdmin } = useAuth();
   const { posts, deletePost } = useData();
@@ -9236,12 +10152,14 @@ export const BoardsPage: React.FC = () => {
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [editingPost, setEditingPost] = useState<Post | null>(null);
   const [activeTab, setActiveTab] = useState<'notice' | 'free' | 'event'>('notice');
+
   // Filter posts by type
   const notices = posts.filter(p => p.type === 'notice').sort((a, b) => {
     if (a.pinned && !b.pinned) return -1;
     if (!a.pinned && b.pinned) return 1;
     return b.createdAt.getTime() - a.createdAt.getTime();
   });
+
   const freePosts = posts.filter(p => p.type === 'free');
   // μATOM-0535: 이벤트 리스트 정렬/표시 고정(startAt)
   const eventPosts = posts
@@ -9252,6 +10170,7 @@ export const BoardsPage: React.FC = () => {
       const bTime = b.startAt?.getTime() || 0;
       return aTime - bTime;
     });
+
   const handleCreatePost = (type: PostType) => {
     // If Admin and on Notice tab, default to Notice type
     if (activeTab === 'notice' && isAdmin()) {
@@ -9261,6 +10180,7 @@ export const BoardsPage: React.FC = () => {
     }
     setCreateModalOpen(true);
   };
+
   return (
     <div className="pb-20 pt-16">
       <div className="max-w-md mx-auto">
@@ -9279,6 +10199,7 @@ export const BoardsPage: React.FC = () => {
               <span className="text-xs">연습·시합</span>
             </TabsTrigger>
           </TabsList>
+
           <TabsContent value="notice" className="p-4 space-y-3 mt-0">
             <PostList
               posts={notices}
@@ -9286,6 +10207,7 @@ export const BoardsPage: React.FC = () => {
               onPostClick={(post) => setSelectedPost(post)}
             />
           </TabsContent>
+
           <TabsContent value="free" className="p-4 space-y-3 mt-0">
             <PostList
               posts={freePosts}
@@ -9293,6 +10215,7 @@ export const BoardsPage: React.FC = () => {
               onPostClick={(post) => setSelectedPost(post)}
             />
           </TabsContent>
+
           <TabsContent value="event" className="p-4 space-y-3 mt-0">
             <PostList
               posts={eventPosts}
@@ -9301,6 +10224,7 @@ export const BoardsPage: React.FC = () => {
             />
           </TabsContent>
         </Tabs>
+
         {/* FAB - Create Post (Tab-based visibility) */}
         {/* 공지/연습·시합: adminLike만 버튼 노출 */}
         {/* 자유: 멤버면 버튼 노출 */}
@@ -9314,18 +10238,21 @@ export const BoardsPage: React.FC = () => {
             <Plus className="w-6 h-6" />
           </motion.button>
         ) : null}
+
         {/* Pending User Notice */}
         {user?.status === 'pending' && (
           <div className="fixed bottom-24 right-4 bg-gray-800 text-white text-xs px-3 py-2 rounded-full shadow-lg opacity-80 z-40">
             가입 승인 대기중 (글쓰기 제한)
           </div>
         )}
+
         {/* Create Post Modal */}
         <CreatePostModal
           isOpen={createModalOpen}
           onClose={() => setCreateModalOpen(false)}
           defaultType={createPostType}
         />
+
         {/* Edit Post Modal */}
         {editingPost && (
           <EditPostModal
@@ -9334,6 +10261,7 @@ export const BoardsPage: React.FC = () => {
             onClose={() => setEditingPost(null)}
           />
         )}
+
         {/* Post Detail Modal */}
         {selectedPost && (
           <PostDetailModal
@@ -9353,10 +10281,12 @@ export const BoardsPage: React.FC = () => {
             }}
           />
         )}
+
       </div>
     </div>
   );
 };
+
 // Post List Component
 const PostList: React.FC<{ posts: any[]; type: PostType; onPostClick: (post: Post) => void }> = ({ posts, type, onPostClick }) => {
   if (posts.length === 0) {
@@ -9367,6 +10297,7 @@ const PostList: React.FC<{ posts: any[]; type: PostType; onPostClick: (post: Pos
       />
     );
   }
+
   return (
     <>
       {posts.map((post, index) => (
@@ -9375,6 +10306,7 @@ const PostList: React.FC<{ posts: any[]; type: PostType; onPostClick: (post: Pos
     </>
   );
 };
+
 // Post Card Component
 const PostCard: React.FC<{ post: any; index: number; type: PostType; onPostClick: (post: Post) => void }> = ({ post, index, type, onPostClick }) => {
   const getTypeInfo = () => {
@@ -9389,7 +10321,9 @@ const PostCard: React.FC<{ post: any; index: number; type: PostType; onPostClick
         return { icon: MessageSquare, color: 'from-gray-500 to-gray-600', label: '게시글' };
     }
   };
+
   const { icon: Icon, color, label } = getTypeInfo();
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -9403,6 +10337,7 @@ const PostCard: React.FC<{ post: any; index: number; type: PostType; onPostClick
           <div className={`p-2 bg-gradient-to-br ${color} rounded-lg text-white flex-shrink-0`}>
             <Icon className="w-5 h-5" />
           </div>
+
           {/* Content */}
           <div className="flex-1 min-w-0">
             {/* Header */}
@@ -9417,16 +10352,19 @@ const PostCard: React.FC<{ post: any; index: number; type: PostType; onPostClick
                 </Badge>
               )}
             </div>
+
             {/* Title */}
             <h3 className="font-semibold text-gray-900 dark:text-white mb-1 line-clamp-1">
               {post.title}
             </h3>
+
             {/* Content Preview */}
             {post.content && (
               <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2 mb-2">
                 {post.content}
               </p>
             )}
+
             {/* Meta Info */}
             <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
               <span>{post.author.name}</span>
@@ -9442,6 +10380,8 @@ const PostCard: React.FC<{ post: any; index: number; type: PostType; onPostClick
                 </>
               )}
             </div>
+
+
             {/* Push Status (Notice) */}
             {type === 'notice' && post.pushStatus && (
               <div className="mt-2">
@@ -9466,8 +10406,7 @@ const PostCard: React.FC<{ post: any; index: number; type: PostType; onPostClick
 };
 ```
 
-## src/app/pages/HomePage.tsx
-
+## FILE: src\app\pages\HomePage.tsx
 ```tsx
 import React from 'react';
 import { motion } from 'motion/react';
@@ -9478,26 +10417,32 @@ import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { format, differenceInHours } from 'date-fns';
 import { ko } from 'date-fns/locale';
+
 interface HomePageProps {
   onNavigate: (tab: 'boards', postId?: string) => void;
 }
+
 export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
   const { posts } = useData();
+
   // Get upcoming events (next 3)
   const upcomingEvents = posts
     .filter(p => p.type === 'event' && p.startAt && p.startAt > new Date())
     .sort((a, b) => (a.startAt?.getTime() || 0) - (b.startAt?.getTime() || 0))
     .slice(0, 3);
+
   // Get latest notices (2)
   const latestNotices = posts
     .filter(p => p.type === 'notice')
     .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
     .slice(0, 2);
+
   // Get next event with deadline
   const nextEventWithDeadline = upcomingEvents[0];
   const hoursUntilDeadline = nextEventWithDeadline?.voteCloseAt
     ? differenceInHours(nextEventWithDeadline.voteCloseAt, new Date())
     : null;
+
   return (
     <div className="pb-20 pt-16">
       <div className="max-w-md mx-auto p-4 space-y-4">
@@ -9523,6 +10468,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
             <div className="text-xs opacity-80">최근 경기</div>
           </Card>
         </motion.div>
+
         {/* Deadline Alert */}
         {nextEventWithDeadline && hoursUntilDeadline !== null && hoursUntilDeadline > 0 && hoursUntilDeadline < 48 && (
           <motion.div
@@ -9546,6 +10492,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
             </Card>
           </motion.div>
         )}
+
         {/* Upcoming Events */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -9566,6 +10513,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
               전체보기
             </Button>
           </div>
+
           <div className="space-y-3">
             {upcomingEvents.length === 0 ? (
               <Card className="p-6 text-center text-gray-500 dark:text-gray-400">
@@ -9583,6 +10531,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
             )}
           </div>
         </motion.div>
+
         {/* Latest Notices */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -9603,6 +10552,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
               전체보기
             </Button>
           </div>
+
           <div className="space-y-2">
             {latestNotices.length === 0 ? (
               <Card className="p-6 text-center text-gray-500 dark:text-gray-400">
@@ -9620,6 +10570,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
             )}
           </div>
         </motion.div>
+
         {/* Quick Actions */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -9630,6 +10581,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
             <Plus className="w-5 h-5" />
             빠른 작업
           </h2>
+
           <div className="grid grid-cols-3 gap-3">
             <Button
               variant="outline"
@@ -9653,6 +10605,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate }) => {
     </div>
   );
 };
+
 // Event Card Component
 const EventCard: React.FC<{
   event: Post;
@@ -9714,6 +10667,7 @@ const EventCard: React.FC<{
     </motion.div>
   );
 };
+
 // Notice Card Component
 const NoticeCard: React.FC<{
   notice: Post;
@@ -9755,26 +10709,29 @@ const NoticeCard: React.FC<{
 };
 ```
 
-## src/app/pages/InstallPage.tsx
-
+## FILE: src\app\pages\InstallPage.tsx
 ```tsx
 import React, { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
 import { Download, Share, PlusSquare, ArrowUp, AlertCircle } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { isIOS, isAndroid, isInAppBrowser } from '../../lib/utils/userAgent';
+
 export const InstallPage: React.FC = () => {
     const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
     const [isInstalled, setIsInstalled] = useState(false);
     const [os, setOs] = useState<'ios' | 'android' | 'desktop'>('desktop');
     const [showManualGuide, setShowManualGuide] = useState(false);
+
     useEffect(() => {
         // Detect OS
         const isAndroidDevice = isAndroid();
         const isIOSDevice = isIOS();
+
         if (isIOSDevice) setOs('ios');
         else if (isAndroidDevice) setOs('android');
         else setOs('desktop');
+
         // Android KakaoTalk Redirect
         if (isAndroidDevice && /KAKAOTALK/i.test(navigator.userAgent)) {
             // Redirect to Chrome using Intent
@@ -9783,31 +10740,38 @@ export const InstallPage: React.FC = () => {
             window.location.href = `intent://${urlWithoutProtocol}#Intent;scheme=https;package=com.android.chrome;end`;
             return;
         }
+
         // Check if already installed (standalone mode)
         if (window.matchMedia('(display-mode: standalone)').matches) {
             setIsInstalled(true);
         }
+
         // Capture install prompt
         const handleBeforeInstallPrompt = (e: any) => {
             e.preventDefault();
             setDeferredPrompt(e);
             console.log('Install prompt captured');
         };
+
         window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
         return () => {
             window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
         };
     }, []);
+
     const handleInstallClick = async () => {
         if (!deferredPrompt) {
             setShowManualGuide(true);
             return;
         }
+
         deferredPrompt.prompt();
         const { outcome } = await deferredPrompt.userChoice;
         console.log(`User response to the install prompt: ${outcome}`);
         setDeferredPrompt(null);
     };
+
     if (isInstalled) {
         return (
             <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex flex-col items-center justify-center p-6 text-center">
@@ -9833,6 +10797,7 @@ export const InstallPage: React.FC = () => {
             </div>
         );
     }
+
     return (
         <div className="min-h-screen bg-gradient-to-br from-blue-500 to-purple-600 flex flex-col items-center justify-center p-6 text-white font-sans">
             <motion.div
@@ -9848,6 +10813,7 @@ export const InstallPage: React.FC = () => {
                     <h1 className="text-2xl font-bold">Wings Baseball Club</h1>
                     <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">공식 커뮤니티 앱을 설치하세요</p>
                 </div>
+
                 <div className="p-6 space-y-6">
                     {isInAppBrowser() && (
                         <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-xl p-4 flex items-start gap-3">
@@ -9860,6 +10826,7 @@ export const InstallPage: React.FC = () => {
                             </div>
                         </div>
                     )}
+
                     {/* Android / Desktop Install Button */}
                     {(os === 'android' || os === 'desktop') && (
                         <div className="text-center space-y-4">
@@ -9870,11 +10837,13 @@ export const InstallPage: React.FC = () => {
                                 <Download className="w-5 h-5 mr-2" />
                                 앱 설치하기
                             </Button>
+
                             {!showManualGuide && (
                                 <p className="text-xs text-gray-500">
                                     * 설치 버튼이 작동하지 않으면 브라우저 메뉴의 '앱 설치'를 이용해주세요.
                                 </p>
                             )}
+
                             {/* Manual Install Guide for Android */}
                             {showManualGuide && (
                                 <motion.div
@@ -9903,6 +10872,7 @@ export const InstallPage: React.FC = () => {
                             )}
                         </div>
                     )}
+
                     {/* iOS Instructions */}
                     {os === 'ios' && (
                         <div className="space-y-4">
@@ -9912,6 +10882,7 @@ export const InstallPage: React.FC = () => {
                                     사파리(Safari) 브라우저에서 아래 순서대로 진행해주세요.
                                 </p>
                             </div>
+
                             <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-4 space-y-4">
                                 <div className="flex items-center gap-4">
                                     <div className="w-8 h-8 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-full flex items-center justify-center font-bold shrink-0">1</div>
@@ -9934,6 +10905,7 @@ export const InstallPage: React.FC = () => {
                                     </div>
                                 </div>
                             </div>
+
                             {/* Arrow pointing to bottom (simulation) */}
                             <div className="flex justify-center pt-2 animate-bounce">
                                 <ArrowUp className="w-6 h-6 text-blue-500 rotate-180" />
@@ -9942,16 +10914,17 @@ export const InstallPage: React.FC = () => {
                     )}
                 </div>
             </motion.div >
+
             <div className="mt-8 text-white/60 text-xs">
                 © 2025 Wings Baseball Club
             </div>
         </div >
     );
 };
+
 ```
 
-## src/app/pages/LoginPage.tsx
-
+## FILE: src\app\pages\LoginPage.tsx
 ```tsx
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -9963,12 +10936,15 @@ import { toast } from 'sonner';
 import {
   checkUserExists
 } from '../../lib/firebase/auth.service';
+
 import {
   isInAppBrowser,
   getBreakoutUrl,
   isAndroid
 } from '../../lib/utils/userAgent';
+
 type LoginStep = 'method';
+
 export const LoginPage: React.FC = () => {
   // WebView Detection
   if (isInAppBrowser()) {
@@ -9985,6 +10961,7 @@ export const LoginPage: React.FC = () => {
           카카오톡/인스타그램 등 인앱 브라우저에서는{'\n'}
           로그인이 불가능합니다.
         </p>
+
         {isAndroid() ? (
           <Button
             className="w-full h-14 text-lg font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-xl"
@@ -10009,19 +10986,24 @@ export const LoginPage: React.FC = () => {
       </div>
     );
   }
+
   const [step] = useState<LoginStep>('method');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
   // 1. Google Sign In
   const handleGoogleLogin = async () => {
     setLoading(true);
     setError('');
+
     try {
       const { loginWithGoogle } = await import('../../lib/firebase/auth.service');
       // Google Auth Login (gets firebase user)
       const firebaseUser = await loginWithGoogle();
+
       // Check if user profile exists
       const exists = await checkUserExists(firebaseUser.uid);
+
       if (exists) {
         toast.success(`환영합니다, ${firebaseUser.displayName}님!`);
       } else {
@@ -10035,6 +11017,7 @@ export const LoginPage: React.FC = () => {
       setLoading(false);
     }
   };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-600 via-blue-500 to-blue-400 dark:from-blue-900 dark:via-blue-800 dark:to-blue-700 flex items-center justify-center p-4">
       <motion.div
@@ -10057,6 +11040,7 @@ export const LoginPage: React.FC = () => {
             * 로그인 오류 시 Chrome/Safari 브라우저를 이용해주세요.
           </p>
         </div>
+
         <div className="p-8">
           <AnimatePresence mode="wait">
             {step === 'method' && (
@@ -10090,6 +11074,7 @@ export const LoginPage: React.FC = () => {
               </motion.div>
             )}
           </AnimatePresence>
+
           {/* Global Error */}
           {error && (
             <motion.div
@@ -10110,8 +11095,7 @@ export const LoginPage: React.FC = () => {
 };
 ```
 
-## src/app/pages/MyActivityPage.tsx
-
+## FILE: src\app\pages\MyActivityPage.tsx
 ```tsx
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
@@ -10120,14 +11104,17 @@ import { useAuth } from '../contexts/AuthContext';
 import { useData } from '../contexts/DataContext';
 import { formatDistanceToNow } from 'date-fns';
 import { ko } from 'date-fns/locale';
+
 export const MyActivityPage: React.FC = () => {
     const { user } = useAuth();
     const { posts, comments } = useData();
     const [activeTab, setActiveTab] = useState<'posts' | 'comments'>('posts');
+
     if (!user) {
         console.log('[MyActivityPage] No user found');
         return null;
     }
+
     // Safe sorting helper
     const getPoolDate = (item: any) => {
         if (item.createdAt instanceof Date) return item.createdAt;
@@ -10135,19 +11122,23 @@ export const MyActivityPage: React.FC = () => {
         if (item.createdAt && typeof item.createdAt.seconds === 'number') return new Date(item.createdAt.seconds * 1000);
         return new Date(0); // Fallback
     };
+
     // Filter my posts
     const myPosts = posts
         .filter(post => post.author.id === user.id) // Use author.id
         .sort((a, b) => getPoolDate(b).getTime() - getPoolDate(a).getTime());
+
     // Filter my comments
     const myComments = Object.entries(comments).flatMap(([postId, postComments]) =>
         postComments
             .filter((comment: any) => comment.author.id === user.id)
             .map((comment: any) => ({ ...comment, postId }))
     ).sort((a: any, b: any) => getPoolDate(b).getTime() - getPoolDate(a).getTime());
+
     return (
         <div className="pb-20 pt-16">
             {/* Header handled by App.tsx TopBar */}
+
             {/* Tabs */}
             <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 sticky top-16 z-10">
                 <div className="flex">
@@ -10171,6 +11162,7 @@ export const MyActivityPage: React.FC = () => {
                     </button>
                 </div>
             </div>
+
             <div className="p-4 space-y-4">
                 {activeTab === 'posts' ? (
                     <>
@@ -10244,10 +11236,10 @@ export const MyActivityPage: React.FC = () => {
         </div>
     );
 };
+
 ```
 
-## src/app/pages/MyPage.tsx
-
+## FILE: src\app\pages\MyPage.tsx
 ```tsx
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
@@ -10262,12 +11254,14 @@ import { ProfileEditModal } from '../components/ProfileEditModal';
 import { APP_INFO } from '../../lib/constants/app-info';
 import { toast } from 'sonner';
 import { useFcm } from '../hooks/useFcm';
+
 interface MyPageProps {
   onNavigateToSettings?: () => void;
   onNavigateToAdmin?: () => void;
   onNavigateToNoticeManage?: () => void;
   onNavigateToMyActivity?: () => void;
 }
+
 export const MyPage: React.FC<MyPageProps> = ({
   onNavigateToSettings,
   onNavigateToAdmin,
@@ -10282,32 +11276,40 @@ export const MyPage: React.FC<MyPageProps> = ({
     postCount: 0,
     commentCount: 0,
   });
+
   // μATOM-0512: 알림 권한 요청 UX(내정보)
   // μATOM-0513: 토큰 취득→Functions 호출
   // μATOM-0514: 토큰 재등록 버튼
   const { permission, tokenRegistered, tokenError, requestPermission, retryRegister } = useFcm();
+
   // Calculate real statistics
   useEffect(() => {
     if (!user) return;
+
     // Count attendance
     const attendanceCount = (attendanceRecords || []).filter(
       record => record.userId === user.id && record.status === 'attending'
     ).length;
+
     // Count posts
     const postCount = (posts || []).filter((post) => post.author.id === user.id).length;
+
     // Count comments
     const allComments = Object.values(comments || {}).flat();
     const commentCount = allComments.filter((comment) => comment.author.id === user.id).length;
+
     setStats({
       attendanceCount,
       postCount,
       commentCount,
     });
   }, [user, posts, comments, attendanceRecords]);
+
   const handleLogout = () => {
     logout();
     toast.success('로그아웃되었습니다');
   };
+
   const getRoleInfo = (role: UserRole) => {
     switch (role) {
       case 'PRESIDENT':
@@ -10322,9 +11324,12 @@ export const MyPage: React.FC<MyPageProps> = ({
         return { label: '일반회원', color: 'bg-gradient-to-r from-gray-500 to-gray-600', icon: User };
     }
   };
+
   if (!user) return null;
+
   const roleInfo = getRoleInfo(user.role);
   const RoleIcon = roleInfo.icon;
+
   return (
     <div className="pb-20 pt-16">
       <div className="max-w-md mx-auto">
@@ -10336,6 +11341,7 @@ export const MyPage: React.FC<MyPageProps> = ({
         >
           {/* Background Gradient */}
           <div className={`h-32 ${roleInfo.color} rounded-b-3xl`}></div>
+
           {/* Profile Card */}
           <div className="px-4 -mt-16">
             <Card className="p-6">
@@ -10360,6 +11366,7 @@ export const MyPage: React.FC<MyPageProps> = ({
                     <RoleIcon className="w-4 h-4" />
                   </div>
                 </div>
+
                 {/* Info */}
                 <div className="flex-1">
                   <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-1">
@@ -10387,6 +11394,7 @@ export const MyPage: React.FC<MyPageProps> = ({
                   </div>
                 </div>
               </div>
+
               {/* Stats */}
               <div className="grid grid-cols-3 gap-4 mt-6 pt-4 border-t dark:border-gray-700">
                 <div className="text-center">
@@ -10405,6 +11413,7 @@ export const MyPage: React.FC<MyPageProps> = ({
             </Card>
           </div>
         </motion.div>
+
         {/* Quick Stats */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -10424,6 +11433,7 @@ export const MyPage: React.FC<MyPageProps> = ({
                 </div>
               </div>
             </Card>
+
             <Card className="p-4 bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/20 border-green-200 dark:border-green-800">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-green-500 rounded-lg">
@@ -10437,6 +11447,7 @@ export const MyPage: React.FC<MyPageProps> = ({
             </Card>
           </div>
         </motion.div>
+
         {/* Menu List */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -10478,6 +11489,7 @@ export const MyPage: React.FC<MyPageProps> = ({
               <div className="h-3"></div>
             </>
           )}
+
           {/* μATOM-0512: 알림 권한 요청 UX(내정보) */}
           <Card className="mb-3">
             <div className="p-4">
@@ -10556,6 +11568,7 @@ export const MyPage: React.FC<MyPageProps> = ({
               )}
             </div>
           </Card>
+
           {/* General Menu */}
           <Card>
             <MenuItem icon={MessageSquare} label="내 활동" onClick={() => onNavigateToMyActivity?.()} />
@@ -10566,6 +11579,7 @@ export const MyPage: React.FC<MyPageProps> = ({
             <Separator />
             <MenuItem icon={Edit} label="프로필 편집" onClick={() => setEditModalOpen(true)} />
           </Card>
+
           {/* Logout */}
           <Button
             variant="outline"
@@ -10575,12 +11589,14 @@ export const MyPage: React.FC<MyPageProps> = ({
             <LogOut className="w-4 h-4 mr-2" />
             로그아웃
           </Button>
+
           {/* Version Info */}
           <div className="text-center text-xs text-gray-500 dark:text-gray-400 py-4">
             {APP_INFO.version}
           </div>
         </motion.div>
       </div>
+
       {/* Profile Edit Modal */}
       <ProfileEditModal
         isOpen={editModalOpen}
@@ -10589,6 +11605,7 @@ export const MyPage: React.FC<MyPageProps> = ({
     </div>
   );
 };
+
 // Menu Item Component
 const MenuItem: React.FC<{
   icon: React.ElementType;
@@ -10610,8 +11627,7 @@ const MenuItem: React.FC<{
 };
 ```
 
-## src/app/pages/NotificationPage.tsx
-
+## FILE: src\app\pages\NotificationPage.tsx
 ```tsx
 import React from 'react';
 import { motion } from 'motion/react';
@@ -10631,20 +11647,25 @@ import { Button } from '../components/ui/button';
 import { formatDistanceToNow } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { toast } from 'sonner';
+
 interface NotificationPageProps {
   onBack?: () => void;
 }
+
 export const NotificationPage: React.FC<NotificationPageProps> = ({ onBack }) => {
   const { notifications, markNotificationAsRead, markAllNotificationsAsRead } = useData();
+
   const handleNotificationClick = async (notification: any) => {
     if (!notification.read) {
       await markNotificationAsRead(notification.id);
     }
+
     // 링크가 있으면 이동 (향후 구현)
     if (notification.link) {
       toast.info('해당 게시글로 이동 기능은 곧 구현됩니다');
     }
   };
+
   const handleMarkAllAsRead = async () => {
     try {
       await markAllNotificationsAsRead();
@@ -10653,6 +11674,7 @@ export const NotificationPage: React.FC<NotificationPageProps> = ({ onBack }) =>
       toast.error('알림 읽음 처리 실패');
     }
   };
+
   const getNotificationIcon = (type: string) => {
     switch (type) {
       case 'notice':
@@ -10669,6 +11691,7 @@ export const NotificationPage: React.FC<NotificationPageProps> = ({ onBack }) =>
         return <Bell className="w-5 h-5" />;
     }
   };
+
   const getNotificationColor = (type: string) => {
     switch (type) {
       case 'notice':
@@ -10685,7 +11708,9 @@ export const NotificationPage: React.FC<NotificationPageProps> = ({ onBack }) =>
         return 'from-gray-500 to-gray-600';
     }
   };
+
   const unreadCount = notifications.filter((n) => !n.read).length;
+
   return (
     <div className="pb-20 pt-16">
       {/* Header */}
@@ -10720,6 +11745,7 @@ export const NotificationPage: React.FC<NotificationPageProps> = ({ onBack }) =>
           </Button>
         )}
       </div>
+
       <div className="p-4">
         {notifications.length === 0 ? (
           <motion.div
@@ -10758,6 +11784,7 @@ export const NotificationPage: React.FC<NotificationPageProps> = ({ onBack }) =>
                     >
                       {getNotificationIcon(notification.type)}
                     </div>
+
                     {/* Content */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between gap-2 mb-1">
@@ -10794,10 +11821,10 @@ export const NotificationPage: React.FC<NotificationPageProps> = ({ onBack }) =>
     </div>
   );
 };
+
 ```
 
-## src/app/pages/SettingsPage.tsx
-
+## FILE: src\app\pages\SettingsPage.tsx
 ```tsx
 import React from 'react';
 import {
@@ -10820,13 +11847,16 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useFcm } from '../hooks/useFcm'; // ATOM-13
 import { APP_INFO, DEVELOPER_INFO, FEATURES, TECH_STACK } from '../../lib/constants/app-info';
 import { toast } from 'sonner';
+
 interface SettingsPageProps {
   onBack?: () => void;
 }
+
 export const SettingsPage: React.FC<SettingsPageProps> = () => {
   const { logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const { permission, tokenRegistered, tokenError, requestPermission, retryRegister } = useFcm(); // ATOM-13
+
   const handleLogout = async () => {
     try {
       await logout();
@@ -10835,13 +11865,16 @@ export const SettingsPage: React.FC<SettingsPageProps> = () => {
       toast.error('로그아웃 실패');
     }
   };
+
   // ATOM-13: FCM 토큰 등록 상태 관리
   const pushEnabled = permission === 'granted' && tokenRegistered;
+  
   const handlePushToggle = async () => {
     if (permission === 'unsupported') {
       toast.error('이 브라우저는 푸시 알림을 지원하지 않습니다');
       return;
     }
+
     if (permission === 'granted') {
       // 이미 허용됨 - 토큰 등록 상태에 따라 다르게 처리
       if (tokenError) {
@@ -10852,9 +11885,11 @@ export const SettingsPage: React.FC<SettingsPageProps> = () => {
       }
       return;
     }
+
     // 권한 요청
     await requestPermission();
   };
+
   return (
     <div className="pb-20 pt-16">
       {/* Header */}
@@ -10862,6 +11897,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = () => {
         <h1 className="text-2xl font-bold mb-2">설정</h1>
         <p className="text-blue-100">앱 설정 및 정보</p>
       </div>
+
       <div className="p-4 space-y-4">
         {/* 앱 정보 섹션 */}
         <div className="bg-white dark:bg-gray-900 rounded-2xl p-6 shadow-sm">
@@ -10874,6 +11910,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = () => {
               <p className="text-sm text-gray-500">{APP_INFO.fullName}</p>
             </div>
           </div>
+
           <div className="space-y-2">
             <div className="flex justify-between text-sm">
               <span className="text-gray-600">버전</span>
@@ -10889,6 +11926,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = () => {
             </div>
           </div>
         </div>
+
         {/* 개발사 정보 섹션 */}
         <div className="bg-white dark:bg-gray-900 rounded-2xl p-6 shadow-sm">
           <div className="flex items-center gap-3 mb-4">
@@ -10897,6 +11935,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = () => {
             </div>
             <h2 className="font-bold">개발사 정보</h2>
           </div>
+
           <div className="space-y-3">
             <div className="flex items-start gap-3">
               <Building2 className="w-5 h-5 text-gray-400 mt-0.5" />
@@ -10905,6 +11944,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = () => {
                 <p className="font-medium">{DEVELOPER_INFO.company}</p>
               </div>
             </div>
+
             <div className="flex items-start gap-3">
               <User className="w-5 h-5 text-gray-400 mt-0.5" />
               <div className="flex-1">
@@ -10912,6 +11952,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = () => {
                 <p className="font-medium">{DEVELOPER_INFO.ceo.join(', ')}</p>
               </div>
             </div>
+
             <div className="flex items-start gap-3">
               <Shield className="w-5 h-5 text-gray-400 mt-0.5" />
               <div className="flex-1">
@@ -10919,6 +11960,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = () => {
                 <p className="font-medium">{DEVELOPER_INFO.manager}</p>
               </div>
             </div>
+
             <div className="flex items-start gap-3">
               <Mail className="w-5 h-5 text-gray-400 mt-0.5" />
               <div className="flex-1">
@@ -10933,6 +11975,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = () => {
             </div>
           </div>
         </div>
+
         {/* 환경 설정 섹션 */}
         <div className="bg-white dark:bg-gray-900 rounded-2xl p-6 shadow-sm">
           <div className="flex items-center gap-3 mb-4">
@@ -10941,6 +11984,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = () => {
             </div>
             <h2 className="font-bold">환경 설정</h2>
           </div>
+
           <div className="space-y-3">
             {/* 다크 모드 */}
             <button
@@ -10973,6 +12017,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = () => {
                 </div>
               </div>
             </button>
+
             {/* 푸시 알림 */}
             <button
               onClick={handlePushToggle}
@@ -10983,7 +12028,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = () => {
                 <div className="text-left">
                   <p className="font-medium">푸시 알림</p>
                   <p className="text-xs text-gray-500">
-                    {permission === 'unsupported'
+                    {permission === 'unsupported' 
                       ? '브라우저 미지원'
                       : permission === 'granted'
                       ? tokenRegistered
@@ -11022,6 +12067,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = () => {
             )}
           </div>
         </div>
+
         {/* 주요 기능 섹션 */}
         <div className="bg-white dark:bg-gray-900 rounded-2xl p-6 shadow-sm">
           <div className="flex items-center gap-3 mb-4">
@@ -11030,6 +12076,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = () => {
             </div>
             <h2 className="font-bold">주요 기능</h2>
           </div>
+
           <div className="space-y-2">
             {FEATURES.map((feature, index) => (
               <div key={index} className="flex items-start gap-2">
@@ -11039,6 +12086,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = () => {
             ))}
           </div>
         </div>
+
         {/* 기술 스택 섹션 */}
         <div className="bg-white dark:bg-gray-900 rounded-2xl p-6 shadow-sm">
           <div className="flex items-center gap-3 mb-4">
@@ -11047,6 +12095,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = () => {
             </div>
             <h2 className="font-bold">기술 스택</h2>
           </div>
+
           <div className="space-y-4">
             <div>
               <p className="text-xs text-gray-500 mb-2">프론트엔드</p>
@@ -11061,6 +12110,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = () => {
                 ))}
               </div>
             </div>
+
             <div>
               <p className="text-xs text-gray-500 mb-2">백엔드</p>
               <div className="flex flex-wrap gap-2">
@@ -11074,6 +12124,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = () => {
                 ))}
               </div>
             </div>
+
             <div>
               <p className="text-xs text-gray-500 mb-2">UI 라이브러리</p>
               <div className="flex flex-wrap gap-2">
@@ -11089,6 +12140,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = () => {
             </div>
           </div>
         </div>
+
         {/* 개인정보 처리방침 */}
         <button className="w-full bg-white dark:bg-gray-900 rounded-2xl p-4 shadow-sm hover:shadow-md transition-shadow flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -11097,6 +12149,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = () => {
           </div>
           <ChevronRight className="w-5 h-5 text-gray-400" />
         </button>
+
         {/* 이용약관 */}
         <button className="w-full bg-white dark:bg-gray-900 rounded-2xl p-4 shadow-sm hover:shadow-md transition-shadow flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -11105,6 +12158,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = () => {
           </div>
           <ChevronRight className="w-5 h-5 text-gray-400" />
         </button>
+
         {/* 로그아웃 */}
         <button
           onClick={handleLogout}
@@ -11113,6 +12167,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = () => {
           <LogOut className="w-5 h-5" />
           로그아웃
         </button>
+
         {/* 저작권 */}
         <div className="text-center text-xs text-gray-500 pt-4">
           <p>© 2024 {DEVELOPER_INFO.company}. All rights reserved.</p>
@@ -11123,3 +12178,1808 @@ export const SettingsPage: React.FC<SettingsPageProps> = () => {
   );
 };
 ```
+
+## FILE: src\lib\constants\app-info.ts
+```ts
+/**
+ * 앱 정보 및 개발사 정보
+ */
+
+export const APP_INFO = {
+  name: 'WINGS BASEBALL CLUB',
+  fullName: '윙스야구동호회',
+  version: '1.0.0',
+  buildDate: '2024-12-17',
+  description: '야구 동호회 커뮤니티 통합 관리 시스템',
+} as const;
+
+export const DEVELOPER_INFO = {
+  company: 'KS컴퍼니',
+  ceo: ['배종수', '석경선'],
+  contactEmail: 'suhachi02@gmail.com',
+  manager: '배종수',
+  managerRole: '운영관리 책임자',
+} as const;
+
+export const FEATURES = [
+  '동호회 운영 관리 (공지/일정/출석/투표/앨범)',
+  '회비 및 회계 관리',
+  '경기 기록 시스템 (라인업/타자/투수 기록)',
+  '역할별 권한 관리',
+  '실시간 데이터 동기화',
+  'PWA 지원 (모바일 앱 설치 가능)',
+] as const;
+
+export const TECH_STACK = {
+  frontend: ['React', 'TypeScript', 'Vite', 'Tailwind CSS', 'Motion/React'],
+  backend: ['Firebase Auth', 'Firebase Firestore', 'Firebase Storage', 'Firebase Cloud Functions'],
+  ui: ['shadcn/ui', 'Radix UI', 'Lucide Icons'],
+} as const;
+
+export const PRIVACY_POLICY = {
+  lastUpdated: '2024-12-17',
+  description: '본 서비스는 동호회 회원 전용 서비스로, 초대 코드를 통해서만 가입할 수 있습니다.',
+  dataCollection: [
+    '회원 정보 (이름, 닉네임, 연락처, 역할)',
+    '게시글 및 댓글',
+    '출석 및 투표 정보',
+    '경기 기록',
+    '회비 납부 정보',
+  ],
+  dataUsage: [
+    '동호회 운영 및 관리',
+    '회원 간 커뮤니케이션 지원',
+    '경기 및 일정 관리',
+    '회비 및 회계 관리',
+  ],
+} as const;
+
+```
+
+## FILE: src\lib\firebase\auth.service.ts
+```ts
+// Firebase Authentication Service
+import {
+  signOut,
+  onAuthStateChanged,
+  User as FirebaseUser,
+  GoogleAuthProvider,
+  signInWithPopup,
+} from 'firebase/auth';
+import {
+  doc,
+  getDoc,
+  setDoc,
+  updateDoc,
+  serverTimestamp,
+} from 'firebase/firestore';
+
+
+import { auth, db } from './config';
+import type { UserDoc, UserRole } from './types';
+
+
+/**
+ * [POLICY] Google OAuth Only Login
+ */
+export async function loginWithGoogle(): Promise<FirebaseUser> {
+  const provider = new GoogleAuthProvider();
+  try {
+    const result = await signInWithPopup(auth, provider);
+    return result.user;
+  } catch (error: any) {
+    console.error('Google Login Error:', error);
+    throw error;
+  }
+}
+
+/**
+ * [POLICY] Simplified Account Creation
+ * New users are created as 'pending'.
+ */
+export async function createAccount(
+  user: FirebaseUser,
+  realName: string,
+  nickname?: string,
+  phone?: string
+): Promise<UserDoc> {
+  try {
+    const role: UserRole = 'MEMBER';
+    const clubId = 'WINGS'; // Default club
+
+    const userData: UserDoc = {
+      uid: user.uid,
+      realName,
+      nickname: nickname || user.displayName || '',
+      phone: phone || null,
+      photoURL: user.photoURL || null,
+      role: role,
+      status: 'pending', // POLICY: Must be manually approved/activated by admin
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    // 1. Write to global users collection (Profile)
+    await setDoc(doc(db, 'users', user.uid), {
+      ...userData,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+
+    // 2. Add to Club Members collection (Membership)
+    await setDoc(doc(db, 'clubs', clubId, 'members', user.uid), {
+      ...userData,
+      clubId,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+
+    return userData;
+  } catch (error) {
+    console.error('Error creating account:', error);
+    throw error;
+  }
+}
+
+/**
+ * Check if user document exists
+ */
+export async function checkUserExists(uid: string): Promise<boolean> {
+  const userRef = doc(db, 'users', uid);
+  const userSnap = await getDoc(userRef);
+  return userSnap.exists();
+}
+
+/**
+ * Get current user data with KST dates
+ */
+export async function getCurrentUserData(uid: string): Promise<UserDoc | null> {
+  try {
+    const userRef = doc(db, 'users', uid);
+    const userDoc = await getDoc(userRef);
+    if (!userDoc.exists()) {
+      return null;
+    }
+
+    const data = userDoc.data() as UserDoc;
+
+    // [TEMP] Auto-Promote dev email to ADMIN
+    const rawData = data as any;
+    if (rawData.email === 'jsbae59@gmail.com' && data.role !== 'ADMIN') {
+      await updateDoc(userRef, { role: 'ADMIN', status: 'active' });
+      const memberRef = doc(db, 'clubs', 'WINGS', 'members', uid);
+      const memberSnap = await getDoc(memberRef);
+      if (memberSnap.exists()) {
+        await updateDoc(memberRef, { role: 'ADMIN', status: 'active' });
+      }
+      data.role = 'ADMIN';
+      data.status = 'active';
+    }
+
+    return {
+      ...data,
+      createdAt: (data.createdAt as any)?.toDate?.() || new Date(),
+      updatedAt: (data.updatedAt as any)?.toDate?.() || new Date(),
+    } as UserDoc;
+  } catch (error: any) {
+    if (error.code === 'unavailable') return null;
+    console.error('Error getting user data:', error);
+    return null;
+  }
+}
+
+/**
+ * Update user profile
+ */
+export async function updateUserData(
+  uid: string,
+  updates: Partial<UserDoc>
+): Promise<void> {
+  try {
+    const userRef = doc(db, 'users', uid);
+    const cleanUpdates = JSON.parse(JSON.stringify(updates));
+    const sanitizedUpdates = Object.entries(cleanUpdates).reduce((acc, [key, value]) => {
+      if (value !== undefined) acc[key] = value;
+      return acc;
+    }, {} as any);
+
+    await setDoc(
+      userRef,
+      {
+        ...sanitizedUpdates,
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true }
+    );
+  } catch (error) {
+    console.error('Error updating user data:', error);
+    throw error;
+  }
+}
+
+/**
+ * Logout
+ */
+export async function logout(): Promise<void> {
+  await signOut(auth);
+}
+
+/**
+ * Auth state listener
+ */
+export function onAuthStateChange(
+  callback: (user: FirebaseUser | null) => void
+): () => void {
+  return onAuthStateChanged(auth, callback);
+}
+
+// --------------------------------------------------------------------------------------------------------------------
+// RBAC HELPERS
+// --------------------------------------------------------------------------------------------------------------------
+
+export function isAdmin(role: UserRole): boolean {
+  return ['PRESIDENT', 'DIRECTOR', 'ADMIN', 'TREASURER'].includes(role);
+}
+
+export function isTreasury(role: UserRole): boolean {
+  return ['PRESIDENT', 'TREASURER'].includes(role);
+}
+
+```
+
+## FILE: src\lib\firebase\config.ts
+```ts
+// Firebase Configuration
+// 
+// ⚠️ 중요: 실제 Firebase 프로젝트 설정 값으로 교체하세요
+// Firebase Console (https://console.firebase.google.com)에서
+// 프로젝트 설정 > 일반 > 내 앱 > Firebase SDK snippet > 구성에서 확인할 수 있습니다
+
+import { initializeApp } from 'firebase/app';
+import { getAuth } from 'firebase/auth';
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, CACHE_SIZE_UNLIMITED } from 'firebase/firestore';
+import { getStorage } from 'firebase/storage';
+import { getFunctions } from 'firebase/functions';
+// Note: getMessaging은 클라이언트에서만 사용하므로 messaging.service.ts에서 import
+
+const firebaseConfig = {
+  // 우선순위: .env 값 > 아래 기본값 (사용자가 제공한 Firebase 설정)
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || 'AIzaSyACk1-QVyol4r6TKmNcDXHbuv3NwWbjmJU',
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || 'wings-baseball-club.firebaseapp.com',
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || 'wings-baseball-club',
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || 'wings-baseball-club.firebasestorage.app',
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '951671719712',
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || '1:951671719712:web:9f2b4fb521ec546d43f945',
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || 'G-HHQYWBCLG4'
+};
+
+// Firebase 초기화
+const app = initializeApp(firebaseConfig);
+
+// Firebase 서비스 초기화
+export const auth = getAuth(app);
+
+// Firestore 초기화 (New Persistence API)
+export const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({
+    tabManager: persistentMultipleTabManager(),
+    cacheSizeBytes: CACHE_SIZE_UNLIMITED
+  })
+});
+
+export const storage = getStorage(app);
+export const functions = getFunctions(app, 'asia-northeast3'); // 서울 리전
+
+// 전역 Firebase 에러 핸들러
+const originalConsoleError = console.error;
+console.error = (...args: any[]) => {
+  // Firebase 오프라인 관련 에러는 경고로 변경
+  const errorMessage = args[0]?.toString() || '';
+  if (
+    errorMessage.includes('Failed to get document because the client is offline') ||
+    errorMessage.includes('[code=unavailable]') ||
+    errorMessage.includes('AbortError')
+  ) {
+    console.warn('⚠️ Firebase offline warning (suppressed):', ...args);
+    return;
+  }
+  originalConsoleError.apply(console, args);
+};
+
+export default app;
+```
+
+## FILE: src\lib\firebase\events.service.ts
+```ts
+import { httpsCallable } from 'firebase/functions';
+import { functions } from './config';
+
+/**
+ * 이벤트 게시글 생성 (callable)
+ * 
+ * μATOM-0534: 프론트 이벤트 작성 화면 + callable 호출
+ */
+export const createEventPostFn = httpsCallable<
+  {
+    clubId: string;
+    eventType: 'PRACTICE' | 'GAME';
+    title: string;
+    content: string;
+    startAt: string | number; // ISO string or timestamp
+    place: string;
+    opponent?: string;
+    requestId: string;
+  },
+  {
+    success: boolean;
+    postId: string;
+    voteCloseAt: string; // ISO string
+  }
+>(functions, 'createEventPost');
+
+/**
+ * 이벤트 게시글 생성
+ * 
+ * @param clubId 클럽 ID
+ * @param eventType 이벤트 타입 (PRACTICE | GAME)
+ * @param title 제목
+ * @param content 내용
+ * @param startAt 시작 일시 (Date 또는 ISO string)
+ * @param place 장소
+ * @param opponent 상대팀 (선택)
+ * @returns 게시글 ID 및 투표 마감 시간
+ */
+export async function createEventPost(
+  clubId: string,
+  eventType: 'PRACTICE' | 'GAME',
+  title: string,
+  content: string,
+  startAt: Date | string,
+  place: string,
+  opponent?: string
+): Promise<{ postId: string; voteCloseAt: string }> {
+  // UUID 생성 (requestId)
+  const requestId = crypto.randomUUID();
+
+  // startAt을 ISO string으로 변환
+  const startAtISO = typeof startAt === 'string' ? startAt : startAt.toISOString();
+
+  const result = await createEventPostFn({
+    clubId,
+    eventType,
+    title,
+    content,
+    startAt: startAtISO,
+    place,
+    opponent,
+    requestId,
+  });
+
+  return {
+    postId: result.data.postId,
+    voteCloseAt: result.data.voteCloseAt,
+  };
+}
+
+
+```
+
+## FILE: src\lib\firebase\firestore.service.ts
+```ts
+// Firebase Firestore Service
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+  query,
+  where,
+  orderBy,
+  limit,
+  startAfter,
+  serverTimestamp,
+  Timestamp,
+  addDoc,
+  QueryDocumentSnapshot,
+  DocumentData,
+} from 'firebase/firestore';
+import { db } from './config';
+import {
+  PostDoc,
+  CommentDoc,
+  AttendanceDoc,
+  NotificationDoc,
+} from './types';
+
+// Helper to get collection refs
+const getClubCol = (clubId: string, colName: string) => collection(db, 'clubs', clubId, colName);
+const getClubDoc = (clubId: string, colName: string, docId: string) => doc(db, 'clubs', clubId, colName, docId);
+
+// ===== POSTS =====
+
+/**
+ * 게시글 생성
+ */
+export async function createPost(clubId: string, postData: Omit<PostDoc, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
+  try {
+    const postsRef = getClubCol(clubId, 'posts');
+    const docRef = await addDoc(postsRef, {
+      ...postData,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+    return docRef.id;
+  } catch (error) {
+    console.error('Error creating post:', error);
+    throw error;
+  }
+}
+
+/**
+ * 게시글 목록 가져오기
+ * μATOM-0302: 쿼리 규격 통일 (orderBy createdAt desc, limit N)
+ */
+export async function getPosts(
+  clubId: string, 
+  postType?: 'notice' | 'free' | 'event', 
+  limitCount: number = 50,
+  lastVisible?: QueryDocumentSnapshot<DocumentData>
+): Promise<{ posts: PostDoc[]; lastDoc: QueryDocumentSnapshot<DocumentData> | null }> {
+  try {
+    const postsRef = getClubCol(clubId, 'posts');
+    let q = query(postsRef, orderBy('createdAt', 'desc'), limit(limitCount));
+
+    if (postType) {
+      q = query(postsRef, where('type', '==', postType), orderBy('createdAt', 'desc'), limit(limitCount));
+    }
+
+    if (lastVisible) {
+      q = query(q, startAfter(lastVisible));
+    }
+
+    const snapshot = await getDocs(q);
+    const posts = snapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+      createdAt: (doc.data().createdAt as Timestamp)?.toDate() || new Date(),
+      updatedAt: (doc.data().updatedAt as Timestamp)?.toDate() || new Date(),
+      startAt: (doc.data().startAt as Timestamp)?.toDate(),
+      voteCloseAt: (doc.data().voteCloseAt as Timestamp)?.toDate(),
+      pushSentAt: (doc.data().pushSentAt as Timestamp)?.toDate(),
+    })) as PostDoc[];
+
+    const lastDoc = snapshot.docs[snapshot.docs.length - 1] || null;
+    return { posts, lastDoc };
+  } catch (error) {
+    console.error('Error getting posts:', error);
+    return { posts: [], lastDoc: null };
+  }
+}
+
+/**
+ * 특정 게시글 가져오기
+ */
+export async function getPost(clubId: string, postId: string): Promise<PostDoc | null> {
+  try {
+    const postDoc = await getDoc(getClubDoc(clubId, 'posts', postId));
+    if (!postDoc.exists()) return null;
+
+    const data = postDoc.data() as any;
+    return {
+      id: postDoc.id,
+      ...data,
+      createdAt: (data.createdAt as Timestamp)?.toDate() || new Date(),
+      updatedAt: (data.updatedAt as Timestamp)?.toDate() || new Date(),
+      startAt: (data.startAt as Timestamp)?.toDate(),
+      voteCloseAt: (data.voteCloseAt as Timestamp)?.toDate(),
+      closeAt: (data.closeAt as Timestamp)?.toDate(),
+    } as PostDoc;
+  } catch (error) {
+    console.error('Error getting post:', error);
+    return null;
+  }
+}
+
+/**
+ * 게시글 업데이트
+ */
+export async function updatePost(clubId: string, postId: string, updates: Partial<PostDoc>): Promise<void> {
+  try {
+    const postRef = getClubDoc(clubId, 'posts', postId);
+    await updateDoc(postRef, {
+      ...updates,
+      updatedAt: serverTimestamp(),
+    });
+  } catch (error) {
+    console.error('Error updating post:', error);
+    throw error;
+  }
+}
+
+/**
+ * 게시글 삭제
+ */
+export async function deletePost(clubId: string, postId: string): Promise<void> {
+  try {
+    await deleteDoc(getClubDoc(clubId, 'posts', postId));
+  } catch (error) {
+    console.error('Error deleting post:', error);
+    throw error;
+  }
+}
+
+// ===== COMMENTS =====
+// Comments are subcollection of posts? No, PRD says `clubs/{clubId}/posts/{postId}/comments/{commentId}`
+// BUT Legacy code used a root `comments` collection linked by `postId`. 
+// PRD is the truth: `clubs/{clubId}/posts/{postId}/comments/{commentId}`.
+// I will implement PRD structure.
+
+/**
+ * 댓글 추가
+ */
+export async function addComment(clubId: string, postId: string, commentData: Omit<CommentDoc, 'id' | 'createdAt' | 'updatedAt' | 'postId'>): Promise<string> {
+  try {
+    const commentsRef = collection(db, 'clubs', clubId, 'posts', postId, 'comments');
+    const docRef = await addDoc(commentsRef, {
+      ...commentData,
+      postId, // keep for redundancy/search if needed
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+    return docRef.id;
+  } catch (error) {
+    console.error('Error adding comment:', error);
+    throw error;
+  }
+}
+
+/**
+ * 게시글의 댓글 가져오기
+ */
+export async function getComments(clubId: string, postId: string): Promise<CommentDoc[]> {
+  try {
+    const commentsRef = collection(db, 'clubs', clubId, 'posts', postId, 'comments');
+    const q = query(commentsRef, orderBy('createdAt', 'asc'));
+    const snapshot = await getDocs(q);
+
+    return snapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+      createdAt: (doc.data().createdAt as Timestamp)?.toDate() || new Date(),
+      updatedAt: (doc.data().updatedAt as Timestamp)?.toDate() || new Date(),
+    })) as CommentDoc[];
+  } catch (error) {
+    console.error('Error getting comments:', error);
+    return [];
+  }
+}
+
+/**
+ * 댓글 업데이트
+ */
+export async function updateComment(clubId: string, postId: string, commentId: string, updates: Partial<CommentDoc>): Promise<void> {
+  try {
+    const commentRef = doc(db, 'clubs', clubId, 'posts', postId, 'comments', commentId);
+    await updateDoc(commentRef, {
+      ...updates,
+      updatedAt: serverTimestamp(),
+    });
+  } catch (error) {
+    console.error('Error updating comment:', error);
+    throw error;
+  }
+}
+
+/**
+ * 댓글 삭제
+ */
+export async function deleteComment(clubId: string, postId: string, commentId: string): Promise<void> {
+  try {
+    await deleteDoc(doc(db, 'clubs', clubId, 'posts', postId, 'comments', commentId));
+  } catch (error) {
+    console.error('Error deleting comment:', error);
+    throw error;
+  }
+}
+
+// ===== ATTENDANCE =====
+// PRD: `clubs/{clubId}/posts/{postId}/attendance/{userId}`
+// Legacy: root `attendance` with `${postId}_${userId}` ID.
+// Switching to PRD.
+
+/**
+ * 출석 상태 업데이트
+ */
+export async function updateAttendance(clubId: string, postId: string, userId: string, attendanceData: Omit<AttendanceDoc, 'id' | 'updatedAt' | 'postId' | 'userId'>): Promise<void> {
+  try {
+    const attendanceRef = doc(db, 'clubs', clubId, 'posts', postId, 'attendance', userId);
+    await setDoc(
+      attendanceRef,
+      {
+        ...attendanceData,
+        postId,
+        userId,
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true }
+    );
+  } catch (error) {
+    console.error('Error updating attendance:', error);
+    throw error;
+  }
+}
+
+/**
+ * 게시글의 출석 현황 가져오기
+ */
+export async function getAttendances(clubId: string, postId: string): Promise<AttendanceDoc[]> {
+  try {
+    const attendanceRef = collection(db, 'clubs', clubId, 'posts', postId, 'attendance');
+    const snapshot = await getDocs(attendanceRef);
+
+    return snapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+      updatedAt: (doc.data().updatedAt as Timestamp)?.toDate() || new Date(),
+    })) as AttendanceDoc[];
+  } catch (error) {
+    console.error('Error getting attendances:', error);
+    return [];
+  }
+}
+
+/**
+ * 사용자의 특정 게시글 출석 상태 가져오기
+ */
+export async function getUserAttendance(clubId: string, postId: string, userId: string): Promise<AttendanceDoc | null> {
+  try {
+    const attendanceRef = doc(db, 'clubs', clubId, 'posts', postId, 'attendance', userId);
+    const attendanceDoc = await getDoc(attendanceRef);
+
+    if (!attendanceDoc.exists()) return null;
+
+    const data = attendanceDoc.data();
+    return {
+      id: attendanceDoc.id,
+      ...data,
+      updatedAt: (data.updatedAt as Timestamp)?.toDate() || new Date(),
+    } as AttendanceDoc;
+  } catch (error) {
+    console.error('Error getting user attendance:', error);
+    return null;
+  }
+}
+
+// ===== MEMBERS =====
+// PRD: `clubs/{clubId}/members`
+
+/**
+ * 전체 회원 목록 가져오기
+ */
+export async function getMembers(clubId: string): Promise<any[]> {
+  try {
+    const membersRef = getClubCol(clubId, 'members');
+    const q = query(membersRef, where('status', '==', 'active'), orderBy('createdAt', 'asc'));
+    const snapshot = await getDocs(q);
+
+    return snapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+      createdAt: (doc.data().createdAt as Timestamp)?.toDate(),
+      updatedAt: (doc.data().updatedAt as Timestamp)?.toDate(),
+    }));
+  } catch (error) {
+    console.error('Error getting members:', error);
+    return [];
+  }
+}
+
+/**
+ * 모든 회원 목록 가져오기 (비활성 회원 포함, 관리자용)
+ */
+export async function getAllMembers(clubId: string): Promise<any[]> {
+  try {
+    const membersRef = getClubCol(clubId, 'members');
+    const q = query(membersRef, orderBy('createdAt', 'desc'));
+    const snapshot = await getDocs(q);
+
+    return snapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+      createdAt: (doc.data().createdAt as Timestamp)?.toDate(),
+      updatedAt: (doc.data().updatedAt as Timestamp)?.toDate(),
+    }));
+  } catch (error) {
+    console.error('Error getting all members:', error);
+    return [];
+  }
+}
+
+/**
+ * 특정 멤버 조회 (clubs/{clubId}/members/{uid})
+ * ATOM-08: Access Gate에서 사용
+ */
+export async function getMember(clubId: string, uid: string): Promise<any | null> {
+  try {
+    const memberRef = getClubDoc(clubId, 'members', uid);
+    const memberDoc = await getDoc(memberRef);
+
+    if (!memberDoc.exists()) {
+      return null;
+    }
+
+    const data = memberDoc.data();
+    return {
+      id: memberDoc.id,
+      ...data,
+      createdAt: (data.createdAt as Timestamp)?.toDate(),
+      updatedAt: (data.updatedAt as Timestamp)?.toDate(),
+    };
+  } catch (error) {
+    console.error('Error getting member:', error);
+    return null;
+  }
+}
+
+/**
+ * 멤버 정보 업데이트 (관리자)
+ */
+export async function updateMember(clubId: string, userId: string, updates: any): Promise<void> {
+  try {
+    const memberRef = getClubDoc(clubId, 'members', userId);
+    await updateDoc(memberRef, {
+      ...updates,
+      updatedAt: serverTimestamp(),
+    });
+  } catch (error) {
+    console.error('Error updating member:', error);
+    throw error;
+  }
+}
+
+
+// ===== NOTIFICATIONS =====
+// PRD: Global or Post-based? Notifications are usually per user.
+// Legacy: `notifications` root.
+// PRD: `clubs/{clubId}/members/{userId}/notifications`? (Not explicitly defined in list but implied)
+// Or just `notifications` root?
+// "Notifications Collection ... allow read if owner"
+// I will keep it root OR specific to club.
+// Since it's a "Club Community PWA", notifications are likely club-scoped (e.g. "Game tomorrow").
+// But what if a user is in multiple clubs? Use root.
+// HOWEVER, Phase 1 is about "Architecture Refactoring (ClubID)".
+// If I move notifications to `clubs/{clubId}/notifications`, it's cleaner.
+// For now, let's keep notifications GLOBAL (root) to avoid breaking global status,
+// OR put them under `clubs/{clubId}/notifications`?
+// Let's go with Global user notifications for now, as `getUserNotifications(userId)` implies getting ALL notifs for a user.
+// Wait, `getUserNotifications` queries `collection(db, 'notifications')`.
+// If I want to support Club, maybe I should leave it as is for now, OR filter by clubId.
+// Let's LEAVE notifications at root for now, as they are user-centric.
+// The `firestore.service.ts` update is focused on Club Data.
+
+/**
+ * 알림 생성
+ */
+export async function createNotification(notificationData: Omit<NotificationDoc, 'id' | 'createdAt'>): Promise<string> {
+  try {
+    const notificationsRef = collection(db, 'notifications');
+    const docRef = await addDoc(notificationsRef, {
+      ...notificationData,
+      createdAt: serverTimestamp(),
+    });
+    return docRef.id;
+  } catch (error) {
+    console.error('Error creating notification:', error);
+    throw error;
+  }
+}
+
+/**
+ * 사용자 알림 가져오기
+ */
+export async function getUserNotifications(userId: string, limitCount: number = 50): Promise<NotificationDoc[]> {
+  try {
+    const notificationsRef = collection(db, 'notifications');
+    const q = query(
+      notificationsRef,
+      where('userId', '==', userId),
+      orderBy('createdAt', 'desc'),
+      limit(limitCount)
+    );
+    const snapshot = await getDocs(q);
+
+    return snapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+      createdAt: (doc.data().createdAt as Timestamp)?.toDate() || new Date(),
+    })) as NotificationDoc[];
+  } catch (error) {
+    console.error('Error getting user notifications:', error);
+    return [];
+  }
+}
+
+/**
+ * 알림 읽음 처리
+ */
+export async function markNotificationAsRead(notificationId: string): Promise<void> {
+  try {
+    const notificationRef = doc(db, 'notifications', notificationId);
+    await updateDoc(notificationRef, { read: true });
+  } catch (error) {
+    console.error('Error marking notification as read:', error);
+    throw error;
+  }
+}
+
+/**
+ * 모든 알림 읽음 처리
+ */
+export async function markAllNotificationsAsRead(userId: string): Promise<void> {
+  try {
+    const notificationsRef = collection(db, 'notifications');
+    const q = query(notificationsRef, where('userId', '==', userId), where('read', '==', false));
+    const snapshot = await getDocs(q);
+
+    const promises = snapshot.docs.map((doc) =>
+      updateDoc(doc.ref, { read: true })
+    );
+
+    await Promise.all(promises);
+  } catch (error) {
+    console.error('Error marking all notifications as read:', error);
+    throw error;
+  }
+}
+```
+
+## FILE: src\lib\firebase\messaging.service.ts
+```ts
+// Firebase Cloud Messaging Service
+// ATOM-13: FCM 클라이언트 구현
+
+import { getMessaging, getToken, onMessage, Messaging } from 'firebase/messaging';
+import { httpsCallable } from 'firebase/functions';
+import app, { functions } from './config';
+// Note: toast는 foreground 메시지 핸들러에서만 사용
+
+// FCM 토큰 등록 Function
+const registerFcmTokenFn = httpsCallable<{
+  clubId: string;
+  token: string;
+  platform?: 'web' | 'android' | 'ios';
+  requestId?: string;
+}, { success: boolean; tokenId: string }>(functions, 'registerFcmToken');
+
+// VAPID 키 (Firebase Console > 프로젝트 설정 > 클라우드 메시징에서 확인)
+// 실제 프로젝트에서는 환경 변수로 관리 권장
+const VAPID_KEY = import.meta.env.VITE_FCM_VAPID_KEY || '';
+
+let messagingInstance: Messaging | null = null;
+
+/**
+ * FCM Messaging 인스턴스 초기화
+ */
+export function getMessagingInstance(): Messaging | null {
+  if (typeof window === 'undefined') {
+    // 서버 사이드에서는 null 반환
+    return null;
+  }
+
+  if (!messagingInstance) {
+    try {
+      messagingInstance = getMessaging(app);
+    } catch (error) {
+      console.error('FCM 초기화 실패:', error);
+      return null;
+    }
+  }
+
+  return messagingInstance;
+}
+
+/**
+ * 알림 권한 상태 조회
+ */
+export async function getNotificationPermission(): Promise<NotificationPermission> {
+  if (typeof window === 'undefined' || !('Notification' in window)) {
+    return 'denied';
+  }
+
+  return Notification.permission;
+}
+
+/**
+ * 알림 권한 요청
+ */
+export async function requestNotificationPermission(): Promise<NotificationPermission> {
+  if (typeof window === 'undefined' || !('Notification' in window)) {
+    return 'denied';
+  }
+
+  if (Notification.permission === 'granted') {
+    return 'granted';
+  }
+
+  if (Notification.permission === 'denied') {
+    return 'denied';
+  }
+
+  try {
+    const permission = await Notification.requestPermission();
+    return permission;
+  } catch (error) {
+    console.error('알림 권한 요청 실패:', error);
+    return 'denied';
+  }
+}
+
+/**
+ * FCM 토큰 발급 및 등록
+ */
+export async function registerFcmToken(clubId: string): Promise<string | null> {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  const messaging = getMessagingInstance();
+  if (!messaging) {
+    console.error('FCM Messaging 인스턴스를 초기화할 수 없습니다');
+    return null;
+  }
+
+  // 권한 확인
+  const permission = await getNotificationPermission();
+  if (permission !== 'granted') {
+    console.warn('알림 권한이 허용되지 않았습니다:', permission);
+    return null;
+  }
+
+  // VAPID 키 확인
+  if (!VAPID_KEY) {
+    console.warn('VAPID 키가 설정되지 않았습니다. 환경 변수 VITE_FCM_VAPID_KEY를 설정하세요');
+    return null;
+  }
+
+  try {
+    // FCM 토큰 발급
+    const token = await getToken(messaging, {
+      vapidKey: VAPID_KEY,
+    });
+
+    if (!token) {
+      console.warn('FCM 토큰을 발급받을 수 없습니다');
+      return null;
+    }
+
+    // 플랫폼 감지 (간단한 방법)
+    const platform = detectPlatform();
+
+    // 서버에 토큰 등록
+    try {
+      await registerFcmTokenFn({
+        clubId,
+        token,
+        platform,
+        requestId: `client-${Date.now()}`,
+      });
+      console.log('FCM 토큰 등록 완료:', token.substring(0, 20) + '...');
+    } catch (error: any) {
+      console.error('FCM 토큰 등록 실패:', error);
+      // 토큰은 반환하되 등록은 실패 (나중에 재시도 가능)
+    }
+
+    return token;
+  } catch (error: any) {
+    console.error('FCM 토큰 발급 실패:', error);
+    if (error.code === 'messaging/permission-blocked') {
+      console.error('알림 권한이 차단되었습니다');
+    } else if (error.code === 'messaging/unsupported-browser') {
+      console.error('FCM을 지원하지 않는 브라우저입니다');
+    }
+    return null;
+  }
+}
+
+/**
+ * 플랫폼 감지 (간단한 방법)
+ */
+function detectPlatform(): 'web' | 'android' | 'ios' {
+  if (typeof window === 'undefined') {
+    return 'web';
+  }
+
+  const userAgent = navigator.userAgent || navigator.vendor || (window as any).opera;
+  
+  if (/android/i.test(userAgent)) {
+    return 'android';
+  }
+  
+  if (/iPad|iPhone|iPod/.test(userAgent) && !(window as any).MSStream) {
+    return 'ios';
+  }
+  
+  return 'web';
+}
+
+/**
+ * Foreground 메시지 수신 핸들러 등록
+ */
+export function onForegroundMessage(
+  callback: (payload: {
+    title?: string;
+    body?: string;
+    data?: Record<string, string>;
+  }) => void
+): () => void {
+  const messaging = getMessagingInstance();
+  if (!messaging) {
+    return () => {};
+  }
+
+  try {
+    const unsubscribe = onMessage(messaging, (payload) => {
+      console.log('Foreground 메시지 수신:', payload);
+
+      const notification = payload.notification;
+      if (notification) {
+        callback({
+          title: notification.title,
+          body: notification.body,
+          data: payload.data as Record<string, string> | undefined,
+        });
+
+        // 토스트 알림은 useFcm에서 처리하도록 콜백 전달
+        // toast는 클라이언트 코드에서 직접 사용
+      }
+    });
+
+    return unsubscribe;
+  } catch (error) {
+    console.error('Foreground 메시지 핸들러 등록 실패:', error);
+    return () => {};
+  }
+}
+
+
+```
+
+## FILE: src\lib\firebase\notices.service.ts
+```ts
+import { httpsCallable } from 'firebase/functions';
+import { functions } from './config';
+
+/**
+ * 공지 작성 및 푸시 발송 (callable)
+ * 
+ * ATOM-17: createNoticeWithPush 클라이언트 호출
+ */
+export const createNoticeWithPushFn = httpsCallable<
+  {
+    clubId: string;
+    title: string;
+    content: string;
+    pinned?: boolean;
+    requestId: string;
+  },
+  {
+    success: boolean;
+    postId: string;
+    pushStatus: 'SENT' | 'FAILED';
+    pushResult: {
+      sent: number;
+      failed: number;
+    } | null;
+  }
+>(functions, 'createNoticeWithPush');
+
+/**
+ * 공지 작성 및 푸시 발송
+ * 
+ * @param clubId 클럽 ID
+ * @param title 제목
+ * @param content 내용
+ * @param pinned 고정 여부
+ * @returns 게시글 ID 및 푸시 상태
+ */
+export async function createNoticeWithPush(
+  clubId: string,
+  title: string,
+  content: string,
+  pinned: boolean = false
+): Promise<{ postId: string; pushStatus: 'SENT' | 'FAILED'; pushResult: { sent: number; failed: number } | null }> {
+  // UUID 생성 (requestId)
+  const requestId = crypto.randomUUID();
+
+  const result = await createNoticeWithPushFn({
+    clubId,
+    title,
+    content,
+    pinned,
+    requestId,
+  });
+
+  return {
+    postId: result.data.postId,
+    pushStatus: result.data.pushStatus,
+    pushResult: result.data.pushResult,
+  };
+}
+
+
+```
+
+## FILE: src\lib\firebase\storage.service.ts
+```ts
+// Firebase Storage Service
+import {
+  ref,
+  uploadBytes,
+  uploadBytesResumable,
+  getDownloadURL,
+  deleteObject,
+  listAll,
+} from 'firebase/storage';
+import { storage } from './config';
+
+/**
+ * 프로필 사진 업로드
+ */
+export async function uploadProfilePhoto(
+  userId: string,
+  file: File,
+  onProgress?: (progress: number) => void
+): Promise<string> {
+  try {
+    const fileName = `${Date.now()}_${file.name}`;
+    const storageRef = ref(storage, `profiles/${userId}/${fileName}`);
+
+    if (onProgress) {
+      // 진행률 추적
+      const uploadTask = uploadBytesResumable(storageRef, file);
+
+      return new Promise((resolve, reject) => {
+        uploadTask.on(
+          'state_changed',
+          (snapshot) => {
+            const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+            onProgress(progress);
+          },
+          (error) => {
+            console.error('Upload error:', error);
+            reject(error);
+          },
+          async () => {
+            const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+            resolve(downloadURL);
+          }
+        );
+      });
+    } else {
+      // 진행률 추적 없이 업로드
+      await uploadBytes(storageRef, file);
+      return await getDownloadURL(storageRef);
+    }
+  } catch (error) {
+    console.error('Error uploading profile photo:', error);
+    throw error;
+  }
+}
+
+/**
+ * 게시글 첨부파일 업로드
+ */
+export async function uploadPostAttachment(
+  postId: string,
+  file: File,
+  onProgress?: (progress: number) => void
+): Promise<string> {
+  try {
+    const fileName = `${Date.now()}_${file.name}`;
+    const storageRef = ref(storage, `posts/${postId}/${fileName}`);
+
+    if (onProgress) {
+      const uploadTask = uploadBytesResumable(storageRef, file);
+
+      return new Promise((resolve, reject) => {
+        uploadTask.on(
+          'state_changed',
+          (snapshot) => {
+            const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+            onProgress(progress);
+          },
+          (error) => {
+            console.error('Upload error:', error);
+            reject(error);
+          },
+          async () => {
+            const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+            resolve(downloadURL);
+          }
+        );
+      });
+    } else {
+      await uploadBytes(storageRef, file);
+      return await getDownloadURL(storageRef);
+    }
+  } catch (error) {
+    console.error('Error uploading post attachment:', error);
+    throw error;
+  }
+}
+
+/**
+ * 파일 삭제
+ */
+export async function deleteFile(fileUrl: string): Promise<void> {
+  try {
+    const fileRef = ref(storage, fileUrl);
+    await deleteObject(fileRef);
+  } catch (error) {
+    console.error('Error deleting file:', error);
+    throw error;
+  }
+}
+
+/**
+ * 폴더 내 파일 목록 가져오기
+ */
+export async function listFiles(folderPath: string): Promise<string[]> {
+  try {
+    const folderRef = ref(storage, folderPath);
+    const result = await listAll(folderRef);
+
+    const urls = await Promise.all(
+      result.items.map((item) => getDownloadURL(item))
+    );
+
+    return urls;
+  } catch (error) {
+    console.error('Error listing files:', error);
+    return [];
+  }
+}
+
+/**
+ * 이미지 리사이즈 (클라이언트 사이드)
+ */
+export async function resizeImage(
+  file: File,
+  maxWidth: number,
+  maxHeight: number
+): Promise<File> {
+  return new Promise((resolve, reject) => {
+    const img = document.createElement('img');
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+
+    img.onload = () => {
+      let width = img.width;
+      let height = img.height;
+
+      if (width > height) {
+        if (width > maxWidth) {
+          height *= maxWidth / width;
+          width = maxWidth;
+        }
+      } else {
+        if (height > maxHeight) {
+          width *= maxHeight / height;
+          height = maxHeight;
+        }
+      }
+
+      canvas.width = width;
+      canvas.height = height;
+      ctx?.drawImage(img, 0, 0, width, height);
+
+      canvas.toBlob((blob) => {
+        if (blob) {
+          const resizedFile = new File([blob], file.name, {
+            type: file.type,
+            lastModified: Date.now(),
+          });
+          resolve(resizedFile);
+        } else {
+          reject(new Error('Failed to resize image'));
+        }
+      }, file.type);
+    };
+
+    img.onerror = () => {
+      reject(new Error('Failed to load image'));
+    };
+
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+/**
+ * 파일 유효성 검사
+ */
+export function validateFile(
+  file: File,
+  allowedTypes: string[],
+  maxSizeMB: number
+): { valid: boolean; error?: string } {
+  // 타입 검사
+  if (!allowedTypes.includes(file.type)) {
+    return {
+      valid: false,
+      error: `허용되지 않는 파일 형식입니다. (${allowedTypes.join(', ')})`,
+    };
+  }
+
+  // 크기 검사
+  const maxSizeBytes = maxSizeMB * 1024 * 1024;
+  if (file.size > maxSizeBytes) {
+    return {
+      valid: false,
+      error: `파일 크기가 너무 큽니다. (최대 ${maxSizeMB}MB)`,
+    };
+  }
+
+  return { valid: true };
+}
+
+/**
+ * 이미지 파일 유효성 검사
+ */
+export function validateImageFile(file: File): { valid: boolean; error?: string } {
+  return validateFile(
+    file,
+    ['image/jpeg', 'image/png', 'image/gif', 'image/webp'],
+    10 // 10MB
+  );
+}
+
+/**
+ * 비디오 파일 유효성 검사
+ */
+export function validateVideoFile(file: File): { valid: boolean; error?: string } {
+  return validateFile(
+    file,
+    ['video/mp4', 'video/webm', 'video/quicktime'],
+    100 // 100MB
+  );
+}
+
+```
+
+## FILE: src\lib\firebase\types.ts
+```ts
+// Firebase Firestore 데이터 타입 정의
+
+export type UserRole = 'PRESIDENT' | 'DIRECTOR' | 'TREASURER' | 'ADMIN' | 'MEMBER';
+export type PostType = 'notice' | 'free' | 'event';
+export type EventType = 'PRACTICE' | 'GAME';
+export type AttendanceStatus = 'attending' | 'absent' | 'maybe' | 'none';
+export type PushStatus = 'SENT' | 'FAILED' | 'PENDING';
+export type NotificationType = 'notice' | 'comment' | 'like' | 'event' | 'mention' | 'system';
+
+// User Document
+export interface UserDoc {
+  uid: string;
+  realName: string;
+  nickname?: string | null;
+  phone?: string | null;
+  photoURL?: string | null;
+  role: UserRole;
+  position?: string;
+  backNumber?: string;
+  status: 'pending' | 'active' | 'rejected' | 'withdrawn';
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+
+
+// Post Document
+export interface PostDoc {
+  id: string;
+  type: PostType;
+  title: string;
+  content: string;
+  authorId: string;
+  authorName: string;
+  authorPhotoURL?: string;
+  createdAt: Date;
+  updatedAt: Date;
+  pinned?: boolean;
+
+  // Event specific
+  eventType?: EventType;
+  startAt?: Date | null;
+  place?: string | null;
+  opponent?: string | null;
+  voteCloseAt?: Date;
+  voteClosed?: boolean;
+
+
+  // Push specific (notice only)
+  pushStatus?: PushStatus;
+  pushSentAt?: Date;
+  pushError?: string;
+}
+
+// Comment Document
+export interface CommentDoc {
+  id: string;
+  postId: string;
+  content: string;
+  authorId: string;
+  authorName: string;
+  authorPhotoURL?: string;
+  createdAt: Date;
+  updatedAt: Date;
+  deleted?: boolean;
+}
+
+// Attendance Document
+export interface AttendanceDoc {
+  id: string;
+  postId: string;
+  userId: string;
+  userName: string;
+  status: AttendanceStatus;
+  updatedAt: Date;
+}
+
+
+// Notification Document (알림)
+export interface NotificationDoc {
+  id: string;
+  userId: string;
+  type: NotificationType;
+  title: string;
+  message: string;
+  link?: string;
+  read: boolean;
+  createdAt: Date;
+}
+
+// Activity Log Document
+export interface ActivityLogDoc {
+  id: string;
+  userId: string;
+  userName: string;
+  type: 'post' | 'comment' | 'attendance' | 'vote';
+  action: string;
+  target?: string;
+  createdAt: Date;
+}
+```
+
+## FILE: src\lib\utils\userAgent.ts
+```ts
+export const isInAppBrowser = () => {
+    const userAgent = window.navigator.userAgent.toLowerCase();
+    const targetBrowsers = [
+        'kakao',
+        'naver',
+        'instagram',
+        'fb', // Facebook
+        'line',
+        'daum',
+    ];
+
+    return targetBrowsers.some((browser) => userAgent.includes(browser));
+};
+
+export const getBreakoutUrl = () => {
+    const url = window.location.href;
+    // Android intent scheme to force open in Chrome
+    return `intent://${url.replace(/^https?:\/\//, '')}#Intent;scheme=https;package=com.android.chrome;end`;
+};
+
+export const isAndroid = () => {
+    return /android/i.test(window.navigator.userAgent);
+};
+
+export const isIOS = () => {
+    return /iphone|ipad|ipod/i.test(window.navigator.userAgent);
+};
+
+```
+
+## FILE: src\main.tsx
+```tsx
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import App from './app/App';
+import './styles/index.css';
+
+// Global error handler to suppress AbortError and preview errors
+window.addEventListener('unhandledrejection', (event) => {
+  if (event.reason?.name === 'AbortError') {
+    // Suppress AbortError from being logged
+    event.preventDefault();
+    return;
+  }
+});
+
+// Suppress Vite preview warnings
+const originalWarn = console.warn;
+console.warn = (...args: any[]) => {
+  const warningMessage = args[0]?.toString() || '';
+  if (warningMessage.includes('logPreviewError') || warningMessage.includes('reduxState')) {
+    // Suppress Vite preview warnings
+    return;
+  }
+  originalWarn.apply(console, args);
+};
+
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+);
+```
+
+## FILE: src\styles\fonts.css
+```css
+
+```
+
+## FILE: src\styles\index.css
+```css
+@import './fonts.css';
+@import './tailwind.css';
+@import './theme.css';
+
+/* Custom global styles */
+@layer base {
+  /* Safe area support for mobile devices */
+  .pt-safe {
+    padding-top: env(safe-area-inset-top);
+  }
+  
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  
+  .pl-safe {
+    padding-left: env(safe-area-inset-left);
+  }
+  
+  .pr-safe {
+    padding-right: env(safe-area-inset-right);
+  }
+}
+
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+```
+
+## FILE: src\styles\tailwind.css
+```css
+@import 'tailwindcss' source(none);
+@source '../**/*.{js,ts,jsx,tsx}';
+
+@import 'tw-animate-css';
+
+```
+
+## FILE: src\styles\theme.css
+```css
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  --font-size: 16px;
+  --background: #f8f9fb;
+  --foreground: oklch(0.145 0 0);
+  --card: #ffffff;
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: #2563eb;
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.95 0.0058 264.53);
+  --secondary-foreground: #030213;
+  --muted: #ececf0;
+  --muted-foreground: #717182;
+  --accent: #e9ebef;
+  --accent-foreground: #030213;
+  --destructive: #d4183d;
+  --destructive-foreground: #ffffff;
+  --border: rgba(0, 0, 0, 0.08);
+  --input: transparent;
+  --input-background: #f3f3f5;
+  --switch-background: #cbced4;
+  --font-weight-medium: 600;
+  --font-weight-normal: 400;
+  --ring: #2563eb;
+  --chart-1: oklch(0.646 0.222 41.116);
+  --chart-2: oklch(0.6 0.118 184.704);
+  --chart-3: oklch(0.398 0.07 227.392);
+  --chart-4: oklch(0.828 0.189 84.429);
+  --chart-5: oklch(0.769 0.188 70.08);
+  --radius: 0.75rem;
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: #030213;
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+}
+
+.dark {
+  --background: #0a0a0f;
+  --foreground: oklch(0.985 0 0);
+  --card: #16161f;
+  --card-foreground: oklch(0.985 0 0);
+  --popover: #16161f;
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: #3b82f6;
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.396 0.141 25.723);
+  --destructive-foreground: oklch(0.637 0.237 25.331);
+  --border: rgba(255, 255, 255, 0.1);
+  --input: oklch(0.269 0 0);
+  --ring: #3b82f6;
+  --font-weight-medium: 600;
+  --font-weight-normal: 400;
+  --chart-1: oklch(0.488 0.243 264.376);
+  --chart-2: oklch(0.696 0.17 162.48);
+  --chart-3: oklch(0.769 0.188 70.08);
+  --chart-4: oklch(0.627 0.265 303.9);
+  --chart-5: oklch(0.645 0.246 16.439);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(0.269 0 0);
+  --sidebar-ring: oklch(0.439 0 0);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-input-background: var(--input-background);
+  --color-switch-background: var(--switch-background);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+
+  /**
+  * Default typography styles for HTML elements (h1-h4, p, label, button, input).
+  * These are in @layer base, so Tailwind utility classes (like text-sm, text-lg) automatically override them.
+  */
+
+  html {
+    font-size: var(--font-size);
+  }
+
+  h1 {
+    font-size: var(--text-2xl);
+    font-weight: var(--font-weight-medium);
+    line-height: 1.5;
+  }
+
+  h2 {
+    font-size: var(--text-xl);
+    font-weight: var(--font-weight-medium);
+    line-height: 1.5;
+  }
+
+  h3 {
+    font-size: var(--text-lg);
+    font-weight: var(--font-weight-medium);
+    line-height: 1.5;
+  }
+
+  h4 {
+    font-size: var(--text-base);
+    font-weight: var(--font-weight-medium);
+    line-height: 1.5;
+  }
+
+  label {
+    font-size: var(--text-base);
+    font-weight: var(--font-weight-medium);
+    line-height: 1.5;
+  }
+
+  button {
+    font-size: var(--text-base);
+    font-weight: var(--font-weight-medium);
+    line-height: 1.5;
+  }
+
+  input {
+    font-size: var(--text-base);
+    font-weight: var(--font-weight-normal);
+    line-height: 1.5;
+  }
+}
+```
+
+## FILE: src\vite-env.d.ts
+```ts
+/// <reference types="vite/client" />
+
+```
+

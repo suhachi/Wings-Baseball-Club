@@ -26,7 +26,7 @@ const errors_1 = require("../shared/errors");
  * 3. event post 생성 (type="event", voteClosed=false)
  * 4. audit: EVENT_CREATE
  */
-exports.createEventPost = (0, https_1.onCall)(async (req) => {
+exports.createEventPost = (0, https_1.onCall)({ region: 'asia-northeast3' }, async (req) => {
     const uid = (0, auth_1.requireAuth)(req);
     const clubId = (0, validate_1.reqString)(req.data?.clubId, 'clubId', 3, 64);
     const eventType = (0, validate_1.reqString)(req.data?.eventType, 'eventType', 4, 20);

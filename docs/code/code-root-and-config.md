@@ -12,6 +12,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <!-- PWA Meta Tags -->
     <meta name="theme-color" content="#2563eb" />
+    <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="WINGS" />
@@ -42,8 +43,13 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
+    "build:functions": "cd functions && npm run build",
     "dev": "vite",
-    "export:code": "node scripts/export-code-to-md.mjs"
+    "export:code": "node scripts/export-code-to-md.mjs",
+    "type-check": "tsc --noEmit",
+    "test:rules": "jest tests/rules/firestore.rules.test.ts",
+    "emulators:start": "firebase emulators:start --only firestore,auth",
+    "emulators:start:all": "firebase emulators:start"
   },
   "dependencies": {
     "@emotion/react": "11.14.0",
@@ -104,12 +110,18 @@
     "vaul": "1.1.2"
   },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.0",
     "@tailwindcss/vite": "4.1.12",
+    "@types/jest": "^29.5.14",
     "@types/node": "^20.11.24",
     "@types/react": "^18.2.64",
     "@types/react-dom": "^18.2.21",
     "@vitejs/plugin-react": "4.7.0",
+    "firebase-admin": "^12.0.0",
+    "firebase-tools": "^13.29.1",
+    "jest": "^29.7.0",
     "tailwindcss": "4.1.12",
+    "ts-jest": "^29.4.6",
     "typescript": "^5.2.2",
     "vite": "6.3.5"
   },
@@ -216,5 +228,10 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  build: {
+    outDir: 'dist',
+    emptyOutDir: true,
+  },
+  publicDir: 'public',
 })
 ```

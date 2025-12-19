@@ -27,6 +27,7 @@ const paths_1 = require("../shared/paths");
 exports.closeEventVotes = (0, scheduler_1.onSchedule)({
     schedule: 'every 5 minutes',
     timeZone: 'Asia/Seoul',
+    region: 'asia-northeast3',
 }, async (_event) => {
     const now = firestore_1.Timestamp.now();
     // μATOM-0541: scheduled closeEventVotes 쿼리

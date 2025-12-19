@@ -24,7 +24,7 @@ import { Err } from '../shared/errors';
  * 3. event post 생성 (type="event", voteClosed=false)
  * 4. audit: EVENT_CREATE
  */
-export const createEventPost = onCall(async (req) => {
+export const createEventPost = onCall({ region: 'asia-northeast3' }, async (req) => {
   const uid = requireAuth(req);
   const clubId = reqString(req.data?.clubId, 'clubId', 3, 64);
   const eventType = reqString(req.data?.eventType, 'eventType', 4, 20) as 'PRACTICE' | 'GAME';
@@ -47,7 +47,7 @@ export const createEventPost = onCall(async (req) => {
   if (!startAt) {
     throw Err.invalidArgument('startAt is required');
   }
-  
+
   let startAtDate: Date;
   if (typeof startAt === 'string') {
     startAtDate = new Date(startAt);

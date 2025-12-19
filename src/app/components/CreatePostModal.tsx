@@ -7,6 +7,8 @@ import { useClub } from '../contexts/ClubContext';
 import { toast } from 'sonner';
 import type { PostType } from '../contexts/DataContext';
 import { createEventPost } from '../../lib/firebase/events.service';
+import { createNoticeWithPush } from '../../lib/firebase/notices.service';
+import { Bell } from 'lucide-react'; // Icon for notice
 
 interface CreatePostModalProps {
   isOpen: boolean;
@@ -19,14 +21,15 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
   onClose,
   defaultType = 'free',
 }) => {
-  const { addPost } = useData();
-  const { user } = useAuth();
+  const { addPost, refreshPosts } = useData();
+  const { isAdmin } = useAuth();
   const { currentClubId } = useClub();
 
   const [postType, setPostType] = useState<PostType>(defaultType);
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [loading, setLoading] = useState(false);
+  const [pinned, setPinned] = useState(false); // For notice
 
   // μATOM-0534: 이벤트 작성 화면 (최소 입력)
   const [eventType, setEventType] = useState<'PRACTICE' | 'GAME'>('PRACTICE');
@@ -36,17 +39,46 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
   const [opponent, setOpponent] = useState('');
 
   // ATOM-14: free/event만 클라이언트에서 직접 생성 가능
-  // notice 생성 UI는 이 ATOM에서 금지
-  const postTypes: { id: PostType; label: string; icon: React.ElementType }[] = [
+  // notice 생성 UI는 이 ATOM에서 금지 -> v1.1.1: 관리자는 허용
+  const basePostTypes: { id: PostType; label: string; icon: React.ElementType }[] = [
     { id: 'free', label: '자유게시판', icon: FileText },
     { id: 'event', label: '이벤트/정모', icon: Users },
   ];
+
+  const postTypes = isAdmin()
+    ? [{ id: 'notice' as PostType, label: '공지사항', icon: Bell }, ...basePostTypes]
+    : basePostTypes;
+
+
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!title.trim() || !content.trim()) {
       toast.error('제목과 내용을 입력해주세요');
+      return;
+    }
+
+    // Notice creation (Admin only)
+    if (postType === 'notice') {
+      setLoading(true);
+      try {
+        await createNoticeWithPush(
+          currentClubId,
+          title.trim(),
+          content.trim(),
+          pinned
+        );
+        await refreshPosts();
+        toast.success('공지사항이 작성되었습니다 (알림 발송)');
+        onClose();
+        resetForm();
+      } catch (error: any) {
+        console.error('Error creating notice:', error);
+        toast.error(error.message || '공지 작성 중 오류가 발생했습니다');
+      } finally {
+        setLoading(false);
+      }
       return;
     }
 
@@ -67,7 +99,7 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
           return;
         }
 
-        const result = await createEventPost(
+        await createEventPost(
           currentClubId,
           eventType,
           title.trim(),
@@ -76,6 +108,7 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
           place.trim(),
           opponent.trim() || undefined
         );
+        await refreshPosts();
 
         toast.success('이벤트가 작성되었습니다');
         onClose();
@@ -126,6 +159,7 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
     setStartTime('');
     setPlace('');
     setOpponent('');
+    setPinned(false);
   };
 
   return (
@@ -190,6 +224,23 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
                   </div>
                 </div>
 
+                {/* Pinned Checkbox (Notice Only) */}
+                {postType === 'notice' && (
+                  <div className="flex items-center gap-2 mb-4 p-3 bg-red-50 dark:bg-red-900/10 rounded-lg border border-red-100 dark:border-red-900/30">
+                    <Bell className="w-4 h-4 text-red-500" />
+                    <div className="flex-1">
+                      <span className="text-sm font-medium text-red-800 dark:text-red-300">중요 공지</span>
+                      <p className="text-xs text-red-600 dark:text-red-400">체크 시 상단에 고정되고 알림이 강조됩니다.</p>
+                    </div>
+                    <input
+                      type="checkbox"
+                      className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      checked={pinned}
+                      onChange={(e) => setPinned(e.target.checked)}
+                    />
+                  </div>
+                )}
+
                 {/* Title */}
                 <div>
                   <label className="block text-sm font-medium mb-2">제목</label>
@@ -224,11 +275,10 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
                         <button
                           type="button"
                           onClick={() => setEventType('PRACTICE')}
-                          className={`p-3 rounded-lg border-2 transition-all ${
-                            eventType === 'PRACTICE'
-                              ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/20'
-                              : 'border-gray-200 dark:border-gray-700'
-                          }`}
+                          className={`p-3 rounded-lg border-2 transition-all ${eventType === 'PRACTICE'
+                            ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/20'
+                            : 'border-gray-200 dark:border-gray-700'
+                            }`}
                         >
                           <Calendar className="w-5 h-5 mx-auto mb-1" />
                           <span className="text-xs">연습</span>
@@ -236,11 +286,10 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
                         <button
                           type="button"
                           onClick={() => setEventType('GAME')}
-                          className={`p-3 rounded-lg border-2 transition-all ${
-                            eventType === 'GAME'
-                              ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/20'
-                              : 'border-gray-200 dark:border-gray-700'
-                          }`}
+                          className={`p-3 rounded-lg border-2 transition-all ${eventType === 'GAME'
+                            ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/20'
+                            : 'border-gray-200 dark:border-gray-700'
+                            }`}
                         >
                           <Trophy className="w-5 h-5 mx-auto mb-1" />
                           <span className="text-xs">경기</span>

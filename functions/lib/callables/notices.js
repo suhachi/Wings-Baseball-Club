@@ -1,7 +1,40 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createNoticeWithPush = void 0;
-const https_1 = require("firebase-functions/v2/https");
+const functions = __importStar(require("firebase-functions"));
 const firestore_1 = require("firebase-admin/firestore");
 const auth_1 = require("../shared/auth");
 const validate_1 = require("../shared/validate");
@@ -24,16 +57,39 @@ const paths_1 = require("../shared/paths");
  * 4. audit: NOTICE_CREATE
  *
  * 정책: 푸시 실패해도 게시글은 유지 (정책 고정)
+ *
+ * REFACTOR: Standardized to Gen 1 to ensure compatibility with cloudfunctions.net URL pattern.
  */
-exports.createNoticeWithPush = (0, https_1.onCall)(async (req) => {
-    const uid = (0, auth_1.requireAuth)(req);
-    const clubId = (0, validate_1.reqString)(req.data?.clubId, 'clubId', 3, 64);
-    const title = (0, validate_1.reqString)(req.data?.title, 'title', 1, 200);
-    const content = (0, validate_1.reqString)(req.data?.content, 'content', 1, 5000);
-    const pinned = (0, validate_1.optBoolean)(req.data?.pinned, 'pinned') ?? false;
-    const requestId = (0, validate_1.reqString)(req.data?.requestId, 'requestId', 1, 128); // 필수 (멱등성용)
-    // adminLike 권한 확인
-    await (0, auth_1.requireRole)(clubId, uid, ['PRESIDENT', 'DIRECTOR', 'ADMIN']);
+exports.createNoticeWithPush = functions
+    .region('asia-northeast3')
+    .https.onCall(async (data, context) => {
+    // 1. Auth Check
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'Authentication required');
+    }
+    const uid = context.auth.uid;
+    const clubId = (0, validate_1.reqString)(data?.clubId, 'clubId', 3, 64);
+    const title = (0, validate_1.reqString)(data?.title, 'title', 1, 200);
+    const content = (0, validate_1.reqString)(data?.content, 'content', 1, 5000);
+    const pinned = (0, validate_1.optBoolean)(data?.pinned, 'pinned') ?? false;
+    const requestId = (0, validate_1.reqString)(data?.requestId, 'requestId', 1, 128); // 필수 (멱등성용)
+    // 2. Role Check (adminLike)
+    // getMemberRole might throw V2 error, but we try to match wire format.
+    // If it fails, catch and rethrow V1 error?
+    // Let's assume Err helper works or just catch generic.
+    try {
+        const role = await (0, auth_1.getMemberRole)(clubId, uid);
+        if (!['PRESIDENT', 'DIRECTOR', 'ADMIN'].includes(role)) {
+            throw new functions.https.HttpsError('permission-denied', 'Insufficient role');
+        }
+    }
+    catch (e) {
+        // If it is HttpsError (v2 or v1), rethrow.
+        // Check code.
+        if (e.code)
+            throw e;
+        throw new functions.https.HttpsError('internal', 'Role check failed', e.message);
+    }
     // 멱등성 키 생성
     const idempotencyKey = `notice:${clubId}:${requestId}`;
     return (0, idempotency_1.withIdempotency)(clubId, idempotencyKey, async () => {
@@ -44,7 +100,7 @@ exports.createNoticeWithPush = (0, https_1.onCall)(async (req) => {
             title,
             content,
             authorId: uid,
-            authorName: '', // 나중에 members에서 조회하여 채워넣기
+            authorName: '',
             authorPhotoURL: null,
             pinned,
             pushStatus: 'PENDING',
@@ -82,13 +138,10 @@ exports.createNoticeWithPush = (0, https_1.onCall)(async (req) => {
                     failed: fcmResult.failed,
                     invalidTokens: fcmResult.invalidTokens || [],
                 };
-                // 성공 (sent > 0) 또는 실패했지만 재시도 횟수 초과
                 if (pushResult && (pushResult.sent > 0 || attempt === maxRetries)) {
                     break;
                 }
-                // 실패했지만 재시도 가능
                 if (attempt < maxRetries) {
-                    // 1초 대기 후 재시도
                     await new Promise(resolve => setTimeout(resolve, 1000));
                 }
             }
@@ -96,10 +149,8 @@ exports.createNoticeWithPush = (0, https_1.onCall)(async (req) => {
                 console.error(`푸시 발송 실패 (시도 ${attempt}/${maxRetries}):`, error);
                 pushError = error.message || String(error);
                 if (attempt === maxRetries) {
-                    // 최종 실패
                     break;
                 }
-                // 재시도 전 대기
                 await new Promise(resolve => setTimeout(resolve, 1000));
             }
         }

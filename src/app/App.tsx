@@ -100,6 +100,14 @@ function AppContent() {
           showNotification: false,
           showSettings: false
         };
+      case 'my-activity':
+        return {
+          title: '내 활동',
+          showBack: true,
+          onBack: () => handlePageChange('my'),
+          showNotification: false,
+          showSettings: false
+        };
       case 'notifications':
         return {
           title: '알림',
@@ -135,9 +143,9 @@ function AppContent() {
   const handlePageChange = (page: PageType) => {
     setCurrentPage(page);
     // Update activeTab if it's a main tab
-      if (page !== 'settings' && page !== 'notifications' && page !== 'admin') {
-        setActiveTab(page as 'home' | 'boards' | 'my');
-      }
+    if (page === 'home' || page === 'boards' || page === 'my') {
+      setActiveTab(page);
+    }
   };
 
   const handleNavigateToAdmin = (tab: 'members' | 'stats' | 'notices' = 'members') => {

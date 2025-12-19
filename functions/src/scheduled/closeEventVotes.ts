@@ -25,6 +25,7 @@ import { postCol } from '../shared/paths';
 export const closeEventVotes = onSchedule({
   schedule: 'every 5 minutes',
   timeZone: 'Asia/Seoul',
+  region: 'asia-northeast3',
 }, async (_event) => {
   const now = Timestamp.now();
 
@@ -32,7 +33,7 @@ export const closeEventVotes = onSchedule({
   // voteCloseAt <= now && voteClosed==false인 게시글 조회
   // 주의: 모든 클럽을 순회해야 함 (현재는 기본 클럽만 처리)
   const defaultClubId = 'default-club'; // TODO: 다중 클럽 지원 시 변경 필요
-  
+
   const postsCol = postCol(defaultClubId);
   const query = postsCol
     .where('type', '==', 'event')

@@ -5,72 +5,25 @@
 ## src/lib/firebase/auth.service.ts
 
 ```ts
-```typescript
 // Firebase Authentication Service
 import {
-  signInAnonymously,
   signOut,
   onAuthStateChanged,
   User as FirebaseUser,
   GoogleAuthProvider,
   signInWithPopup,
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  updateProfile,
 } from 'firebase/auth';
 import {
   doc,
   getDoc,
   setDoc,
+  updateDoc,
   serverTimestamp,
-  collection,
-  query,
-  where,
-  getDocs,
-  limit,
-  Timestamp
 } from 'firebase/firestore';
 import { auth, db } from './config';
 import type { UserDoc, UserRole } from './types';
-// Invite Code Data Interface
-export interface InviteCodeData {
-  code: string;
-  role: UserRole;
-  isUsed: boolean;
-  maxUses: number;
-  currentUses: number;
-  expiresAt?: Timestamp;
-}
 /**
- * 1. 초대 코드 유효성 검증 (로그인 전 단계)
- * 유효하면 초대 코드 데이터를 반환하고, 아니면 에러를 던짐.
- */
-export async function validateInviteCode(inviteCode: string): Promise<InviteCodeData> {
-  try {
-    const inviteCodesRef = collection(db, 'inviteCodes');
-    const q = query(inviteCodesRef, where('code', '==', inviteCode), limit(1));
-    const querySnapshot = await getDocs(q);
-    if (querySnapshot.empty) {
-      throw new Error('존재하지 않는 초대 코드입니다.');
-    }
-    const inviteDoc = querySnapshot.docs[0];
-    const inviteData = inviteDoc.data() as InviteCodeData;
-    if (inviteData.isUsed && inviteData.currentUses >= inviteData.maxUses) {
-      throw new Error('이미 사용된 초대 코드입니다.');
-    }
-    if (inviteData.expiresAt && inviteData.expiresAt.toDate() < new Date()) {
-      throw new Error('만료된 초대 코드입니다.');
-    }
-    return inviteData;
-  } catch (error: any) {
-    if (error.code === 'unavailable') {
-      throw new Error('인터넷 연결을 확인해주세요.');
-    }
-    throw error;
-  }
-}
-/**
- * 2-A. 구글 로그인
+ * [POLICY] Google OAuth Only Login
  */
 export async function loginWithGoogle(): Promise<FirebaseUser> {
   const provider = new GoogleAuthProvider();
@@ -83,86 +36,42 @@ export async function loginWithGoogle(): Promise<FirebaseUser> {
   }
 }
 /**
- * 2-B. 이메일 회원가입
- */
-export async function signUpWithEmail(email: string, password: string, name: string): Promise<FirebaseUser> {
-  try {
-    const result = await createUserWithEmailAndPassword(auth, email, password);
-    await updateProfile(result.user, { displayName: name });
-    return result.user;
-  } catch (error: any) {
-    console.error('Email SignUp Error:', error);
-    if (error.code === 'auth/email-already-in-use') {
-      throw new Error('이미 사용 중인 이메일입니다.');
-    }
-    throw error;
-  }
-}
-/**
- * 2-C. 이메일 로그인
- */
-export async function loginWithEmail(email: string, password: string): Promise<FirebaseUser> {
-  try {
-    const result = await signInWithEmailAndPassword(auth, email, password);
-    return result.user;
-  } catch (error: any) {
-    console.error('Email Login Error:', error);
-    if (error.code === 'auth/invalid-credential') {
-      throw new Error('이메일 또는 비밀번호가 올바르지 않습니다.');
-    }
-    throw error;
-  }
-}
-/**
- * 3. 계정 생성 (로그인 성공 후 Firestore 처리)
- * 초대 코드 사용 처리 및 UserDoc 생성
+ * [POLICY] Simplified Account Creation
+ * New users are created as 'pending'.
  */
 export async function createAccount(
   user: FirebaseUser,
-  inviteCode: string,
   realName: string,
   nickname?: string,
   phone?: string
 ): Promise<UserDoc> {
   try {
-    // 초대 코드 데이터 다시 가져오기 (Doc Ref 필요)
-    const inviteCodesRef = collection(db, 'inviteCodes');
-    const q = query(inviteCodesRef, where('code', '==', inviteCode), limit(1));
-    const querySnapshot = await getDocs(q);
-    // 이 시점에서 코드가 없거나 만료되었을 수도 있지만,
-    // validateInviteCode를 통과했다고 가정하고 진행 (혹은 여기서 다시 검증)
-    if (querySnapshot.empty) throw new Error('Invalid code during creation');
-    const inviteDoc = querySnapshot.docs[0];
-    const inviteData = inviteDoc.data();
+    const role: UserRole = 'MEMBER';
+    const clubId = 'WINGS'; // Default club
     const userData: UserDoc = {
       uid: user.uid,
       realName,
       nickname: nickname || user.displayName || '',
-      phone: phone,
-      photoURL: user.photoURL || undefined,
-      role: inviteData.role || 'MEMBER',
-      status: 'active',
+      phone: phone || null,
+      photoURL: user.photoURL || null,
+      role: role,
+      status: 'pending', // POLICY: Must be manually approved/activated by admin
       createdAt: new Date(),
       updatedAt: new Date(),
     };
-    // Firestore에 사용자 정보 저장
+    // 1. Write to global users collection (Profile)
     await setDoc(doc(db, 'users', user.uid), {
       ...userData,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
-    // 초대 코드 사용 처리
-    await setDoc(
-      inviteDoc.ref,
-      {
-        isUsed: true,
-        usedBy: user.uid,
-        usedByName: realName,
-        usedAt: serverTimestamp(),
-        currentUses: inviteData.currentUses + 1,
-      },
-      { merge: true }
-    );
+    // 2. Add to Club Members collection (Membership)
+    await setDoc(doc(db, 'clubs', clubId, 'members', user.uid), {
+      ...userData,
+      clubId,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
     return userData;
   } catch (error) {
     console.error('Error creating account:', error);
@@ -170,44 +79,49 @@ export async function createAccount(
   }
 }
 /**
- * Legacy: 초대 코드로 회원가입 (익명) - DEPRECATED via AUTH-03
- * 사용하는 곳이 없으면 삭제 예정. 호환성을 위해 남겨둠.
+ * Check if user document exists
  */
-export async function redeemInviteCode(
-  inviteCode: string,
-  realName: string
-): Promise<UserDoc> {
-   // Legacy implementation calling new logic steps internally?
-   // No, just keep as is or error. Let's redirect to validateInviteCode manually in UI.
-   throw new Error('This method is deprecated. Use validateInviteCode + createAccount.');
+export async function checkUserExists(uid: string): Promise<boolean> {
+  const userRef = doc(db, 'users', uid);
+  const userSnap = await getDoc(userRef);
+  return userSnap.exists();
 }
 /**
- * 현재 사용자 정보 가져오기
+ * Get current user data with KST dates
  */
 export async function getCurrentUserData(uid: string): Promise<UserDoc | null> {
   try {
-    const userDoc = await getDoc(doc(db, 'users', uid));
+    const userRef = doc(db, 'users', uid);
+    const userDoc = await getDoc(userRef);
     if (!userDoc.exists()) {
       return null;
     }
-    const data = userDoc.data();
+    const data = userDoc.data() as UserDoc;
+    // [TEMP] Auto-Promote dev email to ADMIN
+    const rawData = data as any;
+    if (rawData.email === 'jsbae59@gmail.com' && data.role !== 'ADMIN') {
+      await updateDoc(userRef, { role: 'ADMIN', status: 'active' });
+      const memberRef = doc(db, 'clubs', 'WINGS', 'members', uid);
+      const memberSnap = await getDoc(memberRef);
+      if (memberSnap.exists()) {
+        await updateDoc(memberRef, { role: 'ADMIN', status: 'active' });
+      }
+      data.role = 'ADMIN';
+      data.status = 'active';
+    }
     return {
       ...data,
-      createdAt: data.createdAt?.toDate() || new Date(),
-      updatedAt: data.updatedAt?.toDate() || new Date(),
+      createdAt: (data.createdAt as any)?.toDate?.() || new Date(),
+      updatedAt: (data.updatedAt as any)?.toDate?.() || new Date(),
     } as UserDoc;
   } catch (error: any) {
-    // Firebase offline error handling
-    if (error.code === 'unavailable') {
-      console.warn('Firebase is offline. Using cached data if available.');
-      return null;
-    }
+    if (error.code === 'unavailable') return null;
     console.error('Error getting user data:', error);
     return null;
   }
 }
 /**
- * 사용자 정보 업데이트
+ * Update user profile
  */
 export async function updateUserData(
   uid: string,
@@ -215,10 +129,15 @@ export async function updateUserData(
 ): Promise<void> {
   try {
     const userRef = doc(db, 'users', uid);
+    const cleanUpdates = JSON.parse(JSON.stringify(updates));
+    const sanitizedUpdates = Object.entries(cleanUpdates).reduce((acc, [key, value]) => {
+      if (value !== undefined) acc[key] = value;
+      return acc;
+    }, {} as any);
     await setDoc(
       userRef,
       {
-        ...updates,
+        ...sanitizedUpdates,
         updatedAt: serverTimestamp(),
       },
       { merge: true }
@@ -229,101 +148,27 @@ export async function updateUserData(
   }
 }
 /**
- * 로그아웃
+ * Logout
  */
 export async function logout(): Promise<void> {
-  try {
-    await signOut(auth);
-  } catch (error) {
-    console.error('Error signing out:', error);
-    throw error;
-  }
+  await signOut(auth);
 }
 /**
- * 인증 상태 감지
+ * Auth state listener
  */
 export function onAuthStateChange(
   callback: (user: FirebaseUser | null) => void
 ): () => void {
   return onAuthStateChanged(auth, callback);
 }
-/**
- * 초대 코드 생성 (관리자만)
- */
-export async function createInviteCode(
-  code: string,
-  role: UserRole,
-  createdBy: string,
-  createdByName: string,
-  maxUses: number = 1,
-  expiresInDays?: number
-): Promise<void> {
-  try {
-    const inviteCodeData: any = {
-      code,
-      role,
-      createdBy,
-      createdByName,
-      createdAt: serverTimestamp(),
-      isUsed: false,
-      maxUses,
-      currentUses: 0,
-    };
-    if (expiresInDays) {
-      const expiresAt = new Date();
-      expiresAt.setDate(expiresAt.getDate() + expiresInDays);
-      inviteCodeData.expiresAt = expiresAt;
-    }
-    await setDoc(doc(db, 'inviteCodes', code), inviteCodeData);
-  } catch (error) {
-    console.error('Error creating invite code:', error);
-    throw error;
-  }
-}
-/**
- * 초대 코드 목록 가져오기 (관리자만)
- */
-export async function getInviteCodes(): Promise<any[]> {
-  try {
-    const { collection, getDocs, query, orderBy } = await import('firebase/firestore');
-    const inviteCodesRef = collection(db, 'inviteCodes');
-    const q = query(inviteCodesRef, orderBy('createdAt', 'desc'));
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-      createdAt: doc.data().createdAt?.toDate(),
-      usedAt: doc.data().usedAt?.toDate(),
-      expiresAt: doc.data().expiresAt?.toDate(),
-    }));
-  } catch (error) {
-    console.error('Error getting invite codes:', error);
-    return [];
-  }
-}
-/**
- * 사용자 역할 확인 함수들
- */
+// --------------------------------------------------------------------------------------------------------------------
+// RBAC HELPERS
+// --------------------------------------------------------------------------------------------------------------------
 export function isAdmin(role: UserRole): boolean {
-  return ['PRESIDENT', 'DIRECTOR', 'ADMIN'].includes(role);
+  return ['PRESIDENT', 'DIRECTOR', 'ADMIN', 'TREASURER'].includes(role);
 }
 export function isTreasury(role: UserRole): boolean {
   return ['PRESIDENT', 'TREASURER'].includes(role);
-}
-export function canManageMembers(role: UserRole): boolean {
-  return ['PRESIDENT', 'DIRECTOR', 'ADMIN'].includes(role);
-}
-export function canCreatePosts(role: UserRole): boolean {
-  return true; // 모든 회원 가능
-}
-export function canDeletePosts(role: UserRole): boolean {
-  return ['PRESIDENT', 'DIRECTOR', 'ADMIN'].includes(role);
-}
-export function canManageFinance(role: UserRole): boolean {
-  return ['PRESIDENT', 'TREASURER'].includes(role);
-}
-export function canRecordGame(role: UserRole): boolean {
-  return ['PRESIDENT', 'DIRECTOR', 'ADMIN'].includes(role);
 }
 ```
 
@@ -337,9 +182,10 @@ export function canRecordGame(role: UserRole): boolean {
 // 프로젝트 설정 > 일반 > 내 앱 > Firebase SDK snippet > 구성에서 확인할 수 있습니다
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore, enableIndexedDbPersistence, CACHE_SIZE_UNLIMITED } from 'firebase/firestore';
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, CACHE_SIZE_UNLIMITED } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import { getFunctions } from 'firebase/functions';
+// Note: getMessaging은 클라이언트에서만 사용하므로 messaging.service.ts에서 import
 const firebaseConfig = {
   // 우선순위: .env 값 > 아래 기본값 (사용자가 제공한 Firebase 설정)
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY || 'AIzaSyACk1-QVyol4r6TKmNcDXHbuv3NwWbjmJU',
@@ -354,27 +200,15 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 // Firebase 서비스 초기화
 export const auth = getAuth(app);
-export const db = getFirestore(app);
+// Firestore 초기화 (New Persistence API)
+export const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({
+    tabManager: persistentMultipleTabManager(),
+    cacheSizeBytes: CACHE_SIZE_UNLIMITED
+  })
+});
 export const storage = getStorage(app);
 export const functions = getFunctions(app, 'asia-northeast3'); // 서울 리전
-// Firestore 오프라인 persistence 활성화 (PWA 지원)
-// 단, 개발 환경에서는 여러 탭이 열려있을 수 있으므로 에러를 무시합니다
-if (typeof window !== 'undefined') {
-  enableIndexedDbPersistence(db, {
-    cacheSizeBytes: CACHE_SIZE_UNLIMITED
-  }).catch((err) => {
-    if (err.code === 'failed-precondition') {
-      // 여러 탭이 열려있을 때
-      console.warn('⚠️ Firestore persistence failed: Multiple tabs open');
-    } else if (err.code === 'unimplemented') {
-      // 브라우저가 지원하지 않을 때
-      console.warn('⚠️ Firestore persistence not supported');
-    } else {
-      // 기타 에러는 무시 (예: 오프라인 상태)
-      console.warn('⚠️ Firestore persistence warning:', err.code);
-    }
-  });
-}
 // 전역 Firebase 에러 핸들러
 const originalConsoleError = console.error;
 console.error = (...args: any[]) => {
@@ -393,6 +227,75 @@ console.error = (...args: any[]) => {
 export default app;
 ```
 
+## src/lib/firebase/events.service.ts
+
+```ts
+import { httpsCallable } from 'firebase/functions';
+import { functions } from './config';
+/**
+ * 이벤트 게시글 생성 (callable)
+ *
+ * μATOM-0534: 프론트 이벤트 작성 화면 + callable 호출
+ */
+export const createEventPostFn = httpsCallable<
+  {
+    clubId: string;
+    eventType: 'PRACTICE' | 'GAME';
+    title: string;
+    content: string;
+    startAt: string | number; // ISO string or timestamp
+    place: string;
+    opponent?: string;
+    requestId: string;
+  },
+  {
+    success: boolean;
+    postId: string;
+    voteCloseAt: string; // ISO string
+  }
+>(functions, 'createEventPost');
+/**
+ * 이벤트 게시글 생성
+ *
+ * @param clubId 클럽 ID
+ * @param eventType 이벤트 타입 (PRACTICE | GAME)
+ * @param title 제목
+ * @param content 내용
+ * @param startAt 시작 일시 (Date 또는 ISO string)
+ * @param place 장소
+ * @param opponent 상대팀 (선택)
+ * @returns 게시글 ID 및 투표 마감 시간
+ */
+export async function createEventPost(
+  clubId: string,
+  eventType: 'PRACTICE' | 'GAME',
+  title: string,
+  content: string,
+  startAt: Date | string,
+  place: string,
+  opponent?: string
+): Promise<{ postId: string; voteCloseAt: string }> {
+  // UUID 생성 (requestId)
+  const requestId = crypto.randomUUID();
+  // startAt을 ISO string으로 변환
+  const startAtISO = typeof startAt === 'string' ? startAt : startAt.toISOString();
+  const result = await createEventPostFn({
+    clubId,
+    eventType,
+    title,
+    content,
+    startAt: startAtISO,
+    place,
+    opponent,
+    requestId,
+  });
+  return {
+    postId: result.data.postId,
+    voteCloseAt: result.data.voteCloseAt,
+  };
+}
+```
+
 ## src/lib/firebase/firestore.service.ts
 
 ```ts
@@ -409,19 +312,18 @@ import {
   where,
   orderBy,
   limit,
+  startAfter,
   serverTimestamp,
   Timestamp,
-  onSnapshot,
   addDoc,
+  QueryDocumentSnapshot,
+  DocumentData,
 } from 'firebase/firestore';
 import { db } from './config';
-import type {
+import {
   PostDoc,
   CommentDoc,
   AttendanceDoc,
-  FinanceDoc,
-  BatterRecordDoc,
-  PitcherRecordDoc,
   NotificationDoc,
 } from './types';
 // Helper to get collection refs
@@ -447,29 +349,38 @@ export async function createPost(clubId: string, postData: Omit<PostDoc, 'id' | 
 }
 /**
  * 게시글 목록 가져오기
+ * μATOM-0302: 쿼리 규격 통일 (orderBy createdAt desc, limit N)
  */
-export async function getPosts(clubId: string, postType?: string, limitCount: number = 50): Promise<PostDoc[]> {
+export async function getPosts(
+  clubId: string,
+  postType?: 'notice' | 'free' | 'event',
+  limitCount: number = 50,
+  lastVisible?: QueryDocumentSnapshot<DocumentData>
+): Promise<{ posts: PostDoc[]; lastDoc: QueryDocumentSnapshot<DocumentData> | null }> {
   try {
     const postsRef = getClubCol(clubId, 'posts');
     let q = query(postsRef, orderBy('createdAt', 'desc'), limit(limitCount));
     if (postType) {
       q = query(postsRef, where('type', '==', postType), orderBy('createdAt', 'desc'), limit(limitCount));
     }
+    if (lastVisible) {
+      q = query(q, startAfter(lastVisible));
+    }
     const snapshot = await getDocs(q);
-    return snapshot.docs.map((doc) => ({
+    const posts = snapshot.docs.map((doc) => ({
       id: doc.id,
       ...doc.data(),
       createdAt: (doc.data().createdAt as Timestamp)?.toDate() || new Date(),
       updatedAt: (doc.data().updatedAt as Timestamp)?.toDate() || new Date(),
       startAt: (doc.data().startAt as Timestamp)?.toDate(),
       voteCloseAt: (doc.data().voteCloseAt as Timestamp)?.toDate(),
-      closeAt: (doc.data().closeAt as Timestamp)?.toDate(),
-      recordingLockedAt: (doc.data().recordingLockedAt as Timestamp)?.toDate(),
       pushSentAt: (doc.data().pushSentAt as Timestamp)?.toDate(),
     })) as PostDoc[];
+    const lastDoc = snapshot.docs[snapshot.docs.length - 1] || null;
+    return { posts, lastDoc };
   } catch (error) {
     console.error('Error getting posts:', error);
-    return [];
+    return { posts: [], lastDoc: null };
   }
 }
 /**
@@ -479,7 +390,7 @@ export async function getPost(clubId: string, postId: string): Promise<PostDoc |
   try {
     const postDoc = await getDoc(getClubDoc(clubId, 'posts', postId));
     if (!postDoc.exists()) return null;
-    const data = postDoc.data();
+    const data = postDoc.data() as any;
     return {
       id: postDoc.id,
       ...data,
@@ -560,6 +471,21 @@ export async function getComments(clubId: string, postId: string): Promise<Comme
   } catch (error) {
     console.error('Error getting comments:', error);
     return [];
+  }
+}
+/**
+ * 댓글 업데이트
+ */
+export async function updateComment(clubId: string, postId: string, commentId: string, updates: Partial<CommentDoc>): Promise<void> {
+  try {
+    const commentRef = doc(db, 'clubs', clubId, 'posts', postId, 'comments', commentId);
+    await updateDoc(commentRef, {
+      ...updates,
+      updatedAt: serverTimestamp(),
+    });
+  } catch (error) {
+    console.error('Error updating comment:', error);
+    throw error;
   }
 }
 /**
@@ -675,6 +601,29 @@ export async function getAllMembers(clubId: string): Promise<any[]> {
   }
 }
 /**
+ * 특정 멤버 조회 (clubs/{clubId}/members/{uid})
+ * ATOM-08: Access Gate에서 사용
+ */
+export async function getMember(clubId: string, uid: string): Promise<any | null> {
+  try {
+    const memberRef = getClubDoc(clubId, 'members', uid);
+    const memberDoc = await getDoc(memberRef);
+    if (!memberDoc.exists()) {
+      return null;
+    }
+    const data = memberDoc.data();
+    return {
+      id: memberDoc.id,
+      ...data,
+      createdAt: (data.createdAt as Timestamp)?.toDate(),
+      updatedAt: (data.updatedAt as Timestamp)?.toDate(),
+    };
+  } catch (error) {
+    console.error('Error getting member:', error);
+    return null;
+  }
+}
+/**
  * 멤버 정보 업데이트 (관리자)
  */
 export async function updateMember(clubId: string, userId: string, updates: any): Promise<void> {
@@ -687,177 +636,6 @@ export async function updateMember(clubId: string, userId: string, updates: any)
   } catch (error) {
     console.error('Error updating member:', error);
     throw error;
-  }
-}
-// ===== INVITE CODES =====
-// PRD: `clubs/{clubId}/invites`
-/**
- * 초대 코드 생성
- */
-export async function createInviteCode(clubId: string, codeData: Omit<any, 'id' | 'createdAt'>): Promise<string> {
-  try {
-    // invite code is docId? Yes.
-    const inviteRef = getClubDoc(clubId, 'invites', codeData.code);
-    await setDoc(inviteRef, {
-      ...codeData,
-      createdAt: serverTimestamp(),
-    });
-    return codeData.code;
-  } catch (error) {
-    console.error('Error creating invite code:', error);
-    throw error;
-  }
-}
-/**
- * 초대 코드 목록 가져오기
- */
-export async function getInviteCodes(clubId: string): Promise<any[]> {
-  try {
-    const invitesRef = getClubCol(clubId, 'invites');
-    const q = query(invitesRef, orderBy('createdAt', 'desc'));
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-      createdAt: (doc.data().createdAt as Timestamp)?.toDate(),
-      expiresAt: (doc.data().expiresAt as Timestamp)?.toDate(),
-      usedAt: (doc.data().usedAt as Timestamp)?.toDate(),
-    }));
-  } catch (error) {
-    console.error('Error getting invite codes:', error);
-    return [];
-  }
-}
-/**
- * 초대 코드 삭제
- */
-export async function deleteInviteCode(clubId: string, code: string): Promise<void> {
-  try {
-    await deleteDoc(getClubDoc(clubId, 'invites', code));
-  } catch (error) {
-    console.error('Error deleting invite code:', error);
-    throw error;
-  }
-}
-// ===== FINANCE (LEDGER) =====
-// PRD: `clubs/{clubId}/ledger` or `dues`.
-// Legacy expects `FinanceDoc`. I will map `ledger` to `FinanceDoc`.
-/**
- * 회비/회계 내역 추가
- */
-export async function addFinance(clubId: string, financeData: Omit<FinanceDoc, 'id' | 'createdAt'>): Promise<string> {
-  try {
-    // using 'ledger' collection to align with PRD, but keeping type compatibility via mapping
-    const ledgerRef = getClubCol(clubId, 'ledger');
-    const docRef = await addDoc(ledgerRef, {
-      ...financeData,
-      createdAt: serverTimestamp(),
-    });
-    return docRef.id;
-  } catch (error) {
-    console.error('Error adding finance:', error);
-    throw error;
-  }
-}
-/**
- * 회비/회계 내역 가져오기
- */
-export async function getFinances(clubId: string, limitCount: number = 100): Promise<FinanceDoc[]> {
-  try {
-    const ledgerRef = getClubCol(clubId, 'ledger');
-    const q = query(ledgerRef, orderBy('date', 'desc'), limit(limitCount));
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-      date: (doc.data().date as Timestamp)?.toDate() || new Date(),
-      createdAt: (doc.data().createdAt as Timestamp)?.toDate() || new Date(),
-    })) as FinanceDoc[];
-  } catch (error) {
-    console.error('Error getting finances:', error);
-    return [];
-  }
-}
-/**
- * 회비/회계 내역 삭제
- */
-export async function deleteFinance(clubId: string, financeId: string): Promise<void> {
-  try {
-    await deleteDoc(getClubDoc(clubId, 'ledger', financeId));
-  } catch (error) {
-    console.error('Error deleting finance:', error);
-    throw error;
-  }
-}
-// ===== GAME RECORDS =====
-// PRD: `clubs/{clubId}/posts/{postId}/record_batters/{playerId}` etc.
-// But legacy used `gameRecords` root collection.
-// Let's stick to legacy signature but move data under club -> post?
-// Actually, game records are usually tied to a game post.
-// PRD says: `clubs/{clubId}/posts/{postId}/record_lineup/...`
-// Legacy `saveBatterRecord`: saves to `gameRecords/batters/{gameId}`.
-// I'll change it to `clubs/{clubId}/posts/{gameId}/record_batters`.
-/**
- * 타자 기록 저장
- */
-export async function saveBatterRecord(clubId: string, recordData: Omit<BatterRecordDoc, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
-  try {
-    const recordsRef = collection(db, 'clubs', clubId, 'posts', recordData.gameId, 'record_batters');
-    const docRef = await addDoc(recordsRef, {
-      ...recordData,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    });
-    return docRef.id;
-  } catch (error) {
-    console.error('Error saving batter record:', error);
-    throw error;
-  }
-}
-/**
- * 투수 기록 저장
- */
-export async function savePitcherRecord(clubId: string, recordData: Omit<PitcherRecordDoc, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
-  try {
-    const recordsRef = collection(db, 'clubs', clubId, 'posts', recordData.gameId, 'record_pitchers');
-    const docRef = await addDoc(recordsRef, {
-      ...recordData,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    });
-    return docRef.id;
-  } catch (error) {
-    console.error('Error saving pitcher record:', error);
-    throw error;
-  }
-}
-/**
- * 경기 기록 가져오기
- */
-export async function getGameRecords(clubId: string, gameId: string): Promise<{ batters: BatterRecordDoc[]; pitchers: PitcherRecordDoc[] }> {
-  try {
-    // 타자 기록
-    const battersRef = collection(db, 'clubs', clubId, 'posts', gameId, 'record_batters');
-    const battersSnapshot = await getDocs(battersRef);
-    const batters = battersSnapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-      createdAt: (doc.data().createdAt as Timestamp)?.toDate() || new Date(),
-      updatedAt: (doc.data().updatedAt as Timestamp)?.toDate() || new Date(),
-    })) as BatterRecordDoc[];
-    // 투수 기록
-    const pitchersRef = collection(db, 'clubs', clubId, 'posts', gameId, 'record_pitchers');
-    const pitchersSnapshot = await getDocs(pitchersRef);
-    const pitchers = pitchersSnapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-      createdAt: (doc.data().createdAt as Timestamp)?.toDate() || new Date(),
-      updatedAt: (doc.data().updatedAt as Timestamp)?.toDate() || new Date(),
-    })) as PitcherRecordDoc[];
-    return { batters, pitchers };
-  } catch (error) {
-    console.error('Error getting game records:', error);
-    return { batters: [], pitchers: [] };
   }
 }
 // ===== NOTIFICATIONS =====
@@ -948,6 +726,244 @@ export async function markAllNotificationsAsRead(userId: string): Promise<void> 
 }
 ```
 
+## src/lib/firebase/messaging.service.ts
+
+```ts
+// Firebase Cloud Messaging Service
+// ATOM-13: FCM 클라이언트 구현
+import { getMessaging, getToken, onMessage, Messaging } from 'firebase/messaging';
+import { httpsCallable } from 'firebase/functions';
+import app, { functions } from './config';
+// Note: toast는 foreground 메시지 핸들러에서만 사용
+// FCM 토큰 등록 Function
+const registerFcmTokenFn = httpsCallable<{
+  clubId: string;
+  token: string;
+  platform?: 'web' | 'android' | 'ios';
+  requestId?: string;
+}, { success: boolean; tokenId: string }>(functions, 'registerFcmToken');
+// VAPID 키 (Firebase Console > 프로젝트 설정 > 클라우드 메시징에서 확인)
+// 실제 프로젝트에서는 환경 변수로 관리 권장
+const VAPID_KEY = import.meta.env.VITE_FCM_VAPID_KEY || '';
+let messagingInstance: Messaging | null = null;
+/**
+ * FCM Messaging 인스턴스 초기화
+ */
+export function getMessagingInstance(): Messaging | null {
+  if (typeof window === 'undefined') {
+    // 서버 사이드에서는 null 반환
+    return null;
+  }
+  if (!messagingInstance) {
+    try {
+      messagingInstance = getMessaging(app);
+    } catch (error) {
+      console.error('FCM 초기화 실패:', error);
+      return null;
+    }
+  }
+  return messagingInstance;
+}
+/**
+ * 알림 권한 상태 조회
+ */
+export async function getNotificationPermission(): Promise<NotificationPermission> {
+  if (typeof window === 'undefined' || !('Notification' in window)) {
+    return 'denied';
+  }
+  return Notification.permission;
+}
+/**
+ * 알림 권한 요청
+ */
+export async function requestNotificationPermission(): Promise<NotificationPermission> {
+  if (typeof window === 'undefined' || !('Notification' in window)) {
+    return 'denied';
+  }
+  if (Notification.permission === 'granted') {
+    return 'granted';
+  }
+  if (Notification.permission === 'denied') {
+    return 'denied';
+  }
+  try {
+    const permission = await Notification.requestPermission();
+    return permission;
+  } catch (error) {
+    console.error('알림 권한 요청 실패:', error);
+    return 'denied';
+  }
+}
+/**
+ * FCM 토큰 발급 및 등록
+ */
+export async function registerFcmToken(clubId: string): Promise<string | null> {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+  const messaging = getMessagingInstance();
+  if (!messaging) {
+    console.error('FCM Messaging 인스턴스를 초기화할 수 없습니다');
+    return null;
+  }
+  // 권한 확인
+  const permission = await getNotificationPermission();
+  if (permission !== 'granted') {
+    console.warn('알림 권한이 허용되지 않았습니다:', permission);
+    return null;
+  }
+  // VAPID 키 확인
+  if (!VAPID_KEY) {
+    console.warn('VAPID 키가 설정되지 않았습니다. 환경 변수 VITE_FCM_VAPID_KEY를 설정하세요');
+    return null;
+  }
+  try {
+    // FCM 토큰 발급
+    const token = await getToken(messaging, {
+      vapidKey: VAPID_KEY,
+    });
+    if (!token) {
+      console.warn('FCM 토큰을 발급받을 수 없습니다');
+      return null;
+    }
+    // 플랫폼 감지 (간단한 방법)
+    const platform = detectPlatform();
+    // 서버에 토큰 등록
+    try {
+      await registerFcmTokenFn({
+        clubId,
+        token,
+        platform,
+        requestId: `client-${Date.now()}`,
+      });
+      console.log('FCM 토큰 등록 완료:', token.substring(0, 20) + '...');
+    } catch (error: any) {
+      console.error('FCM 토큰 등록 실패:', error);
+      // 토큰은 반환하되 등록은 실패 (나중에 재시도 가능)
+    }
+    return token;
+  } catch (error: any) {
+    console.error('FCM 토큰 발급 실패:', error);
+    if (error.code === 'messaging/permission-blocked') {
+      console.error('알림 권한이 차단되었습니다');
+    } else if (error.code === 'messaging/unsupported-browser') {
+      console.error('FCM을 지원하지 않는 브라우저입니다');
+    }
+    return null;
+  }
+}
+/**
+ * 플랫폼 감지 (간단한 방법)
+ */
+function detectPlatform(): 'web' | 'android' | 'ios' {
+  if (typeof window === 'undefined') {
+    return 'web';
+  }
+  const userAgent = navigator.userAgent || navigator.vendor || (window as any).opera;
+  if (/android/i.test(userAgent)) {
+    return 'android';
+  }
+  if (/iPad|iPhone|iPod/.test(userAgent) && !(window as any).MSStream) {
+    return 'ios';
+  }
+  return 'web';
+}
+/**
+ * Foreground 메시지 수신 핸들러 등록
+ */
+export function onForegroundMessage(
+  callback: (payload: {
+    title?: string;
+    body?: string;
+    data?: Record<string, string>;
+  }) => void
+): () => void {
+  const messaging = getMessagingInstance();
+  if (!messaging) {
+    return () => {};
+  }
+  try {
+    const unsubscribe = onMessage(messaging, (payload) => {
+      console.log('Foreground 메시지 수신:', payload);
+      const notification = payload.notification;
+      if (notification) {
+        callback({
+          title: notification.title,
+          body: notification.body,
+          data: payload.data as Record<string, string> | undefined,
+        });
+        // 토스트 알림은 useFcm에서 처리하도록 콜백 전달
+        // toast는 클라이언트 코드에서 직접 사용
+      }
+    });
+    return unsubscribe;
+  } catch (error) {
+    console.error('Foreground 메시지 핸들러 등록 실패:', error);
+    return () => {};
+  }
+}
+```
+
+## src/lib/firebase/notices.service.ts
+
+```ts
+import { httpsCallable } from 'firebase/functions';
+import { functions } from './config';
+/**
+ * 공지 작성 및 푸시 발송 (callable)
+ *
+ * ATOM-17: createNoticeWithPush 클라이언트 호출
+ */
+export const createNoticeWithPushFn = httpsCallable<
+  {
+    clubId: string;
+    title: string;
+    content: string;
+    pinned?: boolean;
+    requestId: string;
+  },
+  {
+    success: boolean;
+    postId: string;
+    pushStatus: 'SENT' | 'FAILED';
+    pushResult: {
+      sent: number;
+      failed: number;
+    } | null;
+  }
+>(functions, 'createNoticeWithPush');
+/**
+ * 공지 작성 및 푸시 발송
+ *
+ * @param clubId 클럽 ID
+ * @param title 제목
+ * @param content 내용
+ * @param pinned 고정 여부
+ * @returns 게시글 ID 및 푸시 상태
+ */
+export async function createNoticeWithPush(
+  clubId: string,
+  title: string,
+  content: string,
+  pinned: boolean = false
+): Promise<{ postId: string; pushStatus: 'SENT' | 'FAILED'; pushResult: { sent: number; failed: number } | null }> {
+  // UUID 생성 (requestId)
+  const requestId = crypto.randomUUID();
+  const result = await createNoticeWithPushFn({
+    clubId,
+    title,
+    content,
+    pinned,
+    requestId,
+  });
+  return {
+    postId: result.data.postId,
+    pushStatus: result.data.pushStatus,
+    pushResult: result.data.pushResult,
+  };
+}
+```
+
 ## src/lib/firebase/storage.service.ts
 
 ```ts
@@ -959,7 +975,6 @@ import {
   getDownloadURL,
   deleteObject,
   listAll,
-  UploadTask,
 } from 'firebase/storage';
 import { storage } from './config';
 /**
@@ -1000,48 +1015,6 @@ export async function uploadProfilePhoto(
     }
   } catch (error) {
     console.error('Error uploading profile photo:', error);
-    throw error;
-  }
-}
-/**
- * 앨범 미디어 업로드
- */
-export async function uploadAlbumMedia(
-  file: File,
-  type: 'photo' | 'video',
-  onProgress?: (progress: number) => void
-): Promise<string> {
-  try {
-    const date = new Date();
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const fileName = `${Date.now()}_${file.name}`;
-    const storageRef = ref(storage, `albums/${year}/${month}/${fileName}`);
-    if (onProgress) {
-      const uploadTask = uploadBytesResumable(storageRef, file);
-      return new Promise((resolve, reject) => {
-        uploadTask.on(
-          'state_changed',
-          (snapshot) => {
-            const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-            onProgress(progress);
-          },
-          (error) => {
-            console.error('Upload error:', error);
-            reject(error);
-          },
-          async () => {
-            const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-            resolve(downloadURL);
-          }
-        );
-      });
-    } else {
-      await uploadBytes(storageRef, file);
-      return await getDownloadURL(storageRef);
-    }
-  } catch (error) {
-    console.error('Error uploading album media:', error);
     throw error;
   }
 }
@@ -1211,43 +1184,24 @@ export function validateVideoFile(file: File): { valid: boolean; error?: string 
 ```ts
 // Firebase Firestore 데이터 타입 정의
 export type UserRole = 'PRESIDENT' | 'DIRECTOR' | 'TREASURER' | 'ADMIN' | 'MEMBER';
-export type PostType = 'notice' | 'free' | 'event' | 'meetup' | 'poll' | 'game' | 'album';
+export type PostType = 'notice' | 'free' | 'event';
 export type EventType = 'PRACTICE' | 'GAME';
-export type GameType = 'LEAGUE' | 'PRACTICE';
 export type AttendanceStatus = 'attending' | 'absent' | 'maybe' | 'none';
-export type MediaType = 'photo' | 'video';
 export type PushStatus = 'SENT' | 'FAILED' | 'PENDING';
 export type NotificationType = 'notice' | 'comment' | 'like' | 'event' | 'mention' | 'system';
 // User Document
 export interface UserDoc {
   uid: string;
   realName: string;
-  nickname?: string;
-  phone?: string;
-  photoURL?: string;
+  nickname?: string | null;
+  phone?: string | null;
+  photoURL?: string | null;
   role: UserRole;
   position?: string;
   backNumber?: string;
-  status: 'active' | 'inactive';
-  invitedBy?: string;
-  inviteCode?: string;
+  status: 'pending' | 'active' | 'rejected' | 'withdrawn';
   createdAt: Date;
   updatedAt: Date;
-}
-// Invite Code Document
-export interface InviteCodeDoc {
-  code: string;
-  role: UserRole;
-  createdBy: string;
-  createdByName: string;
-  createdAt: Date;
-  expiresAt?: Date;
-  usedBy?: string;
-  usedByName?: string;
-  usedAt?: Date;
-  isUsed: boolean;
-  maxUses: number;
-  currentUses: number;
 }
 // Post Document
 export interface PostDoc {
@@ -1263,30 +1217,15 @@ export interface PostDoc {
   pinned?: boolean;
   // Event specific
   eventType?: EventType;
-  startAt?: Date;
-  place?: string;
-  opponent?: string;
+  startAt?: Date | null;
+  place?: string | null;
+  opponent?: string | null;
   voteCloseAt?: Date;
   voteClosed?: boolean;
-  // Poll specific
-  choices?: Array<{ id: string; label: string; votes: string[] }>; // votes: userId[]
-  multi?: boolean;
-  anonymous?: boolean;
-  closeAt?: Date;
-  closed?: boolean;
-  // Game specific
-  gameType?: GameType;
-  score?: { our: number; opp: number };
-  recorders?: string[]; // userId[]
-  recordingLocked?: boolean;
-  recordingLockedAt?: Date;
-  recordingLockedBy?: string;
-  // Album specific
-  mediaUrls?: string[];
-  mediaType?: MediaType;
   // Push specific (notice only)
   pushStatus?: PushStatus;
   pushSentAt?: Date;
+  pushError?: string;
 }
 // Comment Document
 export interface CommentDoc {
@@ -1307,57 +1246,6 @@ export interface AttendanceDoc {
   userId: string;
   userName: string;
   status: AttendanceStatus;
-  updatedAt: Date;
-}
-// Finance Document (회비/회계)
-export interface FinanceDoc {
-  id: string;
-  type: 'income' | 'expense';
-  category: 'dues' | 'event' | 'equipment' | 'other';
-  amount: number;
-  description: string;
-  date: Date;
-  createdBy: string;
-  createdByName: string;
-  createdAt: Date;
-  // 회비 specific
-  duesPaidBy?: string;
-  duesPaidByName?: string;
-  duesMonth?: string; // YYYY-MM
-}
-// Game Record Document (타자 기록)
-export interface BatterRecordDoc {
-  id: string;
-  gameId: string;
-  playerId: string;
-  playerName: string;
-  position: string;
-  battingOrder: number;
-  // 타석 결과
-  atBats: string[]; // ['1B', 'K', 'GO', '2B', 'HR'] 등
-  hits: number;
-  runs: number;
-  rbis: number;
-  walks: number;
-  strikeouts: number;
-  createdAt: Date;
-  updatedAt: Date;
-}
-// Game Record Document (투수 기록)
-export interface PitcherRecordDoc {
-  id: string;
-  gameId: string;
-  playerId: string;
-  playerName: string;
-  // 투구 내용
-  innings: number; // 이닝 수 (소수점: 1.1 = 1과 1/3이닝)
-  pitches: number; // 투구 수
-  hitsAllowed: number;
-  runsAllowed: number;
-  earnedRuns: number;
-  walks: number;
-  strikeouts: number;
-  createdAt: Date;
   updatedAt: Date;
 }
 // Notification Document (알림)

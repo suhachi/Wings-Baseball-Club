@@ -24,7 +24,7 @@ const errors_1 = require("../shared/errors");
  *   requestId: 'req-uuid-123'
  * });
  */
-exports.registerFcmToken = (0, https_1.onCall)(async (req) => {
+exports.registerFcmToken = (0, https_1.onCall)({ region: 'asia-northeast3' }, async (req) => {
     const uid = (0, auth_1.requireAuth)(req);
     const clubId = (0, validate_1.reqString)(req.data?.clubId, 'clubId', 3, 64);
     const token = (0, validate_1.reqString)(req.data?.token, 'token', 50, 500); // FCM 토큰은 일반적으로 150자 정도이지만 더 긴 경우도 있음
