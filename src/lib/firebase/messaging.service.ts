@@ -14,9 +14,19 @@ const registerFcmTokenFn = httpsCallable<{
   requestId?: string;
 }, { success: boolean; tokenId: string }>(functions, 'registerFcmToken');
 
-// VAPID 키 (Firebase Console > 프로젝트 설정 > 클라우드 메시징에서 확인)
-// 실제 프로젝트에서는 환경 변수로 관리 권장
+// ⚠️ [시니어 엔지니어링] 번들 리로딩/중복 초기화 상황에서도 경고가 과도하게 쌓이지 않도록 window 전역 플래그 사용
 const VAPID_KEY = import.meta.env.VITE_FCM_VAPID_KEY || '';
+
+function checkVapidKey(): boolean {
+  if (!VAPID_KEY) {
+    if (typeof window !== 'undefined' && !(window as any).__WINGS_WARNED_NO_VAPID) {
+      console.warn('⚠️ [FCM] VAPID 키가 설정되지 않았습니다. 환경 변수 VITE_FCM_VAPID_KEY를 확인하세요.');
+      (window as any).__WINGS_WARNED_NO_VAPID = true;
+    }
+    return false;
+  }
+  return true;
+}
 
 let messagingInstance: Messaging | null = null;
 
@@ -78,30 +88,38 @@ export async function requestNotificationPermission(): Promise<NotificationPermi
 }
 
 /**
+ * FCM 토큰 발급 및 등록 결과 타입
+ */
+export interface FcmRegisterResult {
+  ok: boolean;
+  token?: string;
+  reason?: 'CONFIG_REQUIRED' | 'PERMISSION_DENIED' | 'UNSUPPORTED_BROWSER' | 'UNKNOWN';
+}
+
+/**
  * FCM 토큰 발급 및 등록
  */
-export async function registerFcmToken(clubId: string): Promise<string | null> {
+export async function registerFcmToken(clubId: string): Promise<FcmRegisterResult> {
   if (typeof window === 'undefined') {
-    return null;
+    return { ok: false, reason: 'UNKNOWN' };
   }
 
   const messaging = getMessagingInstance();
   if (!messaging) {
     console.error('FCM Messaging 인스턴스를 초기화할 수 없습니다');
-    return null;
+    return { ok: false, reason: 'UNKNOWN' };
   }
 
   // 권한 확인
   const permission = await getNotificationPermission();
   if (permission !== 'granted') {
     console.warn('알림 권한이 허용되지 않았습니다:', permission);
-    return null;
+    return { ok: false, reason: 'PERMISSION_DENIED' };
   }
 
   // VAPID 키 확인
-  if (!VAPID_KEY) {
-    console.warn('VAPID 키가 설정되지 않았습니다. 환경 변수 VITE_FCM_VAPID_KEY를 설정하세요');
-    return null;
+  if (!checkVapidKey()) {
+    return { ok: false, reason: 'CONFIG_REQUIRED' };
   }
 
   try {
@@ -112,7 +130,7 @@ export async function registerFcmToken(clubId: string): Promise<string | null> {
 
     if (!token) {
       console.warn('FCM 토큰을 발급받을 수 없습니다');
-      return null;
+      return { ok: false, reason: 'UNKNOWN' };
     }
 
     // 플랫폼 감지 (간단한 방법)
@@ -129,18 +147,23 @@ export async function registerFcmToken(clubId: string): Promise<string | null> {
       console.log('FCM 토큰 등록 완료:', token.substring(0, 20) + '...');
     } catch (error: any) {
       console.error('FCM 토큰 등록 실패:', error);
-      // 토큰은 반환하되 등록은 실패 (나중에 재시도 가능)
+      // 토큰은 발급되었으나 서버 등록만 실패한 경우
     }
 
-    return token;
+    return { ok: true, token };
   } catch (error: any) {
     console.error('FCM 토큰 발급 실패:', error);
+    let reason: FcmRegisterResult['reason'] = 'UNKNOWN';
+
     if (error.code === 'messaging/permission-blocked') {
       console.error('알림 권한이 차단되었습니다');
+      reason = 'PERMISSION_DENIED';
     } else if (error.code === 'messaging/unsupported-browser') {
       console.error('FCM을 지원하지 않는 브라우저입니다');
+      reason = 'UNSUPPORTED_BROWSER';
     }
-    return null;
+
+    return { ok: false, reason };
   }
 }
 
@@ -153,15 +176,15 @@ function detectPlatform(): 'web' | 'android' | 'ios' {
   }
 
   const userAgent = navigator.userAgent || navigator.vendor || (window as any).opera;
-  
+
   if (/android/i.test(userAgent)) {
     return 'android';
   }
-  
+
   if (/iPad|iPhone|iPod/.test(userAgent) && !(window as any).MSStream) {
     return 'ios';
   }
-  
+
   return 'web';
 }
 
@@ -177,7 +200,7 @@ export function onForegroundMessage(
 ): () => void {
   const messaging = getMessagingInstance();
   if (!messaging) {
-    return () => {};
+    return () => { };
   }
 
   try {
@@ -200,7 +223,7 @@ export function onForegroundMessage(
     return unsubscribe;
   } catch (error) {
     console.error('Foreground 메시지 핸들러 등록 실패:', error);
-    return () => {};
+    return () => { };
   }
 }
 

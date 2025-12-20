@@ -743,8 +743,19 @@ const registerFcmTokenFn = httpsCallable<{
   requestId?: string;
 }, { success: boolean; tokenId: string }>(functions, 'registerFcmToken');
 // VAPID 키 (Firebase Console > 프로젝트 설정 > 클라우드 메시징에서 확인)
-// 실제 프로젝트에서는 환경 변수로 관리 권장
 const VAPID_KEY = import.meta.env.VITE_FCM_VAPID_KEY || '';
+// 중복 경고 방지용 플래그
+let hasWarnedAboutMissingVapid = false;
+function checkVapidKey(): boolean {
+  if (!VAPID_KEY) {
+    if (!hasWarnedAboutMissingVapid) {
+      console.warn('⚠️ [FCM] VAPID 키가 설정되지 않았습니다. 환경 변수 VITE_FCM_VAPID_KEY를 확인하세요.');
+      hasWarnedAboutMissingVapid = true;
+    }
+    return false;
+  }
+  return true;
+}
 let messagingInstance: Messaging | null = null;
 /**
  * FCM Messaging 인스턴스 초기화
@@ -813,9 +824,8 @@ export async function registerFcmToken(clubId: string): Promise<string | null> {
     return null;
   }
   // VAPID 키 확인
-  if (!VAPID_KEY) {
-    console.warn('VAPID 키가 설정되지 않았습니다. 환경 변수 VITE_FCM_VAPID_KEY를 설정하세요');
-    return null;
+  if (!checkVapidKey()) {
+    return 'CONFIG_REQUIRED';
   }
   try {
     // FCM 토큰 발급
@@ -880,7 +890,7 @@ export function onForegroundMessage(
 ): () => void {
   const messaging = getMessagingInstance();
   if (!messaging) {
-    return () => {};
+    return () => { };
   }
   try {
     const unsubscribe = onMessage(messaging, (payload) => {
@@ -899,7 +909,7 @@ export function onForegroundMessage(
     return unsubscribe;
   } catch (error) {
     console.error('Foreground 메시지 핸들러 등록 실패:', error);
-    return () => {};
+    return () => { };
   }
 }
 ```

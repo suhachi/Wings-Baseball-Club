@@ -1,6 +1,6 @@
 # Firebase Full Code Pack
 
-**Generated**: 2025-12-19T09:01:55.003Z
+**Generated**: 2025-12-20T00:56:31.723Z
 **Scope**: Firebase Configs, Security Rules, Cloud Functions, Frontend SDK Wrappers
 
 ## File: firebase.json
@@ -24,6 +24,17 @@
             {
                 "source": "**",
                 "destination": "/index.html"
+            }
+        ],
+        "headers": [
+            {
+                "source": "**",
+                "headers": [
+                    {
+                        "key": "Cross-Origin-Opener-Policy",
+                        "value": "same-origin-allow-popups"
+                    }
+                ]
             }
         ]
     },
@@ -1055,8 +1066,21 @@ const registerFcmTokenFn = httpsCallable<{
 }, { success: boolean; tokenId: string }>(functions, 'registerFcmToken');
 
 // VAPID 키 (Firebase Console > 프로젝트 설정 > 클라우드 메시징에서 확인)
-// 실제 프로젝트에서는 환경 변수로 관리 권장
 const VAPID_KEY = import.meta.env.VITE_FCM_VAPID_KEY || '';
+
+// 중복 경고 방지용 플래그
+let hasWarnedAboutMissingVapid = false;
+
+function checkVapidKey(): boolean {
+  if (!VAPID_KEY) {
+    if (!hasWarnedAboutMissingVapid) {
+      console.warn('⚠️ [FCM] VAPID 키가 설정되지 않았습니다. 환경 변수 VITE_FCM_VAPID_KEY를 확인하세요.');
+      hasWarnedAboutMissingVapid = true;
+    }
+    return false;
+  }
+  return true;
+}
 
 let messagingInstance: Messaging | null = null;
 
@@ -1139,9 +1163,8 @@ export async function registerFcmToken(clubId: string): Promise<string | null> {
   }
 
   // VAPID 키 확인
-  if (!VAPID_KEY) {
-    console.warn('VAPID 키가 설정되지 않았습니다. 환경 변수 VITE_FCM_VAPID_KEY를 설정하세요');
-    return null;
+  if (!checkVapidKey()) {
+    return 'CONFIG_REQUIRED';
   }
 
   try {
@@ -1193,15 +1216,15 @@ function detectPlatform(): 'web' | 'android' | 'ios' {
   }
 
   const userAgent = navigator.userAgent || navigator.vendor || (window as any).opera;
-  
+
   if (/android/i.test(userAgent)) {
     return 'android';
   }
-  
+
   if (/iPad|iPhone|iPod/.test(userAgent) && !(window as any).MSStream) {
     return 'ios';
   }
-  
+
   return 'web';
 }
 
@@ -1217,7 +1240,7 @@ export function onForegroundMessage(
 ): () => void {
   const messaging = getMessagingInstance();
   if (!messaging) {
-    return () => {};
+    return () => { };
   }
 
   try {
@@ -1240,7 +1263,7 @@ export function onForegroundMessage(
     return unsubscribe;
   } catch (error) {
     console.error('Foreground 메시지 핸들러 등록 실패:', error);
-    return () => {};
+    return () => { };
   }
 }
 
@@ -1665,8 +1688,8 @@ export interface ActivityLogDoc {
       "name": "functions",
       "version": "1.0.0",
       "dependencies": {
-        "firebase-admin": "^12.6.0",
-        "firebase-functions": "^4.7.0"
+        "firebase-admin": "^12.0.0",
+        "firebase-functions": "^5.1.0"
       },
       "devDependencies": {
         "@types/node": "^20.11.24",
@@ -2785,9 +2808,9 @@ export interface ActivityLogDoc {
       }
     },
     "node_modules/firebase-functions": {
-      "version": "4.9.0",
-      "resolved": "https://registry.npmjs.org/firebase-functions/-/firebase-functions-4.9.0.tgz",
-      "integrity": "sha512-IqxOEsVAWGcRv9KRGzWQR5mOFuNsil3vsfkRPPiaV1U/ATC27/jbahh4z8I4rW8Xqa6cQE5xqnw0ueyMH7i7Ag==",
+      "version": "5.1.1",
+      "resolved": "https://registry.npmjs.org/firebase-functions/-/firebase-functions-5.1.1.tgz",
+      "integrity": "sha512-KkyKZE98Leg/C73oRyuUYox04PQeeBThdygMfeX+7t1cmKWYKa/ZieYa89U8GHgED+0mF7m7wfNZOfbURYxIKg==",
       "license": "MIT",
       "dependencies": {
         "@types/cors": "^2.8.5",
@@ -2803,7 +2826,7 @@ export interface ActivityLogDoc {
         "node": ">=14.10.0"
       },
       "peerDependencies": {
-        "firebase-admin": "^10.0.0 || ^11.0.0 || ^12.0.0"
+        "firebase-admin": "^11.10.0 || ^12.0.0"
       }
     },
     "node_modules/form-data": {
@@ -4438,8 +4461,8 @@ export interface ActivityLogDoc {
     "logs": "firebase functions:log"
   },
   "dependencies": {
-    "firebase-admin": "^12.6.0",
-    "firebase-functions": "^4.7.0"
+    "firebase-admin": "^12.0.0",
+    "firebase-functions": "^5.1.0"
   },
   "devDependencies": {
     "typescript": "^5.6.3",
@@ -4447,8 +4470,6 @@ export interface ActivityLogDoc {
   },
   "private": true
 }
-
-
 ```
 
 ## File: functions/src/callables/events.ts

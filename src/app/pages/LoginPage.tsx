@@ -79,8 +79,10 @@ export const LoginPage: React.FC = () => {
       if (exists) {
         toast.success(`환영합니다, ${firebaseUser.displayName}님!`);
       } else {
-        // [NOTICE] 정책상 가입/승인 로직을 제외하므로, 미등록 사용자는 Access Gate에서 차단됨
-        toast.info('등록되지 않은 사용자입니다. 관리자에게 문의해주세요.');
+        // [NOTICE] 신규 유저 자동 가입 신청 (pending 생성)
+        const { createAccount } = await import('../../lib/firebase/auth.service');
+        await createAccount(firebaseUser, firebaseUser.displayName || '이름 없음');
+        toast.info('가입 신청 되었습니다. 관리자 승인 후 이용 가능합니다.');
       }
     } catch (err: any) {
       setError(err.message);

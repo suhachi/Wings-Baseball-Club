@@ -216,7 +216,7 @@ export const MyPage: React.FC<MyPageProps> = ({
           {isAdmin() && (
             <>
               <Card className="overflow-hidden">
-                  <div className="p-3 bg-gradient-to-r from-purple-500 to-purple-600 text-white">
+                <div className="p-3 bg-gradient-to-r from-purple-500 to-purple-600 text-white">
                   <div className="flex items-center gap-2">
                     <Shield className="w-4 h-4" />
                     <span className="font-semibold text-sm">관리자 메뉴</span>
@@ -263,7 +263,7 @@ export const MyPage: React.FC<MyPageProps> = ({
                 ) : permission === 'granted' && !tokenRegistered ? (
                   <Badge className="bg-yellow-100 text-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-400">
                     <AlertCircle className="w-3 h-3 mr-1" />
-                    등록 실패
+                    {tokenError?.includes('설정') ? '설정 필요' : '등록 실패'}
                   </Badge>
                 ) : permission === 'denied' ? (
                   <Badge className="bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400">

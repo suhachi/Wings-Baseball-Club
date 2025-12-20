@@ -22,27 +22,29 @@ import { MyActivityPage } from './pages/MyActivityPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { NotificationPage } from './pages/NotificationPage';
 import { AdminPage } from './pages/AdminPage';
-import { InstallPage } from './pages/InstallPage'; // Added
-import { AccessDeniedPage } from './pages/AccessDeniedPage'; // ATOM-08
-import { useFcm } from './hooks/useFcm'; // ATOM-13: FCM 초기화
+import { InstallPage } from './pages/InstallPage';
+import { AccessDeniedPage } from './pages/AccessDeniedPage';
+import { useFcm } from './hooks/useFcm';
 import { Loader2 } from 'lucide-react';
 type PageType = 'home' | 'boards' | 'my' | 'settings' | 'notifications' | 'admin' | 'my-activity' | 'install';
 function AppContent() {
   // [DEBUG] Version Check
   console.log('%c Wings PWA v1.3-debug loaded ', 'background: #222; color: #ff00ff');
-  const { user, loading, memberStatus } = useAuth(); // μATOM-0401~0402: memberStatus 추가
+  const { user, loading, memberStatus } = useAuth();
   const data = useData();
-  useFcm(); // ATOM-13: FCM 초기화 (권한 확인, 토큰 등록, foreground 수신 핸들러)
+  useFcm();
+  // Navigation State
   const [activeTab, setActiveTab] = useState<'home' | 'boards' | 'my'>('home');
   const [currentPage, setCurrentPage] = useState<PageType>('home');
   const [adminInitialTab, setAdminInitialTab] = useState<'members' | 'stats' | 'notices'>('members');
+  // Phase 1: History Stack
+  const [history, setHistory] = useState<PageType[]>([]);
   // Simple URL routing for install page
   React.useEffect(() => {
     if (window.location.pathname === '/install') {
       setCurrentPage('install');
     }
   }, []);
-  // Calculate unread notification count safely
   const unreadNotificationCount = data?.notifications ? data.notifications.filter((n) => !n.read).length : 0;
   // Loading state
   if (loading) {
@@ -56,18 +58,13 @@ function AppContent() {
     );
   }
   // If not logged in, show login page
-  if (!user && currentPage !== 'install') { // Allow access to install page without login
+  if (!user && currentPage !== 'install') {
     return <LoginPage />;
   }
-  // μATOM-0401: 로그인 후 members/{uid} 존재 체크
-  // μATOM-0402: status==active 검증
-  // μATOM-0403: Gate 실패 시 강제 이동(라우트 가드)
-  // 멤버 문서가 없거나 status가 'active'가 아니면 차단
-  // URL 직접 접근도 AccessDenied로 수렴
+  // Access Gate
   if (user && memberStatus === 'denied') {
     return <AccessDeniedPage />;
   }
-  // 멤버 상태 체크 중이면 로딩 표시
   if (user && memberStatus === 'checking') {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-600 via-blue-500 to-blue-400 flex items-center justify-center">
@@ -78,63 +75,36 @@ function AppContent() {
       </div>
     );
   }
-  // μATOM-0403: Gate 실패 시 강제 이동(라우트 가드)
-  // memberStatus가 'active'가 아니면 모든 보호 페이지 접근 차단
   if (user && memberStatus !== 'active' && currentPage !== 'install') {
     return <AccessDeniedPage />;
   }
-  // Get page title and back button config
-  const getPageConfig = () => {
-    switch (currentPage) {
-      case 'settings':
-        return {
-          title: '설정',
-          showBack: true,
-          onBack: () => handlePageChange('my'),
-          showNotification: false,
-          showSettings: false
-        };
-      case 'my-activity':
-        return {
-          title: '내 활동',
-          showBack: true,
-          onBack: () => handlePageChange('my'),
-          showNotification: false,
-          showSettings: false
-        };
-      case 'notifications':
-        return {
-          title: '알림',
-          showBack: true,
-          onBack: () => handlePageChange('home'),
-          showNotification: false,
-          showSettings: false
-        };
-      case 'admin':
-        return {
-          title: '관리자 페이지',
-          showBack: true,
-          onBack: () => handlePageChange('home'),
-          showNotification: false,
-          showSettings: false
-        };
-      default:
-        return {
-          title: 'WINGS BASEBALL CLUB',
-          showBack: false,
-          showNotification: true,
-          showSettings: false
-        };
+  // --- Phase 1: History Logic ---
+  const addToHistory = (nextPage: PageType) => {
+    if (nextPage === currentPage) return; // Prevent duplicates
+    setHistory((prev) => [...prev, currentPage]);
+  };
+  const goBack = () => {
+    if (history.length === 0) return;
+    // Pop last page
+    const prevPage = history[history.length - 1];
+    setHistory((prev) => prev.slice(0, -1));
+    // Navigate
+    setCurrentPage(prevPage);
+    // Sync tab if needed
+    if (prevPage === 'home' || prevPage === 'boards' || prevPage === 'my') {
+      setActiveTab(prevPage);
     }
   };
   const handleNavigate = (tab: 'home' | 'boards' | 'my') => {
+    if (tab === currentPage) return;
+    addToHistory(tab);
     setActiveTab(tab);
     setCurrentPage(tab);
-    // In a real app, you would also handle postId to show specific post details
   };
   const handlePageChange = (page: PageType) => {
+    if (page === currentPage) return;
+    addToHistory(page);
     setCurrentPage(page);
-    // Update activeTab if it's a main tab
     if (page === 'home' || page === 'boards' || page === 'my') {
       setActiveTab(page);
     }
@@ -143,13 +113,56 @@ function AppContent() {
     setAdminInitialTab(tab);
     handlePageChange('admin');
   };
+  // --- Phase 2: Universal Back Config ---
+  const getPageConfig = () => {
+    const commonBackConfig = {
+      showBack: history.length > 0,
+      onBack: goBack,
+    };
+    switch (currentPage) {
+      case 'settings':
+        return {
+          title: '설정',
+          ...commonBackConfig,
+          showNotification: false,
+          showSettings: false
+        };
+      case 'my-activity': // Added missing title
+        return {
+          title: '내 활동',
+          ...commonBackConfig,
+          showNotification: false,
+          showSettings: false
+        };
+      case 'notifications':
+        return {
+          title: '알림',
+          ...commonBackConfig,
+          showNotification: false,
+          showSettings: false
+        };
+      case 'admin':
+        return {
+          title: '관리자 페이지',
+          ...commonBackConfig,
+          showNotification: false,
+          showSettings: false
+        };
+      default: // Roots: home, boards, my
+        return {
+          title: 'WINGS BASEBALL CLUB',
+          ...commonBackConfig, // Roots now show back if history exists
+          showNotification: true,
+          showSettings: false
+        };
+    }
+  };
   const pageConfig = getPageConfig();
   if (currentPage === 'install') {
     return <InstallPage />;
   }
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
-      {/* Top Bar */}
       <TopBar
         title={pageConfig.title}
         showBack={pageConfig.showBack}
@@ -160,7 +173,6 @@ function AppContent() {
         onLogoClick={() => handlePageChange('home')}
         unreadNotificationCount={unreadNotificationCount}
       />
-      {/* Main Content */}
       <main className="min-h-screen">
         {currentPage === 'home' && <HomePage onNavigate={handleNavigate} />}
         {currentPage === 'boards' && <BoardsPage />}
@@ -173,15 +185,12 @@ function AppContent() {
           />
         )}
         {currentPage === 'my-activity' && <MyActivityPage />}
-        {currentPage === 'settings' && <SettingsPage onBack={() => handlePageChange('my')} />}
-        {currentPage === 'notifications' && <NotificationPage onBack={() => handlePageChange('my')} />}
+        {currentPage === 'settings' && <SettingsPage onBack={goBack} />}
+        {currentPage === 'notifications' && <NotificationPage onBack={goBack} />}
         {currentPage === 'admin' && <AdminPage initialTab={adminInitialTab} />}
       </main>
-      {/* Bottom Navigation */}
       <BottomNav activeTab={activeTab} onTabChange={handleNavigate} />
-      {/* Install Prompt */}
       <InstallPrompt />
-      {/* Toast Notifications */}
       <Toaster
         position="top-center"
         richColors
@@ -204,8 +213,6 @@ export default function App() {
     </ClubProvider>
   );
 }
-// μATOM-0404: Gate 성공 시 clubId 컨텍스트 고정
-// ClubContext의 clubId를 AuthProvider에 전달
 const AuthProviderWithClub: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { currentClubId } = useClub();
   return <AuthProvider clubId={currentClubId}>{children}</AuthProvider>;
@@ -7789,6 +7796,7 @@ import {
   getAttendances,
   updateAttendance as updateAttendanceInDb,
   getMembers,
+  getAllMembers,
   getUserNotifications,
   markNotificationAsRead as markNotificationAsReadInDb,
   markAllNotificationsAsRead as markAllNotificationsAsReadInDb,
@@ -7965,7 +7973,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // 멤버 로드 (exposed as refreshMembers)
   const refreshMembers = async () => {
     try {
-      const membersData = await getMembers(currentClubId);
+      if (!user) return;
+      let membersData;
+      // ADMIN or MANAGER (DIRECTOR) or PRESIDENT can see all members
+      const isAdminLike = ['ADMIN', 'PRESIDENT', 'DIRECTOR', 'TREASURER'].includes(user.role);
+      if (isAdminLike) {
+        membersData = await getAllMembers(currentClubId);
+      } else {
+        membersData = await getMembers(currentClubId);
+      }
       setMembers(membersData);
     } catch (error) {
       console.error('Error loading members:', error);
@@ -8356,6 +8372,11 @@ export function useFcm() {
     try {
       setTokenError(null);
       const token = await registerFcmToken(currentClubId);
+      if (token === 'CONFIG_REQUIRED') {
+        setTokenRegistered(false);
+        setTokenError('푸시 알림 설정이 아직 완료되지 않았습니다. 관리자에게 문의하세요.');
+        return false;
+      }
       if (token) {
         setTokenRegistered(true);
         console.log('FCM 토큰 등록 완료');
@@ -8780,143 +8801,151 @@ function MembersTab({ members, editingMember, setEditingMember, onUpdateMember }
   setEditingMember: (id: string | null) => void;
   onUpdateMember: (id: string, updates: Partial<Member>) => void;
 }) {
+  const pendingMembers = members.filter(m => m.status === 'pending');
   const activeMembers = members.filter(m => m.status === 'active');
-  return (
-    <div className="space-y-6">
-      {/* Active Members List */}
-      <div className="space-y-3">
-        {activeMembers.map((member, index) => (
-          <motion.div
-            key={member.id}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: index * 0.05 }}
-            className="bg-white dark:bg-gray-900 rounded-2xl p-4 shadow-sm"
-          >
-            {editingMember === member.id ? (
-              // Edit Mode
-              <motion.div
-                key={member.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0.9, opacity: 0 }}
-                className="bg-white dark:bg-gray-900 w-full max-w-md rounded-2xl p-6 shadow-xl border border-gray-200 dark:border-gray-800"
-                onClick={(e) => e.stopPropagation()}
+  const inactiveMembers = members.filter(m => m.status === 'rejected' || m.status === 'withdrawn');
+  const renderMemberCard = (member: Member, index: number) => (
+    <motion.div
+      key={member.id}
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: index * 0.05 }}
+      className="bg-white dark:bg-gray-900 rounded-2xl p-4 shadow-sm border border-gray-100 dark:border-gray-800"
+    >
+      {editingMember === member.id ? (
+        // Edit Mode
+        <div className="space-y-4">
+          <div className="flex justify-between items-center mb-2">
+            <span className="font-bold">정보 수정: {member.realName}</span>
+            <button onClick={() => setEditingMember(null)}><X className="w-5 h-5" /></button>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label className="text-xs">역할</Label>
+              <select
+                className="w-full mt-1 p-2 text-sm bg-gray-50 dark:bg-gray-800 border rounded-lg"
+                value={member.role}
+                onChange={(e) => onUpdateMember(member.id, { role: e.target.value as UserRole })}
               >
-                <div className="flex justify-between items-center mb-6">
-                  <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                    멤버 정보 수정
-                  </div>
-                  <button
-                    onClick={() => setEditingMember(null)}
-                    className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-                  >
-                    <X className="w-6 h-6" />
-                  </button>
-                </div>
-                <div className="space-y-4">
-                  <div>
-                    <Label className="text-gray-700 dark:text-gray-300">역할</Label>
-                    <select
-                      className="w-full mt-1 p-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
-                      value={member.role}
-                      onChange={(e) =>
-                        onUpdateMember(member.id, {
-                          role: e.target.value as UserRole,
-                        })
-                      }
-                    >
-                      <option value="MEMBER" className="bg-white dark:bg-gray-800 text-gray-900 dark:text-white">일반</option>
-                      <option value="ADMIN" className="bg-white dark:bg-gray-800 text-gray-900 dark:text-white">관리자</option>
-                      <option value="TREASURER" className="bg-white dark:bg-gray-800 text-gray-900 dark:text-white">총무</option>
-                      <option value="DIRECTOR" className="bg-white dark:bg-gray-800 text-gray-900 dark:text-white">감독</option>
-                      <option value="PRESIDENT" className="bg-white dark:bg-gray-800 text-gray-900 dark:text-white">회장</option>
-                    </select>
-                  </div>
-                  <div>
-                    <Label className="text-gray-700 dark:text-gray-300">포지션</Label>
-                    <Input
-                      value={member.position || ''}
-                      onChange={(e) =>
-                        onUpdateMember(member.id, { position: e.target.value })
-                      }
-                      placeholder="예: 투수"
-                      className="mt-1 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white border-gray-200 dark:border-gray-700"
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-gray-700 dark:text-gray-300">등번호</Label>
-                    <Input
-                      value={member.backNumber || ''}
-                      onChange={(e) =>
-                        onUpdateMember(member.id, { backNumber: e.target.value })
-                      }
-                      placeholder="예: 10"
-                      className="mt-1 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white border-gray-200 dark:border-gray-700"
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-gray-700 dark:text-gray-300">상태</Label>
-                    <select
-                      className="w-full mt-1 p-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
-                      value={member.status}
-                      onChange={(e) =>
-                        onUpdateMember(member.id, {
-                          status: e.target.value as 'active' | 'rejected' | 'withdrawn',
-                        })
-                      }
-                    >
-                      <option value="active" className="bg-white dark:bg-gray-800 text-gray-900 dark:text-white">활성</option>
-                      <option value="rejected" className="bg-white dark:bg-gray-800 text-gray-900 dark:text-white">거절</option>
-                      <option value="withdrawn" className="bg-white dark:bg-gray-800 text-gray-900 dark:text-white">탈퇴</option>
-                    </select>
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    onClick={() => setEditingMember(null)}
-                    className="flex-1"
-                  >
-                    <Check className="w-4 h-4 mr-2" />
-                    확인
-                  </Button>
-                </div>
-              </motion.div>
-            ) : (
-              // View Mode
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 bg-gradient-to-br from-gray-200 to-gray-300 rounded-full flex items-center justify-center">
-                    <span className="text-lg font-bold text-gray-600">
-                      {member.realName[0]}
-                    </span>
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-semibold">{member.realName}</h3>
-                      {member.nickname && <span className="text-sm text-gray-500">({member.nickname})</span>}
-                    </div>
-                    <div className="flex items-center gap-2 mt-1">
-                      <span className={`inline-block px-2 py-0.5 text-xs font-medium text-white bg-gradient-to-r ${roleColors[member.role as UserRole] || 'from-gray-400 to-gray-500'} rounded-full`}>
-                        {roleLabels[member.role as UserRole] || member.role}
-                      </span>
-                      {member.position && <span className="text-xs text-gray-500">{member.position}</span>}
-                      {member.backNumber && <span className="text-xs text-gray-500">#{member.backNumber}</span>}
-                      <span className={`text-xs ${member.status === 'active' ? 'text-green-600' : 'text-gray-400'}`}>
-                        {member.status === 'active' ? '활성' : '비활성'}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                <Button size="sm" variant="outline" onClick={() => setEditingMember(member.id)}>
-                  <Edit2 className="w-4 h-4" />
-                </Button>
+                <option value="MEMBER">일반</option>
+                <option value="ADMIN">관리자</option>
+                <option value="TREASURER">총무</option>
+                <option value="DIRECTOR">감독</option>
+                <option value="PRESIDENT">회장</option>
+              </select>
+            </div>
+            <div>
+              <Label className="text-xs">상태</Label>
+              <select
+                className="w-full mt-1 p-2 text-sm bg-gray-50 dark:bg-gray-800 border rounded-lg"
+                value={member.status}
+                onChange={(e) => onUpdateMember(member.id, { status: e.target.value as any })}
+              >
+                <option value="active">활성</option>
+                <option value="pending">대기</option>
+                <option value="rejected">거절</option>
+                <option value="withdrawn">탈퇴</option>
+              </select>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Input
+              placeholder="포지션"
+              value={member.position || ''}
+              onChange={(e) => onUpdateMember(member.id, { position: e.target.value })}
+              className="h-9 text-sm"
+            />
+            <Input
+              placeholder="등번호"
+              value={member.backNumber || ''}
+              onChange={(e) => onUpdateMember(member.id, { backNumber: e.target.value })}
+              className="h-9 text-sm w-20"
+            />
+          </div>
+          <Button size="sm" className="w-full" onClick={() => setEditingMember(null)}>저장</Button>
+        </div>
+      ) : (
+        // View Mode
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center font-bold text-gray-500">
+              {member.realName[0]}
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-sm">{member.realName}</span>
+                {member.nickname && <span className="text-xs text-gray-400">{member.nickname}</span>}
               </div>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-full text-white bg-gradient-to-r ${roleColors[member.role] || 'from-gray-400 to-gray-500'}`}>
+                  {roleLabels[member.role]}
+                </span>
+                {member.backNumber && <span className="text-[10px] text-gray-500">#{member.backNumber}</span>}
+                <span className={`text-[10px] ${member.status === 'active' ? 'text-green-500' :
+                  member.status === 'pending' ? 'text-orange-500' : 'text-red-400'
+                  }`}>
+                  {member.status === 'active' ? '활성' :
+                    member.status === 'pending' ? '승인대기' :
+                      member.status === 'rejected' ? '거절됨' : '탈퇴'}
+                </span>
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-1">
+            {member.status === 'pending' && (
+              <Button
+                size="sm"
+                variant="default"
+                className="h-8 px-2 bg-green-600 hover:bg-green-700 text-xs"
+                onClick={() => onUpdateMember(member.id, { status: 'active' })}
+              >
+                승인
+              </Button>
             )}
-          </motion.div>
-        ))}
+            <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => setEditingMember(member.id)}>
+              <Edit2 className="w-3.5 h-3.5" />
+            </Button>
+          </div>
+        </div>
+      )}
+    </motion.div>
+  );
+  return (
+    <div className="space-y-8">
+      {/* Pending Members Section */}
+      {pendingMembers.length > 0 && (
+        <div className="space-y-3">
+          <h3 className="text-sm font-bold text-orange-600 flex items-center gap-2 px-1">
+            <Shield className="w-4 h-4" />
+            가입 승인 대기 ({pendingMembers.length})
+          </h3>
+          <div className="space-y-2">
+            {pendingMembers.map((member, i) => renderMemberCard(member, i))}
+          </div>
+        </div>
+      )}
+      {/* Active Members Section */}
+      <div className="space-y-3">
+        <h3 className="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2 px-1">
+          <Users className="w-4 h-4" />
+          활성 멤버 ({activeMembers.length})
+        </h3>
+        <div className="space-y-2">
+          {activeMembers.map((member, i) => renderMemberCard(member, i))}
+        </div>
       </div>
+      {/* Inactive Members Section */}
+      {inactiveMembers.length > 0 && (
+        <div className="space-y-3">
+          <h3 className="text-sm font-bold text-gray-400 flex items-center gap-2 px-1">
+            <X className="w-4 h-4" />
+            비활성/거절/탈퇴 ({inactiveMembers.length})
+          </h3>
+          <div className="space-y-2 opacity-60">
+            {inactiveMembers.map((member, i) => renderMemberCard(member, i))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -10025,8 +10054,10 @@ export const LoginPage: React.FC = () => {
       if (exists) {
         toast.success(`환영합니다, ${firebaseUser.displayName}님!`);
       } else {
-        // [NOTICE] 정책상 가입/승인 로직을 제외하므로, 미등록 사용자는 Access Gate에서 차단됨
-        toast.info('등록되지 않은 사용자입니다. 관리자에게 문의해주세요.');
+        // [NOTICE] 신규 유저 자동 가입 신청 (pending 생성)
+        const { createAccount } = await import('../../lib/firebase/auth.service');
+        await createAccount(firebaseUser, firebaseUser.displayName || '이름 없음');
+        toast.info('가입 신청 되었습니다. 관리자 승인 후 이용 가능합니다.');
       }
     } catch (err: any) {
       setError(err.message);

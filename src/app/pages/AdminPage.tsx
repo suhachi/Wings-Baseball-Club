@@ -250,148 +250,156 @@ function MembersTab({ members, editingMember, setEditingMember, onUpdateMember }
   onUpdateMember: (id: string, updates: Partial<Member>) => void;
 }) {
 
+  const pendingMembers = members.filter(m => m.status === 'pending');
   const activeMembers = members.filter(m => m.status === 'active');
+  const inactiveMembers = members.filter(m => m.status === 'rejected' || m.status === 'withdrawn');
+
+  const renderMemberCard = (member: Member, index: number) => (
+    <motion.div
+      key={member.id}
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: index * 0.05 }}
+      className="bg-white dark:bg-gray-900 rounded-2xl p-4 shadow-sm border border-gray-100 dark:border-gray-800"
+    >
+      {editingMember === member.id ? (
+        // Edit Mode
+        <div className="space-y-4">
+          <div className="flex justify-between items-center mb-2">
+            <span className="font-bold">정보 수정: {member.realName}</span>
+            <button onClick={() => setEditingMember(null)}><X className="w-5 h-5" /></button>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label className="text-xs">역할</Label>
+              <select
+                className="w-full mt-1 p-2 text-sm bg-gray-50 dark:bg-gray-800 border rounded-lg"
+                value={member.role}
+                onChange={(e) => onUpdateMember(member.id, { role: e.target.value as UserRole })}
+              >
+                <option value="MEMBER">일반</option>
+                <option value="ADMIN">관리자</option>
+                <option value="TREASURER">총무</option>
+                <option value="DIRECTOR">감독</option>
+                <option value="PRESIDENT">회장</option>
+              </select>
+            </div>
+            <div>
+              <Label className="text-xs">상태</Label>
+              <select
+                className="w-full mt-1 p-2 text-sm bg-gray-50 dark:bg-gray-800 border rounded-lg"
+                value={member.status}
+                onChange={(e) => onUpdateMember(member.id, { status: e.target.value as any })}
+              >
+                <option value="active">활성</option>
+                <option value="pending">대기</option>
+                <option value="rejected">거절</option>
+                <option value="withdrawn">탈퇴</option>
+              </select>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Input
+              placeholder="포지션"
+              value={member.position || ''}
+              onChange={(e) => onUpdateMember(member.id, { position: e.target.value })}
+              className="h-9 text-sm"
+            />
+            <Input
+              placeholder="등번호"
+              value={member.backNumber || ''}
+              onChange={(e) => onUpdateMember(member.id, { backNumber: e.target.value })}
+              className="h-9 text-sm w-20"
+            />
+          </div>
+          <Button size="sm" className="w-full" onClick={() => setEditingMember(null)}>저장</Button>
+        </div>
+      ) : (
+        // View Mode
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center font-bold text-gray-500">
+              {member.realName[0]}
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-sm">{member.realName}</span>
+                {member.nickname && <span className="text-xs text-gray-400">{member.nickname}</span>}
+              </div>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-full text-white bg-gradient-to-r ${roleColors[member.role] || 'from-gray-400 to-gray-500'}`}>
+                  {roleLabels[member.role]}
+                </span>
+                {member.backNumber && <span className="text-[10px] text-gray-500">#{member.backNumber}</span>}
+                <span className={`text-[10px] ${member.status === 'active' ? 'text-green-500' :
+                  member.status === 'pending' ? 'text-orange-500' : 'text-red-400'
+                  }`}>
+                  {member.status === 'active' ? '활성' :
+                    member.status === 'pending' ? '승인대기' :
+                      member.status === 'rejected' ? '거절됨' : '탈퇴'}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1">
+            {member.status === 'pending' && (
+              <Button
+                size="sm"
+                variant="default"
+                className="h-8 px-2 bg-green-600 hover:bg-green-700 text-xs"
+                onClick={() => onUpdateMember(member.id, { status: 'active' })}
+              >
+                승인
+              </Button>
+            )}
+            <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => setEditingMember(member.id)}>
+              <Edit2 className="w-3.5 h-3.5" />
+            </Button>
+          </div>
+        </div>
+      )}
+    </motion.div>
+  );
 
   return (
-    <div className="space-y-6">
-      {/* Active Members List */}
+    <div className="space-y-8">
+      {/* Pending Members Section */}
+      {pendingMembers.length > 0 && (
+        <div className="space-y-3">
+          <h3 className="text-sm font-bold text-orange-600 flex items-center gap-2 px-1">
+            <Shield className="w-4 h-4" />
+            가입 승인 대기 ({pendingMembers.length})
+          </h3>
+          <div className="space-y-2">
+            {pendingMembers.map((member, i) => renderMemberCard(member, i))}
+          </div>
+        </div>
+      )}
+
+      {/* Active Members Section */}
       <div className="space-y-3">
-        {activeMembers.map((member, index) => (
-          <motion.div
-            key={member.id}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: index * 0.05 }}
-            className="bg-white dark:bg-gray-900 rounded-2xl p-4 shadow-sm"
-          >
-            {editingMember === member.id ? (
-              // Edit Mode
-              <motion.div
-                key={member.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0.9, opacity: 0 }}
-                className="bg-white dark:bg-gray-900 w-full max-w-md rounded-2xl p-6 shadow-xl border border-gray-200 dark:border-gray-800"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <div className="flex justify-between items-center mb-6">
-                  <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                    멤버 정보 수정
-                  </div>
-                  <button
-                    onClick={() => setEditingMember(null)}
-                    className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-                  >
-                    <X className="w-6 h-6" />
-                  </button>
-                </div>
-
-                <div className="space-y-4">
-                  <div>
-                    <Label className="text-gray-700 dark:text-gray-300">역할</Label>
-                    <select
-                      className="w-full mt-1 p-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
-                      value={member.role}
-                      onChange={(e) =>
-                        onUpdateMember(member.id, {
-                          role: e.target.value as UserRole,
-                        })
-                      }
-                    >
-                      <option value="MEMBER" className="bg-white dark:bg-gray-800 text-gray-900 dark:text-white">일반</option>
-                      <option value="ADMIN" className="bg-white dark:bg-gray-800 text-gray-900 dark:text-white">관리자</option>
-                      <option value="TREASURER" className="bg-white dark:bg-gray-800 text-gray-900 dark:text-white">총무</option>
-                      <option value="DIRECTOR" className="bg-white dark:bg-gray-800 text-gray-900 dark:text-white">감독</option>
-                      <option value="PRESIDENT" className="bg-white dark:bg-gray-800 text-gray-900 dark:text-white">회장</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <Label className="text-gray-700 dark:text-gray-300">포지션</Label>
-                    <Input
-                      value={member.position || ''}
-                      onChange={(e) =>
-                        onUpdateMember(member.id, { position: e.target.value })
-                      }
-                      placeholder="예: 투수"
-                      className="mt-1 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white border-gray-200 dark:border-gray-700"
-                    />
-                  </div>
-
-                  <div>
-                    <Label className="text-gray-700 dark:text-gray-300">등번호</Label>
-                    <Input
-                      value={member.backNumber || ''}
-                      onChange={(e) =>
-                        onUpdateMember(member.id, { backNumber: e.target.value })
-                      }
-                      placeholder="예: 10"
-                      className="mt-1 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white border-gray-200 dark:border-gray-700"
-                    />
-                  </div>
-
-                  <div>
-                    <Label className="text-gray-700 dark:text-gray-300">상태</Label>
-                    <select
-                      className="w-full mt-1 p-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
-                      value={member.status}
-                      onChange={(e) =>
-                        onUpdateMember(member.id, {
-                          status: e.target.value as 'active' | 'rejected' | 'withdrawn',
-                        })
-                      }
-                    >
-                      <option value="active" className="bg-white dark:bg-gray-800 text-gray-900 dark:text-white">활성</option>
-                      <option value="rejected" className="bg-white dark:bg-gray-800 text-gray-900 dark:text-white">거절</option>
-                      <option value="withdrawn" className="bg-white dark:bg-gray-800 text-gray-900 dark:text-white">탈퇴</option>
-                    </select>
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    onClick={() => setEditingMember(null)}
-                    className="flex-1"
-                  >
-                    <Check className="w-4 h-4 mr-2" />
-                    확인
-                  </Button>
-                </div>
-              </motion.div>
-            ) : (
-              // View Mode
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 bg-gradient-to-br from-gray-200 to-gray-300 rounded-full flex items-center justify-center">
-                    <span className="text-lg font-bold text-gray-600">
-                      {member.realName[0]}
-                    </span>
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-semibold">{member.realName}</h3>
-                      {member.nickname && <span className="text-sm text-gray-500">({member.nickname})</span>}
-                    </div>
-                    <div className="flex items-center gap-2 mt-1">
-                      <span className={`inline-block px-2 py-0.5 text-xs font-medium text-white bg-gradient-to-r ${roleColors[member.role as UserRole] || 'from-gray-400 to-gray-500'} rounded-full`}>
-                        {roleLabels[member.role as UserRole] || member.role}
-                      </span>
-                      {member.position && <span className="text-xs text-gray-500">{member.position}</span>}
-                      {member.backNumber && <span className="text-xs text-gray-500">#{member.backNumber}</span>}
-                      <span className={`text-xs ${member.status === 'active' ? 'text-green-600' : 'text-gray-400'}`}>
-                        {member.status === 'active' ? '활성' : '비활성'}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                <Button size="sm" variant="outline" onClick={() => setEditingMember(member.id)}>
-                  <Edit2 className="w-4 h-4" />
-                </Button>
-              </div>
-            )}
-          </motion.div>
-        ))}
+        <h3 className="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2 px-1">
+          <Users className="w-4 h-4" />
+          활성 멤버 ({activeMembers.length})
+        </h3>
+        <div className="space-y-2">
+          {activeMembers.map((member, i) => renderMemberCard(member, i))}
+        </div>
       </div>
+
+      {/* Inactive Members Section */}
+      {inactiveMembers.length > 0 && (
+        <div className="space-y-3">
+          <h3 className="text-sm font-bold text-gray-400 flex items-center gap-2 px-1">
+            <X className="w-4 h-4" />
+            비활성/거절/탈퇴 ({inactiveMembers.length})
+          </h3>
+          <div className="space-y-2 opacity-60">
+            {inactiveMembers.map((member, i) => renderMemberCard(member, i))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

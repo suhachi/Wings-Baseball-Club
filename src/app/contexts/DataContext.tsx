@@ -13,6 +13,7 @@ import {
   getAttendances,
   updateAttendance as updateAttendanceInDb,
   getMembers,
+  getAllMembers,
   getUserNotifications,
   markNotificationAsRead as markNotificationAsReadInDb,
   markAllNotificationsAsRead as markAllNotificationsAsReadInDb,
@@ -210,7 +211,18 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // 멤버 로드 (exposed as refreshMembers)
   const refreshMembers = async () => {
     try {
-      const membersData = await getMembers(currentClubId);
+      if (!user) return;
+
+      let membersData;
+      // ADMIN or MANAGER (DIRECTOR) or PRESIDENT can see all members
+      const isAdminLike = ['ADMIN', 'PRESIDENT', 'DIRECTOR', 'TREASURER'].includes(user.role);
+
+      if (isAdminLike) {
+        membersData = await getAllMembers(currentClubId);
+      } else {
+        membersData = await getMembers(currentClubId);
+      }
+
       setMembers(membersData);
     } catch (error) {
       console.error('Error loading members:', error);

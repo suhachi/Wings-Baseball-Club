@@ -286,7 +286,33 @@ firebase deploy --only hosting
 
 ---
 
-## 🤝 기여
+### 🔔 FCM Web Push 설정 (중요)
+
+프로덕션 환경에서 푸시 알림이 작동하려면 **VAPID 키** 설정이 반드시 필요합니다.
+
+1. **VAPID 키 확보**:
+   - [Firebase Console](https://console.firebase.google.com/) 접속 > 프로젝트 선택.
+   - **프로젝트 설정** (톱니바퀴 아이콘) > **클라우드 메시징** 탭 클릭.
+   - 하단 **웹 푸시 인증(Web Push certificates)** 섹션에서 `Key pair` 값(공개 키)을 복사합니다. (키가 없다면 'Generate' 클릭)
+
+2. **환경 변수 주입**:
+   - 프로젝트 루트의 `.env.production` (또는 로컬 개발 시 `.env`) 파일을 생성합니다.
+   - 복사한 키를 아래와 같이 넣습니다:
+     ```env
+     VITE_FCM_VAPID_KEY=복사한_공개_키_값
+     ```
+
+3. **재빌드 및 재배포 (필수)**:
+   - Vite는 빌드 시점에 환경 변수를 번들에 주입하므로, 키 변경 후 반드시 아래 명령어를 수행해야 프로덕션에 반영됩니다.
+     ```bash
+     npm run build
+     npx firebase deploy --only hosting
+     ```
+
+> [!WARNING]
+> `.env.production` 파일은 보안상 절대 Git에 커밋하지 마세요. (이미 `.gitignore`에 처리되어 있습니다.) `env.template`을 참고하여 수동으로 구성하십시오.
+
+## 🤝 기여 방법
 
 이 프로젝트는 WINGS BASEBALL CLUB 전용 프로젝트입니다.
 

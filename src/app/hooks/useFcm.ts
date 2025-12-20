@@ -48,15 +48,29 @@ export function useFcm() {
 
     try {
       setTokenError(null);
-      const token = await registerFcmToken(currentClubId);
+      const result = await registerFcmToken(currentClubId);
 
-      if (token) {
+      if (result.ok && result.token) {
         setTokenRegistered(true);
         console.log('FCM 토큰 등록 완료');
         return true;
       } else {
         setTokenRegistered(false);
-        setTokenError('토큰 발급 실패');
+
+        let errorMessage = '토큰 발급 실패';
+        if (result.reason === 'CONFIG_REQUIRED') {
+          errorMessage = '푸시 알림 설정이 아직 완료되지 않았습니다. 관리자에게 문의하세요.';
+        } else if (result.reason === 'PERMISSION_DENIED') {
+          errorMessage = '알림 권한이 거부되었습니다.';
+        } else if (result.reason === 'UNSUPPORTED_BROWSER') {
+          errorMessage = '이 브라우저는 푸시 알림을 지원하지 않습니다.';
+        }
+
+        setTokenError(errorMessage);
+        if (result.reason !== 'CONFIG_REQUIRED') {
+          // 설정 누락 권장 사항은 토스트 생략하거나 정보를 위해 유지
+          toast.error(errorMessage);
+        }
         return false;
       }
     } catch (error: any) {
