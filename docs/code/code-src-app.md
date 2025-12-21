@@ -31,9 +31,20 @@ type PageType = 'home' | 'boards' | 'my' | 'settings' | 'notifications' | 'admin
 type BoardsTab = 'notice' | 'free' | 'event';
 type AdminTab = 'members' | 'stats' | 'notices';
 function AppContent() {
-  const { user, loading, memberStatus } = useAuth();
+  const { user, loading, memberStatus, isAdmin, profileComplete } = useAuth();
   const data = useData();
   useFcm();
+  // Debug Logging (Dev Only) [Task A.5]
+  React.useEffect(() => {
+    if (process.env.NODE_ENV === 'development' && user) {
+      console.log('[Security] Auth State:', {
+        uid: user.id,
+        status: memberStatus,
+        role: user.role,
+        profileComplete
+      });
+    }
+  }, [user, memberStatus, profileComplete]);
   // Navigation State
   const [activeTab, setActiveTab] = useState<'home' | 'boards' | 'my'>('home');
   const [currentPage, setCurrentPage] = useState<PageType>('home');
@@ -160,6 +171,11 @@ function AppContent() {
     );
   }
   if (user && memberStatus !== 'active' && currentPage !== 'install') {
+    return <AccessDeniedPage />;
+  }
+  // Admin Route Gate (Role check)
+  // Status check is already handled above (non-active -> AccessDeniedPage)
+  if (currentPage === 'admin' && !isAdmin()) {
     return <AccessDeniedPage />;
   }
   // --- Page Config ---
@@ -2488,13 +2504,14 @@ export const ProfileEditModal: React.FC<ProfileEditModalProps> = ({
       const safeNickname = nickname.trim() || user.nickname || '';
       const safePhone = phone.trim() || user.phone || '';
       const safePosition = position || user.position || '';
-      // [PHASE 3.3] BackNumber Normalization & Validation
+      // [SSoT] BackNumber Normalization (Atomic-05)
       let safeBackNumber: number | null = null;
-      if (backNumber && backNumber.trim() !== '') {
-        const parsed = parseInt(backNumber.trim(), 10);
-        if (isNaN(parsed) || parsed < 0 || parsed > 99) {
-          toast.error('등번호는 0~99 사이의 숫자여야 합니다');
-          setLoading(false); // Reset loading state
+      const bnStr = backNumber.toString().trim();
+      if (bnStr !== '') {
+        const parsed = Number(bnStr);
+        if (isNaN(parsed) || !Number.isInteger(parsed) || parsed < 0 || parsed > 99) {
+          toast.error('등번호는 0~99 사이의 정수여야 합니다');
+          setLoading(false);
           return;
         }
         safeBackNumber = parsed;

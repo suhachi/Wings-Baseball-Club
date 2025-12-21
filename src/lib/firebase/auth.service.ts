@@ -59,6 +59,7 @@ export async function signUpWithEmailPassword(params: SignupParams): Promise<Use
     photoURL: user.photoURL || null,
     role: 'MEMBER',
     status: 'active', // IMMEDIATE ACTIVATION
+    backNumber: null, // [M00-FIX] Init backNumber
     createdAt: new Date(), // Type compatibility, will be overwritten by serverTimestamp
     updatedAt: new Date(),
   };
@@ -133,6 +134,7 @@ export async function createAccount(
       photoURL: user.photoURL || null,
       role: role,
       status: 'active', // POLICY: Always active on creation (GateMode SOFT handles permissions)
+      backNumber: null, // [M00-FIX] Init backNumber for SSoT
       createdAt: new Date(),
       updatedAt: new Date(),
 
@@ -332,6 +334,7 @@ export async function ensureMemberExists(clubId: string, user: FirebaseUser): Pr
       photoURL: user.photoURL || userData?.photoURL || null,
       role: 'MEMBER',
       status: 'active', // Auto-activated
+      backNumber: null, // [M00-FIX] Init backNumber
       clubId,
       createdAt: now,
       updatedAt: now,

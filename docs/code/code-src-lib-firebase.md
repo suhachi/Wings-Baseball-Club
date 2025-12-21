@@ -206,9 +206,19 @@ export async function updateMemberData(
     // 1. Update Member Doc (Primary SSoT)
     await setDoc(memberRef, timestampedUpdates, { merge: true });
     // 2. Sync to Global User Doc (Legacy/Global View)
-    // We try to keep them in sync, but Member Doc is the authority.
-    await setDoc(userRef, timestampedUpdates, { merge: true });
-    console.log(`[updateMemberData] Updated member & user docs for ${uid}`);
+    // [POLICY] Sync only if User Doc exists. Never create orphan user docs from member updates.
+    // [POLICY] Strip role/status/clubId to avoid SSoT corruption.
+    const userSnap = await getDoc(userRef);
+    if (userSnap.exists()) {
+      const globalUpdates = { ...timestampedUpdates };
+      delete globalUpdates.role;
+      delete globalUpdates.status;
+      delete globalUpdates.clubId;
+      await setDoc(userRef, globalUpdates, { merge: true });
+      console.log(`[updateMemberData] Updated member & synced user doc for ${uid}`);
+    } else {
+      console.log(`[updateMemberData] Updated member only. Global user doc missing for ${uid}, skipping sync.`);
+    }
   } catch (error) {
     console.error('Error updating member data:', error);
     throw error;

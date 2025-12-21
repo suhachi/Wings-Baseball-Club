@@ -31,6 +31,7 @@ function run(cmd, stepName) {
 // 1. Build Verification
 run('npm run type-check', 'Type Check');
 run('npm run build:functions', 'Functions Build');
+run('npm run build', 'PWA Build');
 
 // 2. Smoke Tests (Critical Only)
 // Skipping C03/D01 due to Emulator Flakiness (Authenticated/NotFound issues).

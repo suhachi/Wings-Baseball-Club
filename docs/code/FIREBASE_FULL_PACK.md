@@ -1,6 +1,6 @@
 # Firebase Full Code Pack
 
-**Generated**: 2025-12-21T14:44:28.290Z
+**Generated**: 2025-12-21T15:35:31.600Z
 **Scope**: Firebase Configs, Security Rules, Cloud Functions, Frontend SDK Wrappers
 
 ## File: firebase.json
@@ -165,7 +165,7 @@ service cloud.firestore {
       match /members/{memberId} {
         // [M00-FIX] 클럽 멤버만 조회 가능 (Option B) - 외부인 차단 OR 본인
         allow read: if isClubMember(clubId) || request.auth.uid == memberId;
-        // [M00-FIX] BackNumber Validation (0-99 or null)
+        // [ATOMIC-06] BackNumber Strict Type/Range (0-99 or null)
         function isValidBackNumber() {
           let bn = request.resource.data.backNumber;
           return bn == null || (bn is int && bn >= 0 && bn <= 99);
@@ -184,8 +184,8 @@ service cloud.firestore {
             'realName', 'nickname', 'phone', 'phoneNumber', 'photoURL', 'updatedAt', 'backNumber'
           ]);
         }
-        allow update: if isAuthenticated() && (
-          (request.auth.uid == memberId && isSelfProfileUpdateAllowed() && isValidBackNumber()) || isAdminLike(clubId)
+        allow update: if isAuthenticated() && isValidBackNumber() && (
+          (request.auth.uid == memberId && isSelfProfileUpdateAllowed()) || isAdminLike(clubId)
         );
       }
 
@@ -566,10 +566,20 @@ export async function updateMemberData(
     await setDoc(memberRef, timestampedUpdates, { merge: true });
 
     // 2. Sync to Global User Doc (Legacy/Global View)
-    // We try to keep them in sync, but Member Doc is the authority.
-    await setDoc(userRef, timestampedUpdates, { merge: true });
+    // [POLICY] Sync only if User Doc exists. Never create orphan user docs from member updates.
+    // [POLICY] Strip role/status/clubId to avoid SSoT corruption.
+    const userSnap = await getDoc(userRef);
+    if (userSnap.exists()) {
+      const globalUpdates = { ...timestampedUpdates };
+      delete globalUpdates.role;
+      delete globalUpdates.status;
+      delete globalUpdates.clubId;
 
-    console.log(`[updateMemberData] Updated member & user docs for ${uid}`);
+      await setDoc(userRef, globalUpdates, { merge: true });
+      console.log(`[updateMemberData] Updated member & synced user doc for ${uid}`);
+    } else {
+      console.log(`[updateMemberData] Updated member only. Global user doc missing for ${uid}, skipping sync.`);
+    }
 
   } catch (error) {
     console.error('Error updating member data:', error);

@@ -252,6 +252,7 @@ function MembersTab({ members, editingMember, setEditingMember, onUpdateMember }
 }) {
 
   // Removed pending members logic as per B02-04 (Signup -> Active policy)
+  const pendingMembers = members.filter(m => m.status === 'pending');
   const activeMembers = members.filter(m => m.status === 'active');
   const inactiveMembers = members.filter(m => m.status === 'rejected' || m.status === 'withdrawn');
 
@@ -292,6 +293,7 @@ function MembersTab({ members, editingMember, setEditingMember, onUpdateMember }
                 value={member.status}
                 onChange={(e) => onUpdateMember(member.id, { status: e.target.value as any })}
               >
+                <option value="pending">대기</option>
                 <option value="active">활성</option>
                 <option value="rejected">거절</option>
                 <option value="withdrawn">탈퇴</option>
@@ -331,9 +333,13 @@ function MembersTab({ members, editingMember, setEditingMember, onUpdateMember }
                   {roleLabels[member.role]}
                 </span>
                 {member.backNumber && <span className="text-[10px] text-gray-500">#{member.backNumber}</span>}
-                <span className={`text-[10px] ${member.status === 'active' ? 'text-green-500' : 'text-red-400'}`}>
+                <span className={`text-[10px] ${member.status === 'active' ? 'text-green-500' :
+                    member.status === 'pending' ? 'text-orange-500' :
+                      'text-red-400'
+                  }`}>
                   {member.status === 'active' ? '활성' :
-                    member.status === 'rejected' ? '거절됨' : '탈퇴'}
+                    member.status === 'pending' ? '승인 대기' :
+                      member.status === 'rejected' ? '거절됨' : '탈퇴'}
                 </span>
               </div>
             </div>
@@ -351,6 +357,19 @@ function MembersTab({ members, editingMember, setEditingMember, onUpdateMember }
 
   return (
     <div className="space-y-8">
+      {/* Pending Members Section */}
+      {pendingMembers.length > 0 && (
+        <div className="space-y-3">
+          <h3 className="text-sm font-bold text-orange-600 dark:text-orange-400 flex items-center gap-2 px-1">
+            <Users className="w-4 h-4" />
+            승인 대기 ({pendingMembers.length})
+          </h3>
+          <div className="space-y-2">
+            {pendingMembers.map((member, i) => renderMemberCard(member, i))}
+          </div>
+        </div>
+      )}
+
       {/* Active Members Section */}
       <div className="space-y-3">
         <h3 className="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2 px-1">
