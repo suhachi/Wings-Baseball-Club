@@ -37,7 +37,7 @@ exports.createEventPost = (0, https_1.onCall)({ region: 'asia-northeast3' }, asy
     const opponent = (0, validate_1.optString)(req.data?.opponent, 'opponent', 200);
     const requestId = (0, validate_1.reqString)(req.data?.requestId, 'requestId', 1, 128); // 필수 (멱등성용)
     // μATOM-0531: adminLike 권한 확인
-    await (0, auth_1.requireRole)(clubId, uid, ['PRESIDENT', 'DIRECTOR', 'ADMIN']);
+    await (0, auth_1.requireRole)(clubId, uid, ['PRESIDENT', 'DIRECTOR', 'TREASURER', 'ADMIN']);
     // eventType 검증
     if (eventType !== 'PRACTICE' && eventType !== 'GAME') {
         throw errors_1.Err.invalidArgument('Invalid eventType', { eventType, validTypes: ['PRACTICE', 'GAME'] });
@@ -59,7 +59,7 @@ exports.createEventPost = (0, https_1.onCall)({ region: 'asia-northeast3' }, asy
     if (isNaN(startAtDate.getTime())) {
         throw errors_1.Err.invalidArgument('Invalid startAt date');
     }
-    // μATOM-0532: voteCloseAt 계산(전날 23:00 KST) 서버 확정
+    // μATOM-0532: voteCloseAt 계산(전날 21:00 KST) 서버 확정
     const voteCloseAtMillis = (0, time_1.computeVoteCloseAtKST)(startAtDate.getTime());
     const voteCloseAt = new Date(voteCloseAtMillis);
     // 멱등성 키 생성

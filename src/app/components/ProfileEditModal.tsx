@@ -67,7 +67,20 @@ export const ProfileEditModal: React.FC<ProfileEditModalProps> = ({
       const safeNickname = nickname.trim() || user.nickname || '';
       const safePhone = phone.trim() || user.phone || '';
       const safePosition = position || user.position || '';
-      const safeBackNumber = backNumber ? parseInt(backNumber) : (user.backNumber || null);
+
+      // [SSoT] BackNumber Normalization (Atomic-05)
+      let safeBackNumber: number | null = null;
+      const bnStr = backNumber.toString().trim();
+
+      if (bnStr !== '') {
+        const parsed = Number(bnStr);
+        if (isNaN(parsed) || !Number.isInteger(parsed) || parsed < 0 || parsed > 99) {
+          toast.error('등번호는 0~99 사이의 정수여야 합니다');
+          setLoading(false);
+          return;
+        }
+        safeBackNumber = parsed;
+      }
 
       const updates: any = {
         nickname: safeNickname,
@@ -227,7 +240,7 @@ export const ProfileEditModal: React.FC<ProfileEditModalProps> = ({
                   value={backNumber}
                   onChange={(e) => setBackNumber(e.target.value)}
                   className="w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="등번호"
+                  placeholder="등번호 (0-99)"
                   min="0"
                   max="99"
                 />
@@ -238,10 +251,17 @@ export const ProfileEditModal: React.FC<ProfileEditModalProps> = ({
                 <label className="block text-sm font-medium mb-2">역할</label>
                 <input
                   type="text"
-                  value={user.role === 'PRESIDENT' ? '회장' :
-                    user.role === 'DIRECTOR' ? '감독' :
-                      user.role === 'TREASURER' ? '총무' :
-                        user.role === 'ADMIN' ? '관리자' : '일반회원'}
+                  value={(() => {
+                    const labels: Record<string, string> = {
+                      PRESIDENT: '회장',
+                      VICE_PRESIDENT: '부회장',
+                      DIRECTOR: '감독',
+                      TREASURER: '총무',
+                      ADMIN: '관리자',
+                      MEMBER: '일반회원'
+                    };
+                    return labels[user.role] || '일반회원';
+                  })()}
                   disabled
                   className="w-full px-4 py-3 border rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-500 cursor-not-allowed"
                 />

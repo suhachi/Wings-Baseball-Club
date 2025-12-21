@@ -1,4 +1,5 @@
 rules_version = '2';
+// Trigger Reload 1
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -14,6 +15,11 @@ service cloud.firestore {
       return /databases/$(database)/documents/clubs/$(clubId)/members/$(uid);
     }
 
+    // [T2] Club ID Hard Lock (Project Policy)
+    function isWingsClub(clubId) {
+      return clubId == 'WINGS';
+    }
+
     // 공통: isClubMember(clubId) 필수
     function isClubMember(clubId) {
       return isAuthenticated() && exists(memberPath(clubId, request.auth.uid));
@@ -27,9 +33,17 @@ service cloud.firestore {
       return isClubMember(clubId) && member(clubId).status == 'active';
     }
 
+    // [M00-07] M00 Soft Gate: 프로필 필수 필드 확인 (realName, phone)
+    // Legacy support: phoneNumber 필드도 인정
+    function hasRequiredProfile(clubId) {
+      let m = member(clubId);
+      return (m.realName != null && m.realName != '')
+          && ( (m.phone != null && m.phone != '') || (m.phoneNumber != null && m.phoneNumber != '') );
+    }
+
     function isAdminLike(clubId) {
       return isClubMember(clubId)
-        && member(clubId).role in ['ADMIN', 'PRESIDENT', 'DIRECTOR', 'TREASURER'];
+        && member(clubId).role in ['PRESIDENT', 'VICE_PRESIDENT', 'DIRECTOR', 'TREASURER', 'ADMIN'];
     }
 
     // ============================================
@@ -45,9 +59,10 @@ service cloud.firestore {
 
     // Users (Global)
     match /users/{userId} {
-      allow read: if isAuthenticated();
+      // [M00-FIX] 개인정보 보호: 본인만 조회 가능 (Option A)
+      allow read: if isAuthenticated() && request.auth.uid == userId;
       allow create: if isAuthenticated() && request.auth.uid == userId;
-      // 운영 안전상: 유저 본인만 업데이트(역할/승인은 Functions/관리자화면에서 members 문서로)
+      // 운영 안전상: 유저 본인만 업데이트
       allow update: if isAuthenticated() && request.auth.uid == userId;
     }
 
@@ -63,71 +78,106 @@ service cloud.firestore {
     // ============================================
 
     match /clubs/{clubId} {
+      // [T2] Enforce WINGS Club ID
+      // If not WINGS, deny all.
+      function isTargetClub() {
+        return isWingsClub(clubId);
+      }
+
       // 클럽 문서 read는 active member만 - μATOM-0551
-      allow read: if isActiveMember(clubId);
+      allow read: if isTargetClub() && isActiveMember(clubId);
 
       // ============================================
       // Members
       // ============================================
       match /members/{memberId} {
-        allow read: if isAuthenticated();
-        // 가입 직후 멤버 문서 생성 허용(단, role/status는 서버/관리자만 바꾸는 것을 권장)
-        allow create: if isAuthenticated() && request.auth.uid == memberId;
+        // [M00-FIX] 클럽 멤버만 조회 가능 (Option B) - 외부인 차단 OR 본인
+        allow read: if isClubMember(clubId) || request.auth.uid == memberId;
+        // [ATOMIC-06] BackNumber Strict Type/Range (0-99 or null)
+        function isValidBackNumber() {
+          let bn = request.resource.data.backNumber;
+          return bn == null || (bn is int && bn >= 0 && bn <= 99);
+        }
+
+        // 가입 직후 멤버 문서 생성 허용 (단, role은 MEMBER 고정, status는 active 허용)
+        allow create: if isAuthenticated() && request.auth.uid == memberId
+          && request.resource.data.role == 'MEMBER'
+          && request.resource.data.status == 'active'
+          && isValidBackNumber();
+
         // 본인 프로필 일부 수정만 허용하고 싶으면 keys 제한을 추가해야 함(여기선 보수적으로 adminLike만 허용)
-        allow update: if isAuthenticated() && (request.auth.uid == memberId || isAdminLike(clubId));
+        // 본인 프로필 일부 수정만 허용 (키 제한)
+        function isSelfProfileUpdateAllowed() {
+          return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'realName', 'nickname', 'phone', 'phoneNumber', 'photoURL', 'updatedAt', 'backNumber'
+          ]);
+        }
+        allow update: if isAuthenticated() && isValidBackNumber() && (
+          (request.auth.uid == memberId && isSelfProfileUpdateAllowed()) || isAdminLike(clubId)
+        );
       }
 
       // ============================================
       // Posts
       // ============================================
       match /posts/{postId} {
-        // μATOM-0551: 읽기 isClubMember만
+        // μATOM-0551: 읽기 isClubMember만 (SOFT Gate: Read Allowed)
         allow read: if isActiveMember(clubId);
 
         // Posts Create Policy:
-        // - notice/event: 클라 write 금지 (Functions-only) - μATOM-0552
-        // - free: member create 허용 - μATOM-0553
+        // ... (省略)
         function isPostTypeAllowedForCreate() {
           let postType = request.resource.data.type;
-          // notice, event는 Functions-only
+          // notice, event, poll은 Functions-only
           return postType == 'free';
         }
 
-        allow create: if isActiveMember(clubId) && isPostTypeAllowedForCreate();
+        // [M00-07] hasRequiredProfile 추가
+        allow create: if isActiveMember(clubId) && hasRequiredProfile(clubId) && isPostTypeAllowedForCreate();
 
         // Posts Update/Delete Policy:
-        // - author OR adminLike
+        
+        function isFreePost() {
+          return resource.data.type == 'free';
+        }
+
+        // [M00-FIX] isPostAuthor helper definition added
         function isPostAuthor() {
           return resource.data.authorId == request.auth.uid;
         }
 
         function updatingProtectedPostFields() {
-          return request.resource.data.keys().hasAny([
+          return request.resource.data.diff(resource.data).affectedKeys().hasAny([
             'authorId','authorName','authorPhotoURL','type'
           ]);
         }
 
-        // free: (author OR adminLike) update/delete - μATOM-0553
-        allow update: if isActiveMember(clubId) && (
-          isAdminLike(clubId)
-          || (isPostAuthor() && !updatingProtectedPostFields())
-        );
-
-        allow delete: if isActiveMember(clubId) && (
-          isAdminLike(clubId) || isPostAuthor()
+        // [M00-07] hasRequiredProfile 추가
+        allow update: if isActiveMember(clubId) && hasRequiredProfile(clubId) && (
+             (isFreePost() && isPostAuthor() && !updatingProtectedPostFields())
+          || (isAdminLike(clubId)) 
+        ); 
+        
+        allow delete: if isActiveMember(clubId) && hasRequiredProfile(clubId) && (
+          isAdminLike(clubId) || (isFreePost() && isPostAuthor())
         );
 
         // ============================================
         // Comments
         // ============================================
         // μATOM-0554: comments 정책
-        // Comments Policy: create는 멤버, update/delete 작성자 또는 adminLike
+        // Comments Policy: create는 active 멤버, update/delete는 작성자 또는 adminLike
         match /comments/{commentId} {
           allow read: if isActiveMember(clubId);
-          allow create: if isActiveMember(clubId);
+          // [M00-07] hasRequiredProfile 추가
+          allow create: if isActiveMember(clubId) && hasRequiredProfile(clubId) && request.resource.data.authorId == request.auth.uid;
 
+          // update/delete: author OR adminLike
+          // update/delete: author ONLY (Admin uses callable for audit)
+          // update/delete: author ONLY (Admin uses callable for audit)
+          // 프로필 미완성 상태여도 본인 댓글 수정/삭제 허용 (Cleanup 목적)
           allow update, delete: if isActiveMember(clubId) && (
-            resource.data.authorId == request.auth.uid || isAdminLike(clubId)
+            resource.data.authorId == request.auth.uid
           );
         }
 
@@ -141,9 +191,12 @@ service cloud.firestore {
           // 본인만, voteClosed==false일 때만 write 허용
           function isVoteOpen() {
             let post = get(/databases/$(database)/documents/clubs/$(clubId)/posts/$(postId)).data;
-            return post.voteClosed != true;
+            let closedManual = post.get('voteClosed', false) == true;
+            let closedTime = post.keys().hasAll(['voteCloseAt']) && request.time >= post.voteCloseAt;
+            return !closedManual && !closedTime;
           }
-          allow write: if isActiveMember(clubId) 
+          // [M00-07] hasRequiredProfile 추가
+          allow write: if isActiveMember(clubId) && hasRequiredProfile(clubId)
             && request.auth.uid == userId
             && isVoteOpen();
         }

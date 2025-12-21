@@ -3,7 +3,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User as FirebaseUser } from 'firebase/auth';
 import {
   getCurrentUserData,
-  updateUserData,
+  updateMemberData, // [New SSoT Update]
   logout as firebaseLogout,
   onAuthStateChange,
   isAdmin as checkIsAdmin,
@@ -16,7 +16,7 @@ import type { UserRole } from '../../lib/firebase/types';
 
 // μATOM-0404: Gate 성공 시 clubId 컨텍스트 고정
 // 기본값은 ClubContext에서 전달받도록 변경 예정
-const DEFAULT_CLUB_ID = 'default-club';
+const DEFAULT_CLUB_ID = 'WINGS';
 
 // User roles and constraints re-export
 export type { UserRole };
@@ -29,7 +29,7 @@ export interface User {
   photoURL?: string | null;
   role: UserRole;
   position?: string;
-  backNumber?: string;
+  backNumber?: number | null;
   status: 'pending' | 'active' | 'rejected' | 'withdrawn';
   createdAt: Date;
 }
@@ -37,8 +37,10 @@ export interface User {
 interface AuthContextType {
   user: User | null;
   loading: boolean;
-  memberStatus: 'checking' | 'active' | 'denied' | null; // μATOM-0401~0402: 멤버 상태 체크
-  currentClubId: string; // μATOM-0404: Gate 성공 시 clubId 컨텍스트 고정
+  memberStatus: 'checking' | 'active' | 'denied' | null;
+  currentClubId: string;
+  profileComplete: boolean;
+  canAct: boolean;
 
   // New Auth Methods
   loginWithGoogle: () => Promise<void>;
@@ -90,32 +92,64 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, clubId = D
   useEffect(() => {
     const unsubscribe = onAuthStateChange(async (firebaseUser: FirebaseUser | null) => {
       if (firebaseUser) {
-        const userData = await getCurrentUserData(firebaseUser.uid);
-        if (userData) {
-          const userObj = {
+        // μATOM-0610: Auto-provision member if missing (Access Gate)
+        const { ensureMemberExists } = await import('../../lib/firebase/auth.service');
+        await ensureMemberExists(currentClubId, firebaseUser);
+
+        let userObj: User | null = null;
+        let userData = await getCurrentUserData(firebaseUser.uid);
+
+        // [FIX-M01] SINGLE SOURCE OF TRUTH: Always fetch Club Member Doc
+        // Priority: memberDoc > userData > firebaseUser (legacy fallback)
+        const memberDoc = await getMember(currentClubId, firebaseUser.uid);
+
+        if (process.env.NODE_ENV === 'development') {
+          console.log('[AuthContext] Member Sync Debug:', {
+            uid: firebaseUser.uid,
+            memberExists: !!memberDoc,
+            memberRole: memberDoc?.role,
+            globalRole: userData?.role
+          });
+        }
+
+        if (memberDoc) {
+          // Case A: Member Doc Exists (Primary SSoT)
+          userObj = {
+            id: firebaseUser.uid,
+            realName: memberDoc.realName || userData?.realName || '',
+            nickname: memberDoc.nickname || userData?.nickname || firebaseUser.displayName,
+            phone: memberDoc.phone || (memberDoc as any).phoneNumber || userData?.phone || '',
+            photoURL: memberDoc.photoURL || userData?.photoURL || firebaseUser.photoURL,
+            role: memberDoc.role, // <--- CRITICAL: Use Club Role
+            position: memberDoc.position,
+            backNumber: memberDoc.backNumber,
+            status: memberDoc.status,
+            createdAt: memberDoc.createdAt,
+          };
+        } else if (userData) {
+          // Case B: Global User only (No Member Doc yet)
+          // [PHASE 1.1] Strict SSoT: Access Denied anyway, but ensure Role is safely degraded.
+          userObj = {
             id: userData.uid,
             realName: userData.realName,
             nickname: userData.nickname,
-            phone: userData.phone,
-            photoURL: userData.photoURL || firebaseUser.photoURL || undefined,
-            role: userData.role,
+            phone: userData.phone || (userData as any).phoneNumber,
+            photoURL: userData.photoURL || firebaseUser.photoURL,
+            role: 'MEMBER', // [SECURITY] Force MEMBER if no club membership exists. Do not trust global role.
             position: userData.position,
             backNumber: userData.backNumber,
-            status: userData.status,
+            status: 'pending', // Force pending/checking status effectively
             createdAt: userData.createdAt,
           };
-          setUser(userObj);
-
-          // μATOM-0401: 멤버 상태 체크 (members/{uid} 존재 확인)
-          // μATOM-0402: status==active 검증
-          setMemberStatus('checking');
-          const accessStatus = await checkMemberAccess(userData.uid, currentClubId);
-          setMemberStatus(accessStatus);
-        } else {
-          // Logged in but no UserDoc (e.g. fresh signup before createAccount called)
-          // Do NOT set user yet, let the UI handle the 'creating account' state flow
-          setMemberStatus('denied');
         }
+
+        setUser(userObj);
+
+        // μATOM-0401: 멤버 상태 체크
+        setMemberStatus('checking');
+        const accessStatus = await checkMemberAccess(firebaseUser.uid, currentClubId);
+        setMemberStatus(accessStatus);
+
       } else {
         setUser(null);
         setMemberStatus(null);
@@ -195,7 +229,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, clubId = D
   const updateUser = async (updates: Partial<User>) => {
     if (user) {
       try {
-        await updateUserData(user.id, updates as Partial<unknown>); // Cast to unknown then UserDoc properly if needed
+        // [FIX-M01] SSoT Update: Update Member Doc (and syncs to User doc via service)
+        await updateMemberData(currentClubId, user.id, updates as Partial<unknown>);
         setUser({ ...user, ...updates });
       } catch (error) {
         console.error('Update user error:', error);
@@ -205,6 +240,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, clubId = D
   };
 
   const isAdmin = () => {
+    // [FIX-M01] Unified Admin Check
     return user ? checkIsAdmin(user.role) : false;
   };
 
@@ -212,12 +248,26 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, clubId = D
     return user ? checkIsTreasury(user.role) : false;
   };
 
+  const profileComplete = React.useMemo(() => {
+    if (!user) return false;
+    // [M00-05] M00 Soft Gate: realName + phone required
+    // user.phone is already populated with fallback to phoneNumber if available
+    return !!(user.realName && user.phone);
+  }, [user]);
+
+  const canAct = React.useMemo(() => {
+    // GATE MODE SOFT: Active member AND Profile Complete
+    return memberStatus === 'active' && profileComplete;
+  }, [memberStatus, profileComplete]);
+
   return (
     <AuthContext.Provider value={{
       user,
       loading,
       memberStatus,
-      currentClubId, // μATOM-0404: clubId 컨텍스트 고정
+      currentClubId,
+      profileComplete,
+      canAct,
       loginWithGoogle: handleLoginWithGoogle,
       createMsgAccount,
       logout,

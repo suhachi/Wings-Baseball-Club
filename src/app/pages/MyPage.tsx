@@ -2,7 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { User, Settings, Bell, Shield, LogOut, ChevronRight, Crown, Star, Calendar, Trophy, MessageSquare, Edit, Camera, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { useAuth, UserRole } from '../contexts/AuthContext';
+
 import { useData } from '../contexts/DataContext';
+import { canManageMembers, canManageNotices } from '../lib/permissions';
 import { Card } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
@@ -25,7 +27,7 @@ export const MyPage: React.FC<MyPageProps> = ({
   onNavigateToNoticeManage,
   onNavigateToMyActivity
 }: MyPageProps) => {
-  const { user, logout, isAdmin, isTreasury } = useAuth();
+  const { user, logout, profileComplete } = useAuth();
   const { posts, comments, attendanceRecords } = useData();
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [stats, setStats] = useState({
@@ -84,12 +86,38 @@ export const MyPage: React.FC<MyPageProps> = ({
 
   if (!user) return null;
 
+
   const roleInfo = getRoleInfo(user.role);
   const RoleIcon = roleInfo.icon;
+
+  const canNotices = canManageNotices(user.role);
+  const canMembers = canManageMembers(user.role);
 
   return (
     <div className="pb-20 pt-16">
       <div className="max-w-md mx-auto">
+        {/* Profile Incomplete Banner (GateMode SOFT) */}
+        {!profileComplete && (
+          <div className="mx-4 mt-4 mb-4 p-4 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-xl flex items-center justify-between shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-orange-100 dark:bg-orange-800 rounded-lg">
+                <AlertCircle className="w-5 h-5 text-orange-600 dark:text-orange-400" />
+              </div>
+              <div>
+                <p className="font-bold text-sm text-gray-900 dark:text-white">프로필 미완성</p>
+                <p className="text-xs text-gray-600 dark:text-gray-400">실명과 전화번호를 입력해주세요.</p>
+              </div>
+            </div>
+            <Button
+              size="sm"
+              onClick={() => setEditModalOpen(true)}
+              className="bg-orange-500 hover:bg-orange-600 text-white border-0"
+            >
+              입력하기
+            </Button>
+          </div>
+        )}
+
         {/* Profile Header */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -204,7 +232,6 @@ export const MyPage: React.FC<MyPageProps> = ({
             </Card>
           </div>
         </motion.div>
-
         {/* Menu List */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -213,7 +240,7 @@ export const MyPage: React.FC<MyPageProps> = ({
           className="px-4 mt-6 space-y-3"
         >
           {/* Admin Menu */}
-          {isAdmin() && (
+          {(canNotices || canMembers) && (
             <>
               <Card className="overflow-hidden">
                 <div className="p-3 bg-gradient-to-r from-purple-500 to-purple-600 text-white">
@@ -222,7 +249,7 @@ export const MyPage: React.FC<MyPageProps> = ({
                     <span className="font-semibold text-sm">관리자 메뉴</span>
                   </div>
                 </div>
-                {isAdmin() && (
+                {canMembers && (
                   <>
                     <MenuItem icon={Shield} label="관리자 페이지" onClick={() => onNavigateToAdmin?.()} />
                     <Separator />
@@ -230,17 +257,8 @@ export const MyPage: React.FC<MyPageProps> = ({
                     <Separator />
                   </>
                 )}
-                {isAdmin() && (
-                  <>
-                    <Separator />
-                    <MenuItem icon={Bell} label="공지 관리" onClick={() => onNavigateToNoticeManage?.()} />
-                    <Separator />
-                    {isTreasury() && (
-                      <>
-                        <Separator />
-                      </>
-                    )}
-                  </>
+                {canNotices && (
+                  <MenuItem icon={Bell} label="공지 관리" onClick={() => onNavigateToNoticeManage?.()} />
                 )}
               </Card>
               <div className="h-3"></div>
@@ -268,7 +286,7 @@ export const MyPage: React.FC<MyPageProps> = ({
                 ) : permission === 'denied' ? (
                   <Badge className="bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400">
                     <AlertCircle className="w-3 h-3 mr-1" />
-                    거부됨
+                    권한 필요
                   </Badge>
                 ) : (
                   <Badge variant="outline">대기중</Badge>
@@ -284,14 +302,16 @@ export const MyPage: React.FC<MyPageProps> = ({
                   <p className="text-xs text-red-600 dark:text-red-400 mb-2">
                     {tokenError || '토큰 등록에 실패했습니다'}
                   </p>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={retryRegister}
-                    className="w-full"
-                  >
-                    재시도
-                  </Button>
+                  {!tokenError?.includes('설정') && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={retryRegister}
+                      className="w-full"
+                    >
+                      재시도
+                    </Button>
+                  )}
                 </div>
               )}
               {permission !== 'granted' && (
@@ -313,7 +333,7 @@ export const MyPage: React.FC<MyPageProps> = ({
                 </div>
               )}
               {/* μATOM-0514: 토큰 재등록 버튼 */}
-              {permission === 'granted' && (
+              {permission === 'granted' && !tokenError?.includes('설정') && (
                 <Button
                   size="sm"
                   variant="outline"

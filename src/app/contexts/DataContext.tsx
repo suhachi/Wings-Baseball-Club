@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { isAdminRole } from '../lib/auth/roles';
 import { useAuth } from './AuthContext';
 import { useClub } from './ClubContext';
 import {
@@ -18,11 +19,15 @@ import {
   markNotificationAsRead as markNotificationAsReadInDb,
   markAllNotificationsAsRead as markAllNotificationsAsReadInDb,
 } from '../../lib/firebase/firestore.service';
+import {
+  adminEditComment,
+  adminDeleteComment,
+} from '../../lib/firebase/comments.moderation.service';
 import { PostDoc, CommentDoc, AttendanceDoc, AttendanceStatus, PostType } from '../../lib/firebase/types';
 import type { UserRole } from '../../lib/firebase/types';
 
 // ATOM-08: Access Gate - default club ID (나중에 ClubContext와 통합 가능)
-// const DEFAULT_CLUB_ID = 'default-club';
+// const DEFAULT_CLUB_ID = 'WINGS';
 
 // Re-export types
 export type { PostType, AttendanceStatus, UserRole };
@@ -139,7 +144,7 @@ interface DataContextType {
 const DataContext = createContext<DataContextType | undefined>(undefined);
 
 export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user } = useAuth();
+  const { user, memberStatus } = useAuth();
   const { currentClubId } = useClub();
   const [posts, setPosts] = useState<Post[]>([]);
   const [comments, setComments] = useState<Record<string, Comment[]>>({});
@@ -215,7 +220,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       let membersData;
       // ADMIN or MANAGER (DIRECTOR) or PRESIDENT can see all members
-      const isAdminLike = ['ADMIN', 'PRESIDENT', 'DIRECTOR', 'TREASURER'].includes(user.role);
+      const isAdminLike = isAdminRole(user.role);
 
       if (isAdminLike) {
         membersData = await getAllMembers(currentClubId);
@@ -256,13 +261,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // 초기 로드
   useEffect(() => {
-    if (user) {
+    if (user && memberStatus === 'active') {
       refreshPosts();
       loadMembers();
       loadNotifications();
     } else {
-      // μATOM-0405: 로그아웃 시 상태 초기화
-      // user가 null이면 모든 데이터 초기화
+      // μATOM-0405: 로그아웃 시 상태 초기화 또는 승인 대기 중 데이터 접근 차단
+      // user가 null이거나 active가 아니면 모든 데이터 초기화
       setPosts([]);
       setComments({});
       setAttendances({});
@@ -270,11 +275,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setMembers([]);
       setNotifications([]);
     }
-  }, [user]);
+  }, [user, memberStatus]);
 
   // 게시글 추가
   const addPost = async (postData: Omit<Post, 'id' | 'createdAt' | 'updatedAt' | 'author'>) => {
     if (!user) return;
+    if (postData.type !== 'free') {
+      throw new Error(`[RBAC] addPost() only supports type 'free'. Use Cloud Functions for type='${postData.type}'.`);
+    }
 
     try {
       const newPostData: Omit<PostDoc, 'id' | 'createdAt' | 'updatedAt'> = {
@@ -364,11 +372,15 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // 댓글 추가
   const addComment = async (postId: string, content: string) => {
     if (!user) return;
+    const trimmedContent = content.trim();
+    if (!trimmedContent) {
+      throw new Error('Content cannot be empty');
+    }
 
     try {
       // Note: addCommentInDb(clubId, postId, data)
       const commentDataForDb: Omit<CommentDoc, 'id' | 'createdAt' | 'updatedAt' | 'postId'> = {
-        content,
+        content: trimmedContent,
         authorId: user.id,
         authorName: user.realName,
         authorPhotoURL: user.photoURL ?? undefined,
@@ -385,9 +397,28 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // 댓글 업데이트
   const updateComment = async (postId: string, commentId: string, content: string) => {
     if (!user) return;
+    const trimmedContent = content.trim();
+    if (!trimmedContent) {
+      throw new Error('Content cannot be empty');
+    }
+
+    // Determine current comment author to decide path
+    const targetComment = comments[postId]?.find(c => c.id === commentId);
+    if (!targetComment) {
+      throw new Error('Comment not found');
+    }
+
+    const isAuthor = targetComment.author.id === user.id;
+    const isAdminLike = ['ADMIN', 'PRESIDENT', 'DIRECTOR', 'TREASURER'].includes(user.role);
 
     try {
-      await updateCommentInDb(currentClubId, postId, commentId, { content });
+      if (!isAuthor && isAdminLike) {
+        // Admin Moderation Path (via Callable for Audit)
+        await adminEditComment(currentClubId, postId, commentId, trimmedContent, "Admin Edit (Direct)");
+      } else {
+        // Author Path (Direct Firestore)
+        await updateCommentInDb(currentClubId, postId, commentId, { content: trimmedContent });
+      }
       await loadComments(postId);
     } catch (error) {
       console.error('Error updating comment:', error);
@@ -397,8 +428,27 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // 댓글 삭제
   const deleteComment = async (postId: string, commentId: string) => {
+    if (!user) return;
+
+    // Determine current comment author
+    const targetComment = comments[postId]?.find(c => c.id === commentId);
+    if (!targetComment) {
+      console.warn('Comment not found locally, refetching...');
+      await loadComments(postId);
+      return;
+    }
+
+    const isAuthor = targetComment.author.id === user.id;
+    const isAdminLike = ['ADMIN', 'PRESIDENT', 'DIRECTOR', 'TREASURER'].includes(user.role);
+
     try {
-      await deleteCommentInDb(currentClubId, postId, commentId);
+      if (!isAuthor && isAdminLike) {
+        // Admin Moderation Path (via Callable for Audit)
+        await adminDeleteComment(currentClubId, postId, commentId, "Admin Delete (Direct)");
+      } else {
+        // Author Path (Direct Firestore)
+        await deleteCommentInDb(currentClubId, postId, commentId);
+      }
       await loadComments(postId);
     } catch (error) {
       console.error('Error deleting comment:', error);

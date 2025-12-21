@@ -19,8 +19,9 @@ import { useData, Member } from '../contexts/DataContext';
 import { useClub } from '../contexts/ClubContext';
 import {
   updateMember,
-  createPost,
 } from '../../lib/firebase/firestore.service';
+import { createNoticeWithPush } from '../../lib/firebase/notices.service';
+import { canManageNotices } from '../lib/permissions';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -250,7 +251,7 @@ function MembersTab({ members, editingMember, setEditingMember, onUpdateMember }
   onUpdateMember: (id: string, updates: Partial<Member>) => void;
 }) {
 
-  const pendingMembers = members.filter(m => m.status === 'pending');
+  // Removed pending members logic as per B02-04 (Signup -> Active policy)
   const activeMembers = members.filter(m => m.status === 'active');
   const inactiveMembers = members.filter(m => m.status === 'rejected' || m.status === 'withdrawn');
 
@@ -292,7 +293,6 @@ function MembersTab({ members, editingMember, setEditingMember, onUpdateMember }
                 onChange={(e) => onUpdateMember(member.id, { status: e.target.value as any })}
               >
                 <option value="active">활성</option>
-                <option value="pending">대기</option>
                 <option value="rejected">거절</option>
                 <option value="withdrawn">탈퇴</option>
               </select>
@@ -331,28 +331,15 @@ function MembersTab({ members, editingMember, setEditingMember, onUpdateMember }
                   {roleLabels[member.role]}
                 </span>
                 {member.backNumber && <span className="text-[10px] text-gray-500">#{member.backNumber}</span>}
-                <span className={`text-[10px] ${member.status === 'active' ? 'text-green-500' :
-                  member.status === 'pending' ? 'text-orange-500' : 'text-red-400'
-                  }`}>
+                <span className={`text-[10px] ${member.status === 'active' ? 'text-green-500' : 'text-red-400'}`}>
                   {member.status === 'active' ? '활성' :
-                    member.status === 'pending' ? '승인대기' :
-                      member.status === 'rejected' ? '거절됨' : '탈퇴'}
+                    member.status === 'rejected' ? '거절됨' : '탈퇴'}
                 </span>
               </div>
             </div>
           </div>
 
           <div className="flex items-center gap-1">
-            {member.status === 'pending' && (
-              <Button
-                size="sm"
-                variant="default"
-                className="h-8 px-2 bg-green-600 hover:bg-green-700 text-xs"
-                onClick={() => onUpdateMember(member.id, { status: 'active' })}
-              >
-                승인
-              </Button>
-            )}
             <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => setEditingMember(member.id)}>
               <Edit2 className="w-3.5 h-3.5" />
             </Button>
@@ -364,19 +351,6 @@ function MembersTab({ members, editingMember, setEditingMember, onUpdateMember }
 
   return (
     <div className="space-y-8">
-      {/* Pending Members Section */}
-      {pendingMembers.length > 0 && (
-        <div className="space-y-3">
-          <h3 className="text-sm font-bold text-orange-600 flex items-center gap-2 px-1">
-            <Shield className="w-4 h-4" />
-            가입 승인 대기 ({pendingMembers.length})
-          </h3>
-          <div className="space-y-2">
-            {pendingMembers.map((member, i) => renderMemberCard(member, i))}
-          </div>
-        </div>
-      )}
-
       {/* Active Members Section */}
       <div className="space-y-3">
         <h3 className="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2 px-1">
@@ -468,18 +442,20 @@ function NoticesTab({
       return;
     }
     if (!currentClubId || !user) return;
+    if (!canManageNotices(user.role)) {
+      toast.error('공지 작성 권한이 없습니다.');
+      return;
+    }
 
     setIsSubmitting(true);
     try {
-      // Use createPost service
-      await createPost(currentClubId, {
-        authorId: user.id,
-        authorName: user.realName || user.nickname || 'Admin',
-        authorPhotoURL: user.photoURL ?? undefined,
-        content: content,
-        type: 'notice',
-        title: title,
-      });
+      // Use createNoticeWithPush callable
+      await createNoticeWithPush(
+        currentClubId,
+        title,
+        content,
+        false // pinned default false in this simple UI
+      );
 
       if (sendPush) {
         toast.success('공지사항이 등록되었습니다 (푸시 발송)');

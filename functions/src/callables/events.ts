@@ -36,7 +36,7 @@ export const createEventPost = onCall({ region: 'asia-northeast3' }, async (req)
   const requestId = reqString(req.data?.requestId, 'requestId', 1, 128); // 필수 (멱등성용)
 
   // μATOM-0531: adminLike 권한 확인
-  await requireRole(clubId, uid, ['PRESIDENT', 'DIRECTOR', 'ADMIN']);
+  await requireRole(clubId, uid, ['PRESIDENT', 'DIRECTOR', 'TREASURER', 'ADMIN']);
 
   // eventType 검증
   if (eventType !== 'PRACTICE' && eventType !== 'GAME') {
@@ -61,7 +61,7 @@ export const createEventPost = onCall({ region: 'asia-northeast3' }, async (req)
     throw Err.invalidArgument('Invalid startAt date');
   }
 
-  // μATOM-0532: voteCloseAt 계산(전날 23:00 KST) 서버 확정
+  // μATOM-0532: voteCloseAt 계산(전날 21:00 KST) 서버 확정
   const voteCloseAtMillis = computeVoteCloseAtKST(startAtDate.getTime());
   const voteCloseAt = new Date(voteCloseAtMillis);
 

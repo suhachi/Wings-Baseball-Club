@@ -17,15 +17,78 @@ import {
   doc,
   getDoc,
   setDoc,
-  updateDoc,
   serverTimestamp,
 } from 'firebase/firestore';
+import {
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  updateProfile
+} from 'firebase/auth';
+import { isAdminRole } from '../../app/lib/auth/roles';
 import { auth, db } from './config';
 import type { UserDoc, UserRole } from './types';
+// --------------------------------------------------------------------------------------------------------------------
+// NEW AUTH METHODS (Email/Password)
+// --------------------------------------------------------------------------------------------------------------------
+export interface SignupParams {
+  email: string;
+  password: string;
+  name: string;
+  phone: string;
+  clubId: string;
+}
+export async function signUpWithEmailPassword(params: SignupParams): Promise<UserDoc> {
+  const { email, password, name, phone, clubId } = params;
+  // 1. Create Auth User
+  const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+  const user = userCredential.user;
+  // 2. Update Profile
+  await updateProfile(user, { displayName: name });
+  // 3. Create Firestore Documents (Global User + Club Member)
+  // [POLICY] Auto-activate for email signups (No approval needed)
+  const now = serverTimestamp();
+  const userData: UserDoc = {
+    uid: user.uid,
+    email: user.email || email,
+    realName: name,
+    nickname: name, // Default nickname to realName
+    phone: phone,
+    photoURL: user.photoURL || null,
+    role: 'MEMBER',
+    status: 'active', // IMMEDIATE ACTIVATION
+    createdAt: new Date(), // Type compatibility, will be overwritten by serverTimestamp
+    updatedAt: new Date(),
+  };
+  // Global User
+  await setDoc(doc(db, 'users', user.uid), {
+    ...userData,
+    createdAt: now,
+    updatedAt: now,
+  });
+  // Club Member
+  await setDoc(doc(db, 'clubs', clubId, 'members', user.uid), {
+    ...userData,
+    clubId, // Add clubId to member doc
+    createdAt: now,
+    updatedAt: now,
+  });
+  return userData;
+}
+export async function signInWithEmailPassword(email: string, password: string): Promise<FirebaseUser> {
+  const result = await signInWithEmailAndPassword(auth, email, password);
+  return result.user;
+}
+export async function signOutUser(): Promise<void> {
+  await signOut(auth);
+}
+// --------------------------------------------------------------------------------------------------------------------
+// LEGACY / SHARED METHODS
+// --------------------------------------------------------------------------------------------------------------------
 /**
- * [POLICY] Google OAuth Only Login
+ * [POLICY] Google OAuth Only Login -> Legacy Grace (Hidden Link) handling remains in UI
  */
 export async function loginWithGoogle(): Promise<FirebaseUser> {
+  // ... existing code ...
   const provider = new GoogleAuthProvider();
   try {
     const result = await signInWithPopup(auth, provider);
@@ -36,8 +99,8 @@ export async function loginWithGoogle(): Promise<FirebaseUser> {
   }
 }
 /**
- * [POLICY] Simplified Account Creation
- * New users are created as 'pending'.
+ * [POLICY] Simplified Account Creation / Profile Completion
+ * New users are created as 'active' (GateMode SOFT) but with 'MEMBER' role.
  */
 export async function createAccount(
   user: FirebaseUser,
@@ -50,12 +113,13 @@ export async function createAccount(
     const clubId = 'WINGS'; // Default club
     const userData: UserDoc = {
       uid: user.uid,
+      email: user.email || '',
       realName,
       nickname: nickname || user.displayName || '',
-      phone: phone || null,
+      phone: phone || '',
       photoURL: user.photoURL || null,
       role: role,
-      status: 'pending', // POLICY: Must be manually approved/activated by admin
+      status: 'active', // POLICY: Always active on creation (GateMode SOFT handles permissions)
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -79,12 +143,20 @@ export async function createAccount(
   }
 }
 /**
- * Check if user document exists
+ * Check if user profile (global) exists
  */
 export async function checkUserExists(uid: string): Promise<boolean> {
   const userRef = doc(db, 'users', uid);
   const userSnap = await getDoc(userRef);
   return userSnap.exists();
+}
+/**
+ * Check if membership (club-specific) exists
+ */
+export async function checkMemberExists(clubId: string, uid: string): Promise<boolean> {
+  const memberRef = doc(db, 'clubs', clubId, 'members', uid);
+  const memberSnap = await getDoc(memberRef);
+  return memberSnap.exists();
 }
 /**
  * Get current user data with KST dates
@@ -97,18 +169,6 @@ export async function getCurrentUserData(uid: string): Promise<UserDoc | null> {
       return null;
     }
     const data = userDoc.data() as UserDoc;
-    // [TEMP] Auto-Promote dev email to ADMIN
-    const rawData = data as any;
-    if (rawData.email === 'jsbae59@gmail.com' && data.role !== 'ADMIN') {
-      await updateDoc(userRef, { role: 'ADMIN', status: 'active' });
-      const memberRef = doc(db, 'clubs', 'WINGS', 'members', uid);
-      const memberSnap = await getDoc(memberRef);
-      if (memberSnap.exists()) {
-        await updateDoc(memberRef, { role: 'ADMIN', status: 'active' });
-      }
-      data.role = 'ADMIN';
-      data.status = 'active';
-    }
     return {
       ...data,
       createdAt: (data.createdAt as any)?.toDate?.() || new Date(),
@@ -123,10 +183,48 @@ export async function getCurrentUserData(uid: string): Promise<UserDoc | null> {
 /**
  * Update user profile
  */
+/**
+ * Update member profile (SSoT) + Global sync
+ */
+export async function updateMemberData(
+  clubId: string,
+  uid: string,
+  updates: Partial<UserDoc>
+): Promise<void> {
+  try {
+    const memberRef = doc(db, 'clubs', clubId, 'members', uid);
+    const userRef = doc(db, 'users', uid);
+    const cleanUpdates = JSON.parse(JSON.stringify(updates));
+    const sanitizedUpdates = Object.entries(cleanUpdates).reduce((acc, [key, value]) => {
+      if (value !== undefined) acc[key] = value;
+      return acc;
+    }, {} as any);
+    const timestampedUpdates = {
+      ...sanitizedUpdates,
+      updatedAt: serverTimestamp(),
+    };
+    // 1. Update Member Doc (Primary SSoT)
+    await setDoc(memberRef, timestampedUpdates, { merge: true });
+    // 2. Sync to Global User Doc (Legacy/Global View)
+    // We try to keep them in sync, but Member Doc is the authority.
+    await setDoc(userRef, timestampedUpdates, { merge: true });
+    console.log(`[updateMemberData] Updated member & user docs for ${uid}`);
+  } catch (error) {
+    console.error('Error updating member data:', error);
+    throw error;
+  }
+}
+/**
+ * Legacy Global Update (Deprecated for Profile Edit, kept for compatibility)
+ */
 export async function updateUserData(
   uid: string,
   updates: Partial<UserDoc>
 ): Promise<void> {
+  // Redirect to default club member update if possible, but we don't know clubId here easily without param.
+  // For now, we will mark this as "Global Only" but usually we want SSoT.
+  // However, the prompt asks to "Find updateUserData/updateUser ... and replace/modify".
+  // I will simply replace usages in AuthContext.
   try {
     const userRef = doc(db, 'users', uid);
     const cleanUpdates = JSON.parse(JSON.stringify(updates));
@@ -161,15 +259,107 @@ export function onAuthStateChange(
 ): () => void {
   return onAuthStateChanged(auth, callback);
 }
+/**
+ * [POLICY] Auto-provision member document if missing (Gate-Level)
+ * Ensures user has a member document so they are not blocked by Access Gate.
+ */
+export async function ensureMemberExists(clubId: string, user: FirebaseUser): Promise<void> {
+  const memberRef = doc(db, 'clubs', clubId, 'members', user.uid);
+  const memberSnap = await getDoc(memberRef);
+  if (!memberSnap.exists()) {
+    console.log(`[Auto-Provision] Creating member doc for ${user.uid}`);
+    const now = serverTimestamp();
+    // Try to get global profile for details
+    const userRef = doc(db, 'users', user.uid);
+    const userSnap = await getDoc(userRef);
+    const userData = userSnap.data();
+    await setDoc(memberRef, {
+      uid: user.uid,
+      email: user.email || userData?.email || '',
+      realName: userData?.realName || user.displayName || '이름 없음',
+      nickname: userData?.nickname || user.displayName || '닉네임',
+      phone: userData?.phone || '',
+      photoURL: user.photoURL || userData?.photoURL || null,
+      role: 'MEMBER',
+      status: 'active', // Auto-activated
+      clubId,
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+}
 // --------------------------------------------------------------------------------------------------------------------
 // RBAC HELPERS
 // --------------------------------------------------------------------------------------------------------------------
-export function isAdmin(role: UserRole): boolean {
-  return ['PRESIDENT', 'DIRECTOR', 'ADMIN', 'TREASURER'].includes(role);
+export function isAdmin(role: string): boolean {
+  return isAdminRole(role);
 }
 export function isTreasury(role: UserRole): boolean {
-  return ['PRESIDENT', 'TREASURER'].includes(role);
+  // Finance requires specific trust, but typically Admins can oversee.
+  // For now, keeping specific to President/Treasurer + Admin for backup.
+  return ['PRESIDENT', 'TREASURER', 'ADMIN'].includes(role);
 }
+```
+
+## src/lib/firebase/comments.moderation.service.ts
+
+```ts
+import { functions } from './config';
+import { httpsCallable } from 'firebase/functions';
+interface ModerateCommentRequest {
+    clubId: string;
+    postId: string;
+    commentId: string;
+    action: 'EDIT' | 'DELETE';
+    content?: string;
+    reason?: string;
+    requestId: string;
+}
+interface ModerateCommentResponse {
+    success: boolean;
+    action: 'EDIT' | 'DELETE';
+    commentId: string;
+}
+export const adminEditComment = async (
+    clubId: string,
+    postId: string,
+    commentId: string,
+    content: string,
+    reason?: string
+): Promise<void> => {
+    const moderateComment = httpsCallable<ModerateCommentRequest, ModerateCommentResponse>(
+        functions,
+        'moderateComment'
+    );
+    await moderateComment({
+        clubId,
+        postId,
+        commentId,
+        action: 'EDIT',
+        content,
+        reason,
+        requestId: crypto.randomUUID(),
+    });
+};
+export const adminDeleteComment = async (
+    clubId: string,
+    postId: string,
+    commentId: string,
+    reason?: string
+): Promise<void> => {
+    const moderateComment = httpsCallable<ModerateCommentRequest, ModerateCommentResponse>(
+        functions,
+        'moderateComment'
+    );
+    await moderateComment({
+        clubId,
+        postId,
+        commentId,
+        action: 'DELETE',
+        reason,
+        requestId: crypto.randomUUID(),
+    });
+};
 ```
 
 ## src/lib/firebase/config.ts
@@ -334,6 +524,11 @@ const getClubDoc = (clubId: string, colName: string, docId: string) => doc(db, '
  * 게시글 생성
  */
 export async function createPost(clubId: string, postData: Omit<PostDoc, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
+  // [RBAC] Client-side create allowed ONLY for 'free' board.
+  // notice/event/poll must be created via Cloud Functions (callables).
+  if (postData.type !== 'free') {
+    throw new Error(`[RBAC] createPost() only supports type 'free'. Use Cloud Functions for type='${postData.type}'.`);
+  }
   try {
     const postsRef = getClubCol(clubId, 'posts');
     const docRef = await addDoc(postsRef, {
@@ -742,15 +937,13 @@ const registerFcmTokenFn = httpsCallable<{
   platform?: 'web' | 'android' | 'ios';
   requestId?: string;
 }, { success: boolean; tokenId: string }>(functions, 'registerFcmToken');
-// VAPID 키 (Firebase Console > 프로젝트 설정 > 클라우드 메시징에서 확인)
+// ⚠️ [시니어 엔지니어링] 번들 리로딩/중복 초기화 상황에서도 경고가 과도하게 쌓이지 않도록 window 전역 플래그 사용
 const VAPID_KEY = import.meta.env.VITE_FCM_VAPID_KEY || '';
-// 중복 경고 방지용 플래그
-let hasWarnedAboutMissingVapid = false;
 function checkVapidKey(): boolean {
   if (!VAPID_KEY) {
-    if (!hasWarnedAboutMissingVapid) {
+    if (typeof window !== 'undefined' && !(window as any).__WINGS_WARNED_NO_VAPID) {
       console.warn('⚠️ [FCM] VAPID 키가 설정되지 않았습니다. 환경 변수 VITE_FCM_VAPID_KEY를 확인하세요.');
-      hasWarnedAboutMissingVapid = true;
+      (window as any).__WINGS_WARNED_NO_VAPID = true;
     }
     return false;
   }
@@ -806,26 +999,34 @@ export async function requestNotificationPermission(): Promise<NotificationPermi
   }
 }
 /**
+ * FCM 토큰 발급 및 등록 결과 타입
+ */
+export interface FcmRegisterResult {
+  ok: boolean;
+  token?: string;
+  reason?: 'CONFIG_REQUIRED' | 'PERMISSION_DENIED' | 'UNSUPPORTED_BROWSER' | 'UNKNOWN';
+}
+/**
  * FCM 토큰 발급 및 등록
  */
-export async function registerFcmToken(clubId: string): Promise<string | null> {
+export async function registerFcmToken(clubId: string): Promise<FcmRegisterResult> {
   if (typeof window === 'undefined') {
-    return null;
+    return { ok: false, reason: 'UNKNOWN' };
   }
   const messaging = getMessagingInstance();
   if (!messaging) {
     console.error('FCM Messaging 인스턴스를 초기화할 수 없습니다');
-    return null;
+    return { ok: false, reason: 'UNKNOWN' };
   }
   // 권한 확인
   const permission = await getNotificationPermission();
   if (permission !== 'granted') {
     console.warn('알림 권한이 허용되지 않았습니다:', permission);
-    return null;
+    return { ok: false, reason: 'PERMISSION_DENIED' };
   }
   // VAPID 키 확인
   if (!checkVapidKey()) {
-    return 'CONFIG_REQUIRED';
+    return { ok: false, reason: 'CONFIG_REQUIRED' };
   }
   try {
     // FCM 토큰 발급
@@ -834,7 +1035,7 @@ export async function registerFcmToken(clubId: string): Promise<string | null> {
     });
     if (!token) {
       console.warn('FCM 토큰을 발급받을 수 없습니다');
-      return null;
+      return { ok: false, reason: 'UNKNOWN' };
     }
     // 플랫폼 감지 (간단한 방법)
     const platform = detectPlatform();
@@ -849,17 +1050,20 @@ export async function registerFcmToken(clubId: string): Promise<string | null> {
       console.log('FCM 토큰 등록 완료:', token.substring(0, 20) + '...');
     } catch (error: any) {
       console.error('FCM 토큰 등록 실패:', error);
-      // 토큰은 반환하되 등록은 실패 (나중에 재시도 가능)
+      // 토큰은 발급되었으나 서버 등록만 실패한 경우
     }
-    return token;
+    return { ok: true, token };
   } catch (error: any) {
     console.error('FCM 토큰 발급 실패:', error);
+    let reason: FcmRegisterResult['reason'] = 'UNKNOWN';
     if (error.code === 'messaging/permission-blocked') {
       console.error('알림 권한이 차단되었습니다');
+      reason = 'PERMISSION_DENIED';
     } else if (error.code === 'messaging/unsupported-browser') {
       console.error('FCM을 지원하지 않는 브라우저입니다');
+      reason = 'UNSUPPORTED_BROWSER';
     }
-    return null;
+    return { ok: false, reason };
   }
 }
 /**
@@ -1202,13 +1406,14 @@ export type NotificationType = 'notice' | 'comment' | 'like' | 'event' | 'mentio
 // User Document
 export interface UserDoc {
   uid: string;
-  realName: string;
+  email: string; // [v2.0] Essential
+  realName: string; // [v2.0] Essential
+  phone: string; // [v2.0] Essential
   nickname?: string | null;
-  phone?: string | null;
   photoURL?: string | null;
   role: UserRole;
   position?: string;
-  backNumber?: string;
+  backNumber?: number | null;
   status: 'pending' | 'active' | 'rejected' | 'withdrawn';
   createdAt: Date;
   updatedAt: Date;
@@ -1225,6 +1430,7 @@ export interface PostDoc {
   createdAt: Date;
   updatedAt: Date;
   pinned?: boolean;
+  commentCount?: number;
   // Event specific
   eventType?: EventType;
   startAt?: Date | null;

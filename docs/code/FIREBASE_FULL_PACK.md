@@ -1,13 +1,14 @@
 # Firebase Full Code Pack
 
-**Generated**: 2025-12-20T00:56:31.723Z
+**Generated**: 2025-12-21T14:44:28.290Z
 **Scope**: Firebase Configs, Security Rules, Cloud Functions, Frontend SDK Wrappers
 
 ## File: firebase.json
 ```json
 {
     "firestore": {
-        "rules": "firestore.rules"
+        "rules": "firestore.rules",
+        "indexes": "firestore.indexes.json"
     },
     "functions": {
         "source": "functions",
@@ -70,6 +71,7 @@
 ## File: firestore.rules
 ```rules
 rules_version = '2';
+// Trigger Reload 1
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -85,6 +87,11 @@ service cloud.firestore {
       return /databases/$(database)/documents/clubs/$(clubId)/members/$(uid);
     }
 
+    // [T2] Club ID Hard Lock (Project Policy)
+    function isWingsClub(clubId) {
+      return clubId == 'WINGS';
+    }
+
     // 공통: isClubMember(clubId) 필수
     function isClubMember(clubId) {
       return isAuthenticated() && exists(memberPath(clubId, request.auth.uid));
@@ -98,9 +105,17 @@ service cloud.firestore {
       return isClubMember(clubId) && member(clubId).status == 'active';
     }
 
+    // [M00-07] M00 Soft Gate: 프로필 필수 필드 확인 (realName, phone)
+    // Legacy support: phoneNumber 필드도 인정
+    function hasRequiredProfile(clubId) {
+      let m = member(clubId);
+      return (m.realName != null && m.realName != '')
+          && ( (m.phone != null && m.phone != '') || (m.phoneNumber != null && m.phoneNumber != '') );
+    }
+
     function isAdminLike(clubId) {
       return isClubMember(clubId)
-        && member(clubId).role in ['ADMIN', 'PRESIDENT', 'DIRECTOR', 'TREASURER'];
+        && member(clubId).role in ['PRESIDENT', 'VICE_PRESIDENT', 'DIRECTOR', 'TREASURER', 'ADMIN'];
     }
 
     // ============================================
@@ -116,9 +131,10 @@ service cloud.firestore {
 
     // Users (Global)
     match /users/{userId} {
-      allow read: if isAuthenticated();
+      // [M00-FIX] 개인정보 보호: 본인만 조회 가능 (Option A)
+      allow read: if isAuthenticated() && request.auth.uid == userId;
       allow create: if isAuthenticated() && request.auth.uid == userId;
-      // 운영 안전상: 유저 본인만 업데이트(역할/승인은 Functions/관리자화면에서 members 문서로)
+      // 운영 안전상: 유저 본인만 업데이트
       allow update: if isAuthenticated() && request.auth.uid == userId;
     }
 
@@ -134,71 +150,106 @@ service cloud.firestore {
     // ============================================
 
     match /clubs/{clubId} {
+      // [T2] Enforce WINGS Club ID
+      // If not WINGS, deny all.
+      function isTargetClub() {
+        return isWingsClub(clubId);
+      }
+
       // 클럽 문서 read는 active member만 - μATOM-0551
-      allow read: if isActiveMember(clubId);
+      allow read: if isTargetClub() && isActiveMember(clubId);
 
       // ============================================
       // Members
       // ============================================
       match /members/{memberId} {
-        allow read: if isAuthenticated();
-        // 가입 직후 멤버 문서 생성 허용(단, role/status는 서버/관리자만 바꾸는 것을 권장)
-        allow create: if isAuthenticated() && request.auth.uid == memberId;
+        // [M00-FIX] 클럽 멤버만 조회 가능 (Option B) - 외부인 차단 OR 본인
+        allow read: if isClubMember(clubId) || request.auth.uid == memberId;
+        // [M00-FIX] BackNumber Validation (0-99 or null)
+        function isValidBackNumber() {
+          let bn = request.resource.data.backNumber;
+          return bn == null || (bn is int && bn >= 0 && bn <= 99);
+        }
+
+        // 가입 직후 멤버 문서 생성 허용 (단, role은 MEMBER 고정, status는 active 허용)
+        allow create: if isAuthenticated() && request.auth.uid == memberId
+          && request.resource.data.role == 'MEMBER'
+          && request.resource.data.status == 'active'
+          && isValidBackNumber();
+
         // 본인 프로필 일부 수정만 허용하고 싶으면 keys 제한을 추가해야 함(여기선 보수적으로 adminLike만 허용)
-        allow update: if isAuthenticated() && (request.auth.uid == memberId || isAdminLike(clubId));
+        // 본인 프로필 일부 수정만 허용 (키 제한)
+        function isSelfProfileUpdateAllowed() {
+          return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'realName', 'nickname', 'phone', 'phoneNumber', 'photoURL', 'updatedAt', 'backNumber'
+          ]);
+        }
+        allow update: if isAuthenticated() && (
+          (request.auth.uid == memberId && isSelfProfileUpdateAllowed() && isValidBackNumber()) || isAdminLike(clubId)
+        );
       }
 
       // ============================================
       // Posts
       // ============================================
       match /posts/{postId} {
-        // μATOM-0551: 읽기 isClubMember만
+        // μATOM-0551: 읽기 isClubMember만 (SOFT Gate: Read Allowed)
         allow read: if isActiveMember(clubId);
 
         // Posts Create Policy:
-        // - notice/event: 클라 write 금지 (Functions-only) - μATOM-0552
-        // - free: member create 허용 - μATOM-0553
+        // ... (省略)
         function isPostTypeAllowedForCreate() {
           let postType = request.resource.data.type;
-          // notice, event는 Functions-only
+          // notice, event, poll은 Functions-only
           return postType == 'free';
         }
 
-        allow create: if isActiveMember(clubId) && isPostTypeAllowedForCreate();
+        // [M00-07] hasRequiredProfile 추가
+        allow create: if isActiveMember(clubId) && hasRequiredProfile(clubId) && isPostTypeAllowedForCreate();
 
         // Posts Update/Delete Policy:
-        // - author OR adminLike
+        
+        function isFreePost() {
+          return resource.data.type == 'free';
+        }
+
+        // [M00-FIX] isPostAuthor helper definition added
         function isPostAuthor() {
           return resource.data.authorId == request.auth.uid;
         }
 
         function updatingProtectedPostFields() {
-          return request.resource.data.keys().hasAny([
+          return request.resource.data.diff(resource.data).affectedKeys().hasAny([
             'authorId','authorName','authorPhotoURL','type'
           ]);
         }
 
-        // free: (author OR adminLike) update/delete - μATOM-0553
-        allow update: if isActiveMember(clubId) && (
-          isAdminLike(clubId)
-          || (isPostAuthor() && !updatingProtectedPostFields())
-        );
-
-        allow delete: if isActiveMember(clubId) && (
-          isAdminLike(clubId) || isPostAuthor()
+        // [M00-07] hasRequiredProfile 추가
+        allow update: if isActiveMember(clubId) && hasRequiredProfile(clubId) && (
+             (isFreePost() && isPostAuthor() && !updatingProtectedPostFields())
+          || (isAdminLike(clubId)) 
+        ); 
+        
+        allow delete: if isActiveMember(clubId) && hasRequiredProfile(clubId) && (
+          isAdminLike(clubId) || (isFreePost() && isPostAuthor())
         );
 
         // ============================================
         // Comments
         // ============================================
         // μATOM-0554: comments 정책
-        // Comments Policy: create는 멤버, update/delete 작성자 또는 adminLike
+        // Comments Policy: create는 active 멤버, update/delete는 작성자 또는 adminLike
         match /comments/{commentId} {
           allow read: if isActiveMember(clubId);
-          allow create: if isActiveMember(clubId);
+          // [M00-07] hasRequiredProfile 추가
+          allow create: if isActiveMember(clubId) && hasRequiredProfile(clubId) && request.resource.data.authorId == request.auth.uid;
 
+          // update/delete: author OR adminLike
+          // update/delete: author ONLY (Admin uses callable for audit)
+          // update/delete: author ONLY (Admin uses callable for audit)
+          // 프로필 미완성 상태여도 본인 댓글 수정/삭제 허용 (Cleanup 목적)
           allow update, delete: if isActiveMember(clubId) && (
-            resource.data.authorId == request.auth.uid || isAdminLike(clubId)
+            resource.data.authorId == request.auth.uid
           );
         }
 
@@ -212,9 +263,12 @@ service cloud.firestore {
           // 본인만, voteClosed==false일 때만 write 허용
           function isVoteOpen() {
             let post = get(/databases/$(database)/documents/clubs/$(clubId)/posts/$(postId)).data;
-            return post.voteClosed != true;
+            let closedManual = post.get('voteClosed', false) == true;
+            let closedTime = post.keys().hasAll(['voteCloseAt']) && request.time >= post.voteCloseAt;
+            return !closedManual && !closedTime;
           }
-          allow write: if isActiveMember(clubId) 
+          // [M00-07] hasRequiredProfile 추가
+          allow write: if isActiveMember(clubId) && hasRequiredProfile(clubId)
             && request.auth.uid == userId
             && isVoteOpen();
         }
@@ -247,6 +301,33 @@ service cloud.firestore {
 
 ```
 
+## File: firestore.indexes.json
+```json
+{
+    "indexes": [
+        {
+            "collectionGroup": "posts",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "type",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "voteCloseAt",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "__name__",
+                    "order": "ASCENDING"
+                }
+            ]
+        }
+    ],
+    "fieldOverrides": []
+}
+```
+
 ## File: src/lib/firebase/auth.service.ts
 ```ts
 // Firebase Authentication Service
@@ -261,19 +342,96 @@ import {
   doc,
   getDoc,
   setDoc,
-  updateDoc,
   serverTimestamp,
 } from 'firebase/firestore';
+import {
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  updateProfile
+} from 'firebase/auth';
+import { isAdminRole } from '../../app/lib/auth/roles';
 
 
 import { auth, db } from './config';
 import type { UserDoc, UserRole } from './types';
 
 
+// --------------------------------------------------------------------------------------------------------------------
+// NEW AUTH METHODS (Email/Password)
+// --------------------------------------------------------------------------------------------------------------------
+
+export interface SignupParams {
+  email: string;
+  password: string;
+  name: string;
+  phone: string;
+  clubId: string;
+}
+
+export async function signUpWithEmailPassword(params: SignupParams): Promise<UserDoc> {
+  const { email, password, name, phone, clubId } = params;
+
+  // 1. Create Auth User
+  const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+  const user = userCredential.user;
+
+  // 2. Update Profile
+  await updateProfile(user, { displayName: name });
+
+  // 3. Create Firestore Documents (Global User + Club Member)
+  // [POLICY] Auto-activate for email signups (No approval needed)
+  const now = serverTimestamp();
+
+  const userData: UserDoc = {
+    uid: user.uid,
+    email: user.email || email,
+    realName: name,
+    nickname: name, // Default nickname to realName
+    phone: phone,
+    photoURL: user.photoURL || null,
+    role: 'MEMBER',
+    status: 'active', // IMMEDIATE ACTIVATION
+    createdAt: new Date(), // Type compatibility, will be overwritten by serverTimestamp
+    updatedAt: new Date(),
+  };
+
+  // Global User
+  await setDoc(doc(db, 'users', user.uid), {
+    ...userData,
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  // Club Member
+  await setDoc(doc(db, 'clubs', clubId, 'members', user.uid), {
+    ...userData,
+    clubId, // Add clubId to member doc
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  return userData;
+}
+
+export async function signInWithEmailPassword(email: string, password: string): Promise<FirebaseUser> {
+  const result = await signInWithEmailAndPassword(auth, email, password);
+  return result.user;
+}
+
+export async function signOutUser(): Promise<void> {
+  await signOut(auth);
+}
+
+// --------------------------------------------------------------------------------------------------------------------
+// LEGACY / SHARED METHODS
+// --------------------------------------------------------------------------------------------------------------------
+
 /**
- * [POLICY] Google OAuth Only Login
+ * [POLICY] Google OAuth Only Login -> Legacy Grace (Hidden Link) handling remains in UI
  */
 export async function loginWithGoogle(): Promise<FirebaseUser> {
+  // ... existing code ...
+
   const provider = new GoogleAuthProvider();
   try {
     const result = await signInWithPopup(auth, provider);
@@ -285,8 +443,8 @@ export async function loginWithGoogle(): Promise<FirebaseUser> {
 }
 
 /**
- * [POLICY] Simplified Account Creation
- * New users are created as 'pending'.
+ * [POLICY] Simplified Account Creation / Profile Completion
+ * New users are created as 'active' (GateMode SOFT) but with 'MEMBER' role.
  */
 export async function createAccount(
   user: FirebaseUser,
@@ -300,14 +458,16 @@ export async function createAccount(
 
     const userData: UserDoc = {
       uid: user.uid,
+      email: user.email || '',
       realName,
       nickname: nickname || user.displayName || '',
-      phone: phone || null,
+      phone: phone || '',
       photoURL: user.photoURL || null,
       role: role,
-      status: 'pending', // POLICY: Must be manually approved/activated by admin
+      status: 'active', // POLICY: Always active on creation (GateMode SOFT handles permissions)
       createdAt: new Date(),
       updatedAt: new Date(),
+
     };
 
     // 1. Write to global users collection (Profile)
@@ -333,12 +493,21 @@ export async function createAccount(
 }
 
 /**
- * Check if user document exists
+ * Check if user profile (global) exists
  */
 export async function checkUserExists(uid: string): Promise<boolean> {
   const userRef = doc(db, 'users', uid);
   const userSnap = await getDoc(userRef);
   return userSnap.exists();
+}
+
+/**
+ * Check if membership (club-specific) exists
+ */
+export async function checkMemberExists(clubId: string, uid: string): Promise<boolean> {
+  const memberRef = doc(db, 'clubs', clubId, 'members', uid);
+  const memberSnap = await getDoc(memberRef);
+  return memberSnap.exists();
 }
 
 /**
@@ -354,18 +523,6 @@ export async function getCurrentUserData(uid: string): Promise<UserDoc | null> {
 
     const data = userDoc.data() as UserDoc;
 
-    // [TEMP] Auto-Promote dev email to ADMIN
-    const rawData = data as any;
-    if (rawData.email === 'jsbae59@gmail.com' && data.role !== 'ADMIN') {
-      await updateDoc(userRef, { role: 'ADMIN', status: 'active' });
-      const memberRef = doc(db, 'clubs', 'WINGS', 'members', uid);
-      const memberSnap = await getDoc(memberRef);
-      if (memberSnap.exists()) {
-        await updateDoc(memberRef, { role: 'ADMIN', status: 'active' });
-      }
-      data.role = 'ADMIN';
-      data.status = 'active';
-    }
 
     return {
       ...data,
@@ -382,10 +539,56 @@ export async function getCurrentUserData(uid: string): Promise<UserDoc | null> {
 /**
  * Update user profile
  */
+/**
+ * Update member profile (SSoT) + Global sync
+ */
+export async function updateMemberData(
+  clubId: string,
+  uid: string,
+  updates: Partial<UserDoc>
+): Promise<void> {
+  try {
+    const memberRef = doc(db, 'clubs', clubId, 'members', uid);
+    const userRef = doc(db, 'users', uid);
+
+    const cleanUpdates = JSON.parse(JSON.stringify(updates));
+    const sanitizedUpdates = Object.entries(cleanUpdates).reduce((acc, [key, value]) => {
+      if (value !== undefined) acc[key] = value;
+      return acc;
+    }, {} as any);
+
+    const timestampedUpdates = {
+      ...sanitizedUpdates,
+      updatedAt: serverTimestamp(),
+    };
+
+    // 1. Update Member Doc (Primary SSoT)
+    await setDoc(memberRef, timestampedUpdates, { merge: true });
+
+    // 2. Sync to Global User Doc (Legacy/Global View)
+    // We try to keep them in sync, but Member Doc is the authority.
+    await setDoc(userRef, timestampedUpdates, { merge: true });
+
+    console.log(`[updateMemberData] Updated member & user docs for ${uid}`);
+
+  } catch (error) {
+    console.error('Error updating member data:', error);
+    throw error;
+  }
+}
+
+/**
+ * Legacy Global Update (Deprecated for Profile Edit, kept for compatibility)
+ */
 export async function updateUserData(
   uid: string,
   updates: Partial<UserDoc>
 ): Promise<void> {
+  // Redirect to default club member update if possible, but we don't know clubId here easily without param.
+  // For now, we will mark this as "Global Only" but usually we want SSoT.
+  // However, the prompt asks to "Find updateUserData/updateUser ... and replace/modify".
+  // I will simply replace usages in AuthContext.
+
   try {
     const userRef = doc(db, 'users', uid);
     const cleanUpdates = JSON.parse(JSON.stringify(updates));
@@ -408,6 +611,7 @@ export async function updateUserData(
   }
 }
 
+
 /**
  * Logout
  */
@@ -424,17 +628,119 @@ export function onAuthStateChange(
   return onAuthStateChanged(auth, callback);
 }
 
+/**
+ * [POLICY] Auto-provision member document if missing (Gate-Level)
+ * Ensures user has a member document so they are not blocked by Access Gate.
+ */
+export async function ensureMemberExists(clubId: string, user: FirebaseUser): Promise<void> {
+  const memberRef = doc(db, 'clubs', clubId, 'members', user.uid);
+  const memberSnap = await getDoc(memberRef);
+
+  if (!memberSnap.exists()) {
+    console.log(`[Auto-Provision] Creating member doc for ${user.uid}`);
+    const now = serverTimestamp();
+
+    // Try to get global profile for details
+    const userRef = doc(db, 'users', user.uid);
+    const userSnap = await getDoc(userRef);
+    const userData = userSnap.data();
+
+    await setDoc(memberRef, {
+      uid: user.uid,
+      email: user.email || userData?.email || '',
+      realName: userData?.realName || user.displayName || '이름 없음',
+      nickname: userData?.nickname || user.displayName || '닉네임',
+      phone: userData?.phone || '',
+      photoURL: user.photoURL || userData?.photoURL || null,
+      role: 'MEMBER',
+      status: 'active', // Auto-activated
+      clubId,
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+}
+
 // --------------------------------------------------------------------------------------------------------------------
 // RBAC HELPERS
 // --------------------------------------------------------------------------------------------------------------------
 
-export function isAdmin(role: UserRole): boolean {
-  return ['PRESIDENT', 'DIRECTOR', 'ADMIN', 'TREASURER'].includes(role);
+export function isAdmin(role: string): boolean {
+  return isAdminRole(role);
 }
 
 export function isTreasury(role: UserRole): boolean {
-  return ['PRESIDENT', 'TREASURER'].includes(role);
+  // Finance requires specific trust, but typically Admins can oversee.
+  // For now, keeping specific to President/Treasurer + Admin for backup.
+  return ['PRESIDENT', 'TREASURER', 'ADMIN'].includes(role);
 }
+
+```
+
+## File: src/lib/firebase/comments.moderation.service.ts
+```ts
+import { functions } from './config';
+import { httpsCallable } from 'firebase/functions';
+
+interface ModerateCommentRequest {
+    clubId: string;
+    postId: string;
+    commentId: string;
+    action: 'EDIT' | 'DELETE';
+    content?: string;
+    reason?: string;
+    requestId: string;
+}
+
+interface ModerateCommentResponse {
+    success: boolean;
+    action: 'EDIT' | 'DELETE';
+    commentId: string;
+}
+
+export const adminEditComment = async (
+    clubId: string,
+    postId: string,
+    commentId: string,
+    content: string,
+    reason?: string
+): Promise<void> => {
+    const moderateComment = httpsCallable<ModerateCommentRequest, ModerateCommentResponse>(
+        functions,
+        'moderateComment'
+    );
+
+    await moderateComment({
+        clubId,
+        postId,
+        commentId,
+        action: 'EDIT',
+        content,
+        reason,
+        requestId: crypto.randomUUID(),
+    });
+};
+
+export const adminDeleteComment = async (
+    clubId: string,
+    postId: string,
+    commentId: string,
+    reason?: string
+): Promise<void> => {
+    const moderateComment = httpsCallable<ModerateCommentRequest, ModerateCommentResponse>(
+        functions,
+        'moderateComment'
+    );
+
+    await moderateComment({
+        clubId,
+        postId,
+        commentId,
+        action: 'DELETE',
+        reason,
+        requestId: crypto.randomUUID(),
+    });
+};
 
 ```
 
@@ -615,6 +921,12 @@ const getClubDoc = (clubId: string, colName: string, docId: string) => doc(db, '
  * 게시글 생성
  */
 export async function createPost(clubId: string, postData: Omit<PostDoc, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
+  // [RBAC] Client-side create allowed ONLY for 'free' board.
+  // notice/event/poll must be created via Cloud Functions (callables).
+  if (postData.type !== 'free') {
+    throw new Error(`[RBAC] createPost() only supports type 'free'. Use Cloud Functions for type='${postData.type}'.`);
+  }
+
   try {
     const postsRef = getClubCol(clubId, 'posts');
     const docRef = await addDoc(postsRef, {
@@ -634,8 +946,8 @@ export async function createPost(clubId: string, postData: Omit<PostDoc, 'id' | 
  * μATOM-0302: 쿼리 규격 통일 (orderBy createdAt desc, limit N)
  */
 export async function getPosts(
-  clubId: string, 
-  postType?: 'notice' | 'free' | 'event', 
+  clubId: string,
+  postType?: 'notice' | 'free' | 'event',
   limitCount: number = 50,
   lastVisible?: QueryDocumentSnapshot<DocumentData>
 ): Promise<{ posts: PostDoc[]; lastDoc: QueryDocumentSnapshot<DocumentData> | null }> {
@@ -1065,17 +1377,14 @@ const registerFcmTokenFn = httpsCallable<{
   requestId?: string;
 }, { success: boolean; tokenId: string }>(functions, 'registerFcmToken');
 
-// VAPID 키 (Firebase Console > 프로젝트 설정 > 클라우드 메시징에서 확인)
+// ⚠️ [시니어 엔지니어링] 번들 리로딩/중복 초기화 상황에서도 경고가 과도하게 쌓이지 않도록 window 전역 플래그 사용
 const VAPID_KEY = import.meta.env.VITE_FCM_VAPID_KEY || '';
-
-// 중복 경고 방지용 플래그
-let hasWarnedAboutMissingVapid = false;
 
 function checkVapidKey(): boolean {
   if (!VAPID_KEY) {
-    if (!hasWarnedAboutMissingVapid) {
+    if (typeof window !== 'undefined' && !(window as any).__WINGS_WARNED_NO_VAPID) {
       console.warn('⚠️ [FCM] VAPID 키가 설정되지 않았습니다. 환경 변수 VITE_FCM_VAPID_KEY를 확인하세요.');
-      hasWarnedAboutMissingVapid = true;
+      (window as any).__WINGS_WARNED_NO_VAPID = true;
     }
     return false;
   }
@@ -1142,29 +1451,38 @@ export async function requestNotificationPermission(): Promise<NotificationPermi
 }
 
 /**
+ * FCM 토큰 발급 및 등록 결과 타입
+ */
+export interface FcmRegisterResult {
+  ok: boolean;
+  token?: string;
+  reason?: 'CONFIG_REQUIRED' | 'PERMISSION_DENIED' | 'UNSUPPORTED_BROWSER' | 'UNKNOWN';
+}
+
+/**
  * FCM 토큰 발급 및 등록
  */
-export async function registerFcmToken(clubId: string): Promise<string | null> {
+export async function registerFcmToken(clubId: string): Promise<FcmRegisterResult> {
   if (typeof window === 'undefined') {
-    return null;
+    return { ok: false, reason: 'UNKNOWN' };
   }
 
   const messaging = getMessagingInstance();
   if (!messaging) {
     console.error('FCM Messaging 인스턴스를 초기화할 수 없습니다');
-    return null;
+    return { ok: false, reason: 'UNKNOWN' };
   }
 
   // 권한 확인
   const permission = await getNotificationPermission();
   if (permission !== 'granted') {
     console.warn('알림 권한이 허용되지 않았습니다:', permission);
-    return null;
+    return { ok: false, reason: 'PERMISSION_DENIED' };
   }
 
   // VAPID 키 확인
   if (!checkVapidKey()) {
-    return 'CONFIG_REQUIRED';
+    return { ok: false, reason: 'CONFIG_REQUIRED' };
   }
 
   try {
@@ -1175,7 +1493,7 @@ export async function registerFcmToken(clubId: string): Promise<string | null> {
 
     if (!token) {
       console.warn('FCM 토큰을 발급받을 수 없습니다');
-      return null;
+      return { ok: false, reason: 'UNKNOWN' };
     }
 
     // 플랫폼 감지 (간단한 방법)
@@ -1192,18 +1510,23 @@ export async function registerFcmToken(clubId: string): Promise<string | null> {
       console.log('FCM 토큰 등록 완료:', token.substring(0, 20) + '...');
     } catch (error: any) {
       console.error('FCM 토큰 등록 실패:', error);
-      // 토큰은 반환하되 등록은 실패 (나중에 재시도 가능)
+      // 토큰은 발급되었으나 서버 등록만 실패한 경우
     }
 
-    return token;
+    return { ok: true, token };
   } catch (error: any) {
     console.error('FCM 토큰 발급 실패:', error);
+    let reason: FcmRegisterResult['reason'] = 'UNKNOWN';
+
     if (error.code === 'messaging/permission-blocked') {
       console.error('알림 권한이 차단되었습니다');
+      reason = 'PERMISSION_DENIED';
     } else if (error.code === 'messaging/unsupported-browser') {
       console.error('FCM을 지원하지 않는 브라우저입니다');
+      reason = 'UNSUPPORTED_BROWSER';
     }
-    return null;
+
+    return { ok: false, reason };
   }
 }
 
@@ -1586,13 +1909,14 @@ export type NotificationType = 'notice' | 'comment' | 'like' | 'event' | 'mentio
 // User Document
 export interface UserDoc {
   uid: string;
-  realName: string;
+  email: string; // [v2.0] Essential
+  realName: string; // [v2.0] Essential
+  phone: string; // [v2.0] Essential
   nickname?: string | null;
-  phone?: string | null;
   photoURL?: string | null;
   role: UserRole;
   position?: string;
-  backNumber?: string;
+  backNumber?: number | null;
   status: 'pending' | 'active' | 'rejected' | 'withdrawn';
   createdAt: Date;
   updatedAt: Date;
@@ -1612,6 +1936,7 @@ export interface PostDoc {
   createdAt: Date;
   updatedAt: Date;
   pinned?: boolean;
+  commentCount?: number;
 
   // Event specific
   eventType?: EventType;
@@ -4472,6 +4797,119 @@ export interface ActivityLogDoc {
 }
 ```
 
+## File: functions/src/callables/comments.moderation.ts
+```ts
+import { onCall, HttpsError } from 'firebase-functions/v2/https';
+import * as admin from 'firebase-admin';
+import { writeAudit } from '../shared/audit';
+
+// Note: If db is not exported from index, use admin.firestore()
+const firestore = admin.firestore();
+
+interface ModerateCommentRequest {
+    clubId: string;
+    postId: string;
+    commentId: string;
+    action: 'EDIT' | 'DELETE';
+    content?: string;      // required if EDIT
+    reason?: string;       // optional, recommended
+    requestId: string;      // required for idempotency
+}
+
+export const moderateComment = onCall<ModerateCommentRequest>({ region: 'asia-northeast3' }, async (request) => {
+    // V2: request.data, request.auth
+    const { data, auth } = request;
+
+    // 1. Auth Check
+    if (!auth) {
+        throw new HttpsError('unauthenticated', 'User must be authenticated.');
+    }
+    const uid = auth.uid;
+    const { clubId, postId, commentId, action, content, reason, requestId } = data;
+
+    if (!clubId || !postId || !commentId || !action || !requestId) {
+        throw new HttpsError('invalid-argument', 'Missing required fields.');
+    }
+
+    if (action === 'EDIT' && !content?.trim()) {
+        throw new HttpsError('invalid-argument', 'Content is required for EDIT.');
+    }
+
+    // 2. Role Check (Admin/President/Director/Treasurer)
+    const memberSnap = await firestore.collection('clubs').doc(clubId).collection('members').doc(uid).get();
+    if (!memberSnap.exists) {
+        throw new HttpsError('permission-denied', 'Member profile not found.');
+    }
+    const memberData = memberSnap.data();
+    const role = memberData?.role;
+
+    // Align with isAdminLike
+    if (!['PRESIDENT', 'VICE_PRESIDENT', 'DIRECTOR', 'TREASURER', 'ADMIN'].includes(role)) {
+        throw new HttpsError('permission-denied', 'Insufficient permissions for moderation.');
+    }
+
+    // 3. Target Comment Check
+    const commentRef = firestore
+        .collection('clubs').doc(clubId)
+        .collection('posts').doc(postId)
+        .collection('comments').doc(commentId);
+
+    const commentSnap = await commentRef.get();
+    if (!commentSnap.exists) {
+        throw new HttpsError('not-found', 'Comment not found.');
+    }
+    const beforeData = commentSnap.data();
+
+    // 4. Exec Action
+    try {
+        if (action === 'EDIT') {
+            const trimmedContent = content!.trim();
+            await commentRef.update({
+                content: trimmedContent,
+                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                editedAt: admin.firestore.FieldValue.serverTimestamp(),
+                editedBy: uid,
+                editReason: reason || null,
+                editedByRole: role
+            });
+
+            // Audit
+            await writeAudit({
+                clubId,
+                actorUid: uid,
+                action: 'COMMENT_EDIT',
+                targetType: 'comment',
+                targetId: commentId,
+                before: beforeData,
+                after: { ...beforeData, content: trimmedContent, editedBy: uid }, // approximation
+                meta: { postId, commentId, reason, action, via: 'callable', requestId }
+            });
+
+        } else if (action === 'DELETE') {
+            await commentRef.delete();
+
+            // Audit
+            await writeAudit({
+                clubId,
+                actorUid: uid,
+                action: 'COMMENT_DELETE',
+                targetType: 'comment',
+                targetId: commentId,
+                before: beforeData,
+                after: null,
+                meta: { postId, commentId, reason, action, via: 'callable', requestId }
+            });
+        }
+    } catch (error) {
+        console.error(`[moderateComment] Error:`, error);
+        throw new HttpsError('internal', 'Moderation failed.');
+    }
+
+    return { success: true, action, commentId };
+});
+
+```
+
 ## File: functions/src/callables/events.ts
 ```ts
 import { onCall } from 'firebase-functions/v2/https';
@@ -4512,7 +4950,7 @@ export const createEventPost = onCall({ region: 'asia-northeast3' }, async (req)
   const requestId = reqString(req.data?.requestId, 'requestId', 1, 128); // 필수 (멱등성용)
 
   // μATOM-0531: adminLike 권한 확인
-  await requireRole(clubId, uid, ['PRESIDENT', 'DIRECTOR', 'ADMIN']);
+  await requireRole(clubId, uid, ['PRESIDENT', 'DIRECTOR', 'TREASURER', 'ADMIN']);
 
   // eventType 검증
   if (eventType !== 'PRACTICE' && eventType !== 'GAME') {
@@ -4537,7 +4975,7 @@ export const createEventPost = onCall({ region: 'asia-northeast3' }, async (req)
     throw Err.invalidArgument('Invalid startAt date');
   }
 
-  // μATOM-0532: voteCloseAt 계산(전날 23:00 KST) 서버 확정
+  // μATOM-0532: voteCloseAt 계산(전날 21:00 KST) 서버 확정
   const voteCloseAtMillis = computeVoteCloseAtKST(startAtDate.getTime());
   const voteCloseAt = new Date(voteCloseAtMillis);
 
@@ -4884,7 +5322,7 @@ export const createNoticeWithPush = functions
     // Let's assume Err helper works or just catch generic.
     try {
       const role = await getMemberRole(clubId, uid);
-      if (!['PRESIDENT', 'DIRECTOR', 'ADMIN'].includes(role)) {
+      if (!['PRESIDENT', 'DIRECTOR', 'TREASURER', 'ADMIN'].includes(role)) {
         throw new functions.https.HttpsError('permission-denied', 'Insufficient role');
       }
     } catch (e: any) {
@@ -5032,7 +5470,7 @@ import { Err } from '../shared/errors';
  * 
  * @example
  * await registerFcmToken({
- *   clubId: 'default-club',
+ *   clubId: 'WINGS',
  *   token: 'fcm_token_string',
  *   platform: 'web',
  *   requestId: 'req-uuid-123'
@@ -5091,9 +5529,12 @@ export * from './callables/members';
 export * from './callables/notices';
 export * from './callables/tokens';
 export * from './callables/events'; // μATOM-0531: createEventPost
+export * from './callables/comments.moderation'; // C03-04: Comment Moderation
 
 // Export scheduled functions
-export * from './scheduled/closeEventVotes'; // μATOM-0541: closeEventVotes
+// Export scheduled functions
+// Export triggers
+export * from './triggers/comments.commentCount'; // C03-05: Comment Count Trigger
 
 
 ```
@@ -5255,7 +5696,9 @@ export type AuditAction =
   | 'NOTICE_DELETE'
   | 'EVENT_CLOSE'
   | 'FCM_TOKEN_REGISTER'
-  | 'FCM_TOKEN_DELETE';
+  | 'FCM_TOKEN_DELETE'
+  | 'COMMENT_EDIT'
+  | 'COMMENT_DELETE';
 
 export interface AuditParams {
   clubId: string;
@@ -5307,7 +5750,7 @@ function summarizeData(data: unknown, maxSize = 10000): unknown {
  * @example
  * // 멤버 상태 변경 (승인)
  * await writeAudit({
- *   clubId: 'default-club',
+ *   clubId: 'WINGS',
  *   actorUid: 'admin123',
  *   action: 'MEMBER_STATUS_CHANGE',
  *   targetType: 'member',
@@ -5319,7 +5762,7 @@ function summarizeData(data: unknown, maxSize = 10000): unknown {
  * @example
  * // 공지 생성
  * await writeAudit({
- *   clubId: 'default-club',
+ *   clubId: 'WINGS',
  *   actorUid: 'admin456',
  *   action: 'NOTICE_CREATE',
  *   targetType: 'post',
@@ -5330,7 +5773,7 @@ function summarizeData(data: unknown, maxSize = 10000): unknown {
  * @example
  * // 경기 기록 마감
  * await writeAudit({
- *   clubId: 'default-club',
+ *   clubId: 'WINGS',
  *   actorUid: 'admin789',
  *   action: 'GAME_LOCK_RECORDING',
  *   targetType: 'post',
@@ -5528,7 +5971,7 @@ export interface FCMSendResult {
  * @returns 토큰 문서 ID (해시)
  * 
  * @example
- * await upsertFcmToken('default-club', 'user123', 'fcm_token_string', 'web');
+ * await upsertFcmToken('WINGS', 'user123', 'fcm_token_string', 'web');
  */
 export async function upsertFcmToken(
   clubId: string,
@@ -5563,11 +6006,11 @@ export async function deleteUserTokens(clubId: string, uid: string): Promise<voi
   const tokensCol = memberTokensCol(clubId, uid);
   const snap = await tokensCol.get();
   const batch = getFirestore().batch();
-  
+
   snap.forEach((doc) => {
     batch.delete(doc.ref);
   });
-  
+
   await batch.commit();
 }
 
@@ -5584,13 +6027,13 @@ export async function deleteInvalidTokens(
   invalidTokenIds: string[]
 ): Promise<void> {
   if (invalidTokenIds.length === 0) return;
-  
+
   const batch = getFirestore().batch();
   invalidTokenIds.forEach((tokenId) => {
     const tokenRef = memberTokensCol(clubId, uid).doc(tokenId);
     batch.delete(tokenRef);
   });
-  
+
   await batch.commit();
 }
 
@@ -5604,17 +6047,17 @@ export async function deleteInvalidTokens(
  */
 export async function getAllTokens(clubId: string): Promise<string[]> {
   const db = getFirestore();
-  
+
   // collectionGroup을 사용하여 모든 members/{uid}/tokens 조회
   // 단, 현재 Firestore는 collectionGroup에 대한 필터링이 제한적이므로
   // 모든 members를 순회하는 방식 사용 (성능 고려 필요)
-  
+
   // 방법 1: members 컬렉션을 순회하며 각 멤버의 tokens 조회
   const membersRef = db.collection('clubs').doc(clubId).collection('members');
   const membersSnap = await membersRef.get();
-  
+
   const tokens: string[] = [];
-  
+
   for (const memberDoc of membersSnap.docs) {
     const uid = memberDoc.id;
     const tokensSnap = await memberTokensCol(clubId, uid).get();
@@ -5625,7 +6068,7 @@ export async function getAllTokens(clubId: string): Promise<string[]> {
       }
     });
   }
-  
+
   return tokens;
 }
 
@@ -5638,9 +6081,9 @@ export async function getAllTokens(clubId: string): Promise<string[]> {
  */
 export async function getTokensForUids(clubId: string, uids: string[]): Promise<string[]> {
   if (uids.length === 0) return [];
-  
+
   const tokens: string[] = [];
-  
+
   for (const uid of uids) {
     const tokensSnap = await memberTokensCol(clubId, uid).get();
     tokensSnap.forEach((tokenDoc) => {
@@ -5650,7 +6093,7 @@ export async function getTokensForUids(clubId: string, uids: string[]): Promise<
       }
     });
   }
-  
+
   return tokens;
 }
 
@@ -5664,11 +6107,14 @@ async function getAdminUids(clubId: string): Promise<string[]> {
   const db = getFirestore();
   const membersRef = db.collection('clubs').doc(clubId).collection('members');
   const membersSnap = await membersRef
-    .where('role', 'in', ['PRESIDENT', 'DIRECTOR', 'ADMIN'])
+    .where('role', 'in', ['PRESIDENT', 'DIRECTOR', 'TREASURER', 'ADMIN'])
     .get();
-  
+
   return membersSnap.docs.map((doc) => doc.id);
 }
+
+export const __test__ = { getAdminUids };
+
 
 /**
  * 배열을 청크로 분할
@@ -5748,7 +6194,7 @@ export async function sendToTokens(
  * 
  * @example
  * // 전체 멤버에게 공지 푸시
- * await sendToClub('default-club', {
+ * await sendToClub('WINGS', {
  *   title: '새 공지사항',
  *   body: '중요한 공지가 등록되었습니다.',
  *   data: { postId: 'xyz', type: 'notice' },
@@ -5756,14 +6202,14 @@ export async function sendToTokens(
  * 
  * @example
  * // 관리자에게만 발송
- * await sendToClub('default-club', {
+ * await sendToClub('WINGS', {
  *   title: '출석 투표 마감',
  *   body: '오늘 일정의 출석 투표가 마감되었습니다.',
  * }, 'admins');
  * 
  * @example
  * // 특정 사용자들에게만 발송
- * await sendToClub('default-club', {
+ * await sendToClub('WINGS', {
  *   title: '리마인더',
  *   body: '내일 일정을 확인하세요.',
  * }, ['user123', 'user456']);
@@ -5955,7 +6401,7 @@ export const db = getFirestore();
  * 클럽 문서 참조
  * 
  * @example
- * const clubDoc = clubRef('default-club');
+ * const clubDoc = clubRef('WINGS');
  */
 export function clubRef(clubId: string) {
   return db.collection('clubs').doc(clubId);
@@ -5965,7 +6411,7 @@ export function clubRef(clubId: string) {
  * 멤버 문서 참조 (clubs/{clubId}/members/{uid})
  * 
  * @example
- * const memberDoc = memberRef('default-club', 'user123');
+ * const memberDoc = memberRef('WINGS', 'user123');
  */
 export function memberRef(clubId: string, uid: string) {
   return clubRef(clubId).collection('members').doc(uid);
@@ -5977,7 +6423,7 @@ export function memberRef(clubId: string, uid: string) {
  * PRD v1.0 Section 13.4: 토큰 저장 구조
  * 
  * @example
- * const tokenDoc = memberTokenRef('default-club', 'user123', 'token456');
+ * const tokenDoc = memberTokenRef('WINGS', 'user123', 'token456');
  */
 export function memberTokenRef(clubId: string, uid: string, tokenId: string) {
   return memberRef(clubId, uid).collection('tokens').doc(tokenId);
@@ -5989,7 +6435,7 @@ export function memberTokenRef(clubId: string, uid: string, tokenId: string) {
  * PRD v1.0 Section 13.4: 토큰 저장 구조
  * 
  * @example
- * const tokensCol = memberTokensCol('default-club', 'user123');
+ * const tokensCol = memberTokensCol('WINGS', 'user123');
  */
 export function memberTokensCol(clubId: string, uid: string) {
   return memberRef(clubId, uid).collection('tokens');
@@ -5999,7 +6445,7 @@ export function memberTokensCol(clubId: string, uid: string) {
  * 게시글 문서 참조 (clubs/{clubId}/posts/{postId})
  * 
  * @example
- * const postDoc = postRef('default-club', 'post456');
+ * const postDoc = postRef('WINGS', 'post456');
  */
 export function postRef(clubId: string, postId: string) {
   return clubRef(clubId).collection('posts').doc(postId);
@@ -6009,7 +6455,7 @@ export function postRef(clubId: string, postId: string) {
  * 게시글 컬렉션 참조 (clubs/{clubId}/posts)
  * 
  * @example
- * const postsCol = postCol('default-club');
+ * const postsCol = postCol('WINGS');
  */
 export function postCol(clubId: string) {
   return clubRef(clubId).collection('posts');
@@ -6019,7 +6465,7 @@ export function postCol(clubId: string) {
  * 댓글 문서 참조 (clubs/{clubId}/posts/{postId}/comments/{commentId})
  * 
  * @example
- * const commentDoc = commentRef('default-club', 'post456', 'comment789');
+ * const commentDoc = commentRef('WINGS', 'post456', 'comment789');
  */
 export function commentRef(clubId: string, postId: string, commentId: string) {
   return postRef(clubId, postId).collection('comments').doc(commentId);
@@ -6029,7 +6475,7 @@ export function commentRef(clubId: string, postId: string, commentId: string) {
  * 댓글 컬렉션 참조 (clubs/{clubId}/posts/{postId}/comments)
  * 
  * @example
- * const commentsCol = commentCol('default-club', 'post456');
+ * const commentsCol = commentCol('WINGS', 'post456');
  */
 export function commentCol(clubId: string, postId: string) {
   return postRef(clubId, postId).collection('comments');
@@ -6039,7 +6485,7 @@ export function commentCol(clubId: string, postId: string) {
  * 출석 문서 참조 (clubs/{clubId}/posts/{postId}/attendance/{userId})
  * 
  * @example
- * const attendanceDoc = attendanceRef('default-club', 'post456', 'user123');
+ * const attendanceDoc = attendanceRef('WINGS', 'post456', 'user123');
  */
 export function attendanceRef(clubId: string, postId: string, userId: string) {
   return postRef(clubId, postId).collection('attendance').doc(userId);
@@ -6049,7 +6495,7 @@ export function attendanceRef(clubId: string, postId: string, userId: string) {
  * 출석 컬렉션 참조 (clubs/{clubId}/posts/{postId}/attendance)
  * 
  * @example
- * const attendanceCol = attendanceCol('default-club', 'post456');
+ * const attendanceCol = attendanceCol('WINGS', 'post456');
  */
 export function attendanceCol(clubId: string, postId: string) {
   return postRef(clubId, postId).collection('attendance');
@@ -6059,7 +6505,7 @@ export function attendanceCol(clubId: string, postId: string) {
  * 감사 로그 컬렉션 참조 (clubs/{clubId}/audit)
  * 
  * @example
- * const auditCol = auditCol('default-club');
+ * const auditCol = auditCol('WINGS');
  */
 export function auditCol(clubId: string) {
   return clubRef(clubId).collection('audit');
@@ -6069,7 +6515,7 @@ export function auditCol(clubId: string) {
  * FCM 토큰 컬렉션 참조 (clubs/{clubId}/fcmTokens)
  * 
  * @example
- * const fcmTokensCol = fcmTokenCol('default-club');
+ * const fcmTokensCol = fcmTokenCol('WINGS');
  */
 export function fcmTokenCol(clubId: string) {
   return clubRef(clubId).collection('fcmTokens');
@@ -6079,7 +6525,7 @@ export function fcmTokenCol(clubId: string) {
  * 멱등성 컬렉션 참조 (clubs/{clubId}/idempotency)
  * 
  * @example
- * const idemCol = idemCol('default-club');
+ * const idemCol = idemCol('WINGS');
  */
 export function idemCol(clubId: string) {
   return clubRef(clubId).collection('idempotency');
@@ -6125,13 +6571,13 @@ export function notificationCol() {
 /**
  * 시간 계산 유틸리티
  * 
- * PRD v1.0 정책: 출석 투표 마감은 "시작일 전날 23:00" (KST 기준)
+ * PRD v1.0 정책: 출석 투표 마감은 "시작일 전날 21:00" (KST 기준)
  */
 
 /**
- * 투표 마감 시간 계산 (KST 기준: 시작일 전날 23:00)
+ * 투표 마감 시간 계산 (KST 기준: 시작일 전날 21:00)
  * 
- * 정책: 일정 시작일 전날 23:00 KST에 출석 투표 마감
+ * 정책: 일정 시작일 전날 21:00 KST에 출석 투표 마감
  * 
  * @param startAtMillis 시작일 타임스탬프 (밀리초, UTC)
  * @returns voteCloseAt 타임스탬프 (밀리초, UTC)
@@ -6139,34 +6585,34 @@ export function notificationCol() {
  * @example
  * const startAt = Date.parse('2025-12-20T10:00:00+09:00'); // 2025년 12월 20일 10:00 KST
  * const voteCloseAt = computeVoteCloseAtKST(startAt);
- * // 결과: 2025년 12월 19일 23:00 KST (UTC로 변환된 타임스탬프)
+ * // 결과: 2025년 12월 19일 21:00 KST (UTC로 변환된 타임스탬프)
  */
 export function computeVoteCloseAtKST(startAtMillis: number): number {
-  // 정책: 시작일 전날 23:00 (KST 고정)
+  // 정책: 시작일 전날 21:00 (KST 고정)
   // 
   // 로직:
   // 1. UTC 타임스탬프를 KST로 변환하여 날짜 추출
   // 2. 시작일의 전날을 계산 (KST 기준)
-  // 3. 전날 23:00 KST를 UTC 타임스탬프로 변환하여 반환
+  // 3. 전날 21:00 KST를 UTC 타임스탬프로 변환하여 반환
   //
   // KST = UTC + 9시간
   // KST 00:00 = UTC 15:00 (전날)
-  // KST 23:00 = UTC 14:00 (같은 날)
+  // KST 21:00 = UTC 12:00 (같은 날)
 
   const start = new Date(startAtMillis);
-  
+
   // KST 시간으로 변환 (UTC + 9시간)
   const kstTime = start.getTime() + 9 * 60 * 60 * 1000;
   const kstDate = new Date(kstTime);
-  
+
   // KST 기준 연도/월/일 추출
   const kstYear = kstDate.getUTCFullYear();
   const kstMonth = kstDate.getUTCMonth();
   const kstDay = kstDate.getUTCDate();
-  
+
   // 전날 계산 (KST 기준)
-  const prevDayKST = new Date(Date.UTC(kstYear, kstMonth, kstDay - 1, 23, 0, 0, 0));
-  
+  const prevDayKST = new Date(Date.UTC(kstYear, kstMonth, kstDay - 1, 21, 0, 0, 0));
+
   // UTC로 변환 (KST - 9시간)
   return prevDayKST.getTime() - 9 * 60 * 60 * 1000;
 }
@@ -6338,6 +6784,58 @@ export function optDate(v: unknown, field: string): Date | undefined {
   return reqDate(v, field);
 }
 
+
+```
+
+## File: functions/src/triggers/comments.commentCount.ts
+```ts
+import * as functions from 'firebase-functions';
+import * as admin from 'firebase-admin';
+
+const db = admin.firestore();
+
+/**
+ * [C03-05] Comment Count Trigger
+ * 
+ * Maintains `commentCount` on the parent Post document.
+ * - onCreate: +1
+ * - onDelete: -1 (min 0)
+ * Uses transaction to ensure concurrency safety.
+ */
+export const onCommentCreate = functions.firestore
+    .document('clubs/{clubId}/posts/{postId}/comments/{commentId}')
+    .onCreate(async (_snap, context) => {
+        const { clubId, postId } = context.params;
+        const postRef = db.doc(`clubs/${clubId}/posts/${postId}`);
+
+        return db.runTransaction(async (t) => {
+            const postSnap = await t.get(postRef);
+            if (!postSnap.exists) {
+                console.log(`[commentCount] Post ${postId} does not exist. Skipping decrement.`);
+                return;
+            }
+            const currentCount = postSnap.data()?.commentCount || 0;
+            t.update(postRef, { commentCount: currentCount + 1 });
+        });
+    });
+
+export const onCommentDelete = functions.firestore
+    .document('clubs/{clubId}/posts/{postId}/comments/{commentId}')
+    .onDelete(async (_snap, context) => {
+        const { clubId, postId } = context.params;
+        const postRef = db.doc(`clubs/${clubId}/posts/${postId}`);
+
+        return db.runTransaction(async (t) => {
+            const postSnap = await t.get(postRef);
+            if (!postSnap.exists) {
+                console.log(`[commentCount] Post ${postId} does not exist. Skipping decrement.`);
+                return;
+            }
+            const currentCount = postSnap.data()?.commentCount || 0;
+            const newCount = Math.max(0, currentCount - 1);
+            t.update(postRef, { commentCount: newCount });
+        });
+    });
 
 ```
 

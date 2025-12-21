@@ -28,7 +28,7 @@ exports.db = (0, firestore_1.getFirestore)();
  * 클럽 문서 참조
  *
  * @example
- * const clubDoc = clubRef('default-club');
+ * const clubDoc = clubRef('WINGS');
  */
 function clubRef(clubId) {
     return exports.db.collection('clubs').doc(clubId);
@@ -37,7 +37,7 @@ function clubRef(clubId) {
  * 멤버 문서 참조 (clubs/{clubId}/members/{uid})
  *
  * @example
- * const memberDoc = memberRef('default-club', 'user123');
+ * const memberDoc = memberRef('WINGS', 'user123');
  */
 function memberRef(clubId, uid) {
     return clubRef(clubId).collection('members').doc(uid);
@@ -48,7 +48,7 @@ function memberRef(clubId, uid) {
  * PRD v1.0 Section 13.4: 토큰 저장 구조
  *
  * @example
- * const tokenDoc = memberTokenRef('default-club', 'user123', 'token456');
+ * const tokenDoc = memberTokenRef('WINGS', 'user123', 'token456');
  */
 function memberTokenRef(clubId, uid, tokenId) {
     return memberRef(clubId, uid).collection('tokens').doc(tokenId);
@@ -59,7 +59,7 @@ function memberTokenRef(clubId, uid, tokenId) {
  * PRD v1.0 Section 13.4: 토큰 저장 구조
  *
  * @example
- * const tokensCol = memberTokensCol('default-club', 'user123');
+ * const tokensCol = memberTokensCol('WINGS', 'user123');
  */
 function memberTokensCol(clubId, uid) {
     return memberRef(clubId, uid).collection('tokens');
@@ -68,7 +68,7 @@ function memberTokensCol(clubId, uid) {
  * 게시글 문서 참조 (clubs/{clubId}/posts/{postId})
  *
  * @example
- * const postDoc = postRef('default-club', 'post456');
+ * const postDoc = postRef('WINGS', 'post456');
  */
 function postRef(clubId, postId) {
     return clubRef(clubId).collection('posts').doc(postId);
@@ -77,7 +77,7 @@ function postRef(clubId, postId) {
  * 게시글 컬렉션 참조 (clubs/{clubId}/posts)
  *
  * @example
- * const postsCol = postCol('default-club');
+ * const postsCol = postCol('WINGS');
  */
 function postCol(clubId) {
     return clubRef(clubId).collection('posts');
@@ -86,7 +86,7 @@ function postCol(clubId) {
  * 댓글 문서 참조 (clubs/{clubId}/posts/{postId}/comments/{commentId})
  *
  * @example
- * const commentDoc = commentRef('default-club', 'post456', 'comment789');
+ * const commentDoc = commentRef('WINGS', 'post456', 'comment789');
  */
 function commentRef(clubId, postId, commentId) {
     return postRef(clubId, postId).collection('comments').doc(commentId);
@@ -95,7 +95,7 @@ function commentRef(clubId, postId, commentId) {
  * 댓글 컬렉션 참조 (clubs/{clubId}/posts/{postId}/comments)
  *
  * @example
- * const commentsCol = commentCol('default-club', 'post456');
+ * const commentsCol = commentCol('WINGS', 'post456');
  */
 function commentCol(clubId, postId) {
     return postRef(clubId, postId).collection('comments');
@@ -104,7 +104,7 @@ function commentCol(clubId, postId) {
  * 출석 문서 참조 (clubs/{clubId}/posts/{postId}/attendance/{userId})
  *
  * @example
- * const attendanceDoc = attendanceRef('default-club', 'post456', 'user123');
+ * const attendanceDoc = attendanceRef('WINGS', 'post456', 'user123');
  */
 function attendanceRef(clubId, postId, userId) {
     return postRef(clubId, postId).collection('attendance').doc(userId);
@@ -113,7 +113,7 @@ function attendanceRef(clubId, postId, userId) {
  * 출석 컬렉션 참조 (clubs/{clubId}/posts/{postId}/attendance)
  *
  * @example
- * const attendanceCol = attendanceCol('default-club', 'post456');
+ * const attendanceCol = attendanceCol('WINGS', 'post456');
  */
 function attendanceCol(clubId, postId) {
     return postRef(clubId, postId).collection('attendance');
@@ -122,7 +122,7 @@ function attendanceCol(clubId, postId) {
  * 감사 로그 컬렉션 참조 (clubs/{clubId}/audit)
  *
  * @example
- * const auditCol = auditCol('default-club');
+ * const auditCol = auditCol('WINGS');
  */
 function auditCol(clubId) {
     return clubRef(clubId).collection('audit');
@@ -131,7 +131,7 @@ function auditCol(clubId) {
  * FCM 토큰 컬렉션 참조 (clubs/{clubId}/fcmTokens)
  *
  * @example
- * const fcmTokensCol = fcmTokenCol('default-club');
+ * const fcmTokensCol = fcmTokenCol('WINGS');
  */
 function fcmTokenCol(clubId) {
     return clubRef(clubId).collection('fcmTokens');
@@ -140,7 +140,7 @@ function fcmTokenCol(clubId) {
  * 멱등성 컬렉션 참조 (clubs/{clubId}/idempotency)
  *
  * @example
- * const idemCol = idemCol('default-club');
+ * const idemCol = idemCol('WINGS');
  */
 function idemCol(clubId) {
     return clubRef(clubId).collection('idempotency');

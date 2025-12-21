@@ -43,7 +43,7 @@ function summarizeData(data, maxSize = 10000) {
  * @example
  * // 멤버 상태 변경 (승인)
  * await writeAudit({
- *   clubId: 'default-club',
+ *   clubId: 'WINGS',
  *   actorUid: 'admin123',
  *   action: 'MEMBER_STATUS_CHANGE',
  *   targetType: 'member',
@@ -55,7 +55,7 @@ function summarizeData(data, maxSize = 10000) {
  * @example
  * // 공지 생성
  * await writeAudit({
- *   clubId: 'default-club',
+ *   clubId: 'WINGS',
  *   actorUid: 'admin456',
  *   action: 'NOTICE_CREATE',
  *   targetType: 'post',
@@ -66,7 +66,7 @@ function summarizeData(data, maxSize = 10000) {
  * @example
  * // 경기 기록 마감
  * await writeAudit({
- *   clubId: 'default-club',
+ *   clubId: 'WINGS',
  *   actorUid: 'admin789',
  *   action: 'GAME_LOCK_RECORDING',
  *   targetType: 'post',

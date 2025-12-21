@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { MoreVertical, Trash2, Edit2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { canEditComment, canDeleteComment } from '../lib/permissions';
 import { useData } from '../contexts/DataContext';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -20,8 +21,8 @@ export const CommentList: React.FC<CommentListProps> = ({ postId }) => {
 
   if (postComments.length === 0) {
     return (
-      <EmptyState 
-        type="empty" 
+      <EmptyState
+        type="empty"
         message="첫 댓글을 작성해보세요!"
       />
     );
@@ -54,15 +55,9 @@ const CommentItem: React.FC<CommentItemProps> = ({ comment, postId }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState(comment.content);
 
-  // ATOM-15: 작성자 확인
-  const isAuthor = user?.id === comment.author.id;
-
-  // ATOM-15: adminLike 확인 (PRESIDENT | DIRECTOR | ADMIN | TREASURER)
-  const isAdminLike = user?.role && ['PRESIDENT', 'DIRECTOR', 'ADMIN', 'TREASURER'].includes(user.role);
-
-  // ATOM-15: 수정/삭제 버튼 노출 조건 - 작성자만, 삭제는 adminLike도 가능
-  const canEdit = isAuthor;
-  const canDelete = isAuthor || isAdminLike;
+  // ATOM-15: 수정/삭제 버튼 노출 조건 (Centralized)
+  const canEdit = canEditComment(user?.role, comment.author.id, user?.id);
+  const canDelete = canDeleteComment(user?.role, comment.author.id, user?.id);
 
   // Match author by ID from the nested author object
   const author = members.find(u => u.id === comment.author.id);

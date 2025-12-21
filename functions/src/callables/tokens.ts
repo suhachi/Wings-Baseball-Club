@@ -16,7 +16,7 @@ import { Err } from '../shared/errors';
  * 
  * @example
  * await registerFcmToken({
- *   clubId: 'default-club',
+ *   clubId: 'WINGS',
  *   token: 'fcm_token_string',
  *   platform: 'web',
  *   requestId: 'req-uuid-123'

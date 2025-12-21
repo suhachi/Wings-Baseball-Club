@@ -36,7 +36,7 @@ export interface FCMSendResult {
  * @returns 토큰 문서 ID (해시)
  * 
  * @example
- * await upsertFcmToken('default-club', 'user123', 'fcm_token_string', 'web');
+ * await upsertFcmToken('WINGS', 'user123', 'fcm_token_string', 'web');
  */
 export async function upsertFcmToken(
   clubId: string,
@@ -71,11 +71,11 @@ export async function deleteUserTokens(clubId: string, uid: string): Promise<voi
   const tokensCol = memberTokensCol(clubId, uid);
   const snap = await tokensCol.get();
   const batch = getFirestore().batch();
-  
+
   snap.forEach((doc) => {
     batch.delete(doc.ref);
   });
-  
+
   await batch.commit();
 }
 
@@ -92,13 +92,13 @@ export async function deleteInvalidTokens(
   invalidTokenIds: string[]
 ): Promise<void> {
   if (invalidTokenIds.length === 0) return;
-  
+
   const batch = getFirestore().batch();
   invalidTokenIds.forEach((tokenId) => {
     const tokenRef = memberTokensCol(clubId, uid).doc(tokenId);
     batch.delete(tokenRef);
   });
-  
+
   await batch.commit();
 }
 
@@ -112,17 +112,17 @@ export async function deleteInvalidTokens(
  */
 export async function getAllTokens(clubId: string): Promise<string[]> {
   const db = getFirestore();
-  
+
   // collectionGroup을 사용하여 모든 members/{uid}/tokens 조회
   // 단, 현재 Firestore는 collectionGroup에 대한 필터링이 제한적이므로
   // 모든 members를 순회하는 방식 사용 (성능 고려 필요)
-  
+
   // 방법 1: members 컬렉션을 순회하며 각 멤버의 tokens 조회
   const membersRef = db.collection('clubs').doc(clubId).collection('members');
   const membersSnap = await membersRef.get();
-  
+
   const tokens: string[] = [];
-  
+
   for (const memberDoc of membersSnap.docs) {
     const uid = memberDoc.id;
     const tokensSnap = await memberTokensCol(clubId, uid).get();
@@ -133,7 +133,7 @@ export async function getAllTokens(clubId: string): Promise<string[]> {
       }
     });
   }
-  
+
   return tokens;
 }
 
@@ -146,9 +146,9 @@ export async function getAllTokens(clubId: string): Promise<string[]> {
  */
 export async function getTokensForUids(clubId: string, uids: string[]): Promise<string[]> {
   if (uids.length === 0) return [];
-  
+
   const tokens: string[] = [];
-  
+
   for (const uid of uids) {
     const tokensSnap = await memberTokensCol(clubId, uid).get();
     tokensSnap.forEach((tokenDoc) => {
@@ -158,7 +158,7 @@ export async function getTokensForUids(clubId: string, uids: string[]): Promise<
       }
     });
   }
-  
+
   return tokens;
 }
 
@@ -172,11 +172,14 @@ async function getAdminUids(clubId: string): Promise<string[]> {
   const db = getFirestore();
   const membersRef = db.collection('clubs').doc(clubId).collection('members');
   const membersSnap = await membersRef
-    .where('role', 'in', ['PRESIDENT', 'DIRECTOR', 'ADMIN'])
+    .where('role', 'in', ['PRESIDENT', 'DIRECTOR', 'TREASURER', 'ADMIN'])
     .get();
-  
+
   return membersSnap.docs.map((doc) => doc.id);
 }
+
+export const __test__ = { getAdminUids };
+
 
 /**
  * 배열을 청크로 분할
@@ -256,7 +259,7 @@ export async function sendToTokens(
  * 
  * @example
  * // 전체 멤버에게 공지 푸시
- * await sendToClub('default-club', {
+ * await sendToClub('WINGS', {
  *   title: '새 공지사항',
  *   body: '중요한 공지가 등록되었습니다.',
  *   data: { postId: 'xyz', type: 'notice' },
@@ -264,14 +267,14 @@ export async function sendToTokens(
  * 
  * @example
  * // 관리자에게만 발송
- * await sendToClub('default-club', {
+ * await sendToClub('WINGS', {
  *   title: '출석 투표 마감',
  *   body: '오늘 일정의 출석 투표가 마감되었습니다.',
  * }, 'admins');
  * 
  * @example
  * // 특정 사용자들에게만 발송
- * await sendToClub('default-club', {
+ * await sendToClub('WINGS', {
  *   title: '리마인더',
  *   body: '내일 일정을 확인하세요.',
  * }, ['user123', 'user456']);

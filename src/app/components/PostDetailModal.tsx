@@ -20,6 +20,10 @@ interface PostDetailModalProps {
   onDelete?: (postId: string) => void;
 }
 
+import { canEditPost, canDeletePost, canWriteComment as checkCanWriteComment, canVote } from '../lib/permissions';
+
+// ...
+
 export const PostDetailModal: React.FC<PostDetailModalProps> = ({
   post,
   isOpen,
@@ -27,10 +31,18 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
   onEdit,
   onDelete,
 }) => {
-  const { user, isAdmin } = useAuth();
+  const { user, profileComplete } = useAuth();
   const { members, deletePost, loadComments, updateAttendance, getMyAttendance, loadAttendances } = useData();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [deleting, setDeleting] = useState(false);
+
+  const canWriteComment = checkCanWriteComment(user?.status, profileComplete);
+  // Better use the helper: 
+  // const canWriteComment = checkCanWriteComment(user?.status, profileComplete);
+  // But permission helper name is `canWriteComment`.
+  // Let's rename local var or use module import name properly.
+  // Import is `import { canEditPost, canDeletePost } from '../lib/permissions';` (line 23)
+  // I need to add `canWriteComment` to import.
 
   // μATOM-0304: 상세 공통 post fetch + comments fetch
   useEffect(() => {
@@ -71,8 +83,8 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
 
   // Fix: use realName
   const author = members.find(u => u.id === post.author.id);
-  const canEdit = user?.id === post.author.id || isAdmin();
-  const canDelete = user?.id === post.author.id || isAdmin();
+  const canEdit = canEditPost(post.type, user?.role, post.author.id, user?.id);
+  const canDelete = canDeletePost(post.type, user?.role, post.author.id, user?.id);
 
   const handleShare = async () => {
     if (navigator.share) {
@@ -238,7 +250,7 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
               <div className="px-6 py-6 space-y-6">
                 {/* Header Admin Message for Push Failure */}
                 {/* μATOM-0525: 공지 상세 배지(SENT/FAILED) 표시 - 실패 시 안내 */}
-                {isAdmin() && post.type === 'notice' && post.pushStatus === 'FAILED' && (
+                {user?.role && ['PRESIDENT', 'DIRECTOR', 'TREASURER', 'ADMIN'].includes(user.role) && post.type === 'notice' && post.pushStatus === 'FAILED' && (
                   <div className="flex gap-2 p-3 bg-red-50 dark:bg-red-900/10 border border-red-100 dark:border-red-900/20 rounded-xl text-xs text-red-600 dark:text-red-400">
                     <AlertCircle className="w-4 h-4 flex-shrink-0" />
                     <div>
@@ -309,24 +321,26 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
                       </div>
                     )}
 
-                    {/* μATOM-0501: voteCloseAt 표시 */}
-                    {post.voteCloseAt && (
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 bg-white dark:bg-gray-800 rounded-lg">
-                          <Clock className="w-5 h-5 text-orange-600 dark:text-orange-400" />
-                        </div>
-                        <div>
-                          <div className="text-xs text-gray-500 dark:text-gray-400">투표 마감</div>
-                          <div className="font-medium">
-                            {format(post.voteCloseAt, 'M월 d일 23:00 (KST)', { locale: ko })}
-                          </div>
-                        </div>
+                    {/* μATOM-0501: 투표 마감 안내 */}
+                    <div className="flex items-center gap-3 mb-4 p-3 bg-blue-50 dark:bg-blue-900/10 rounded-lg border border-blue-100 dark:border-blue-900/20">
+                      <div className="p-2 bg-white dark:bg-gray-800 rounded-full shadow-sm">
+                        <Clock className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                       </div>
-                    )}
+                      <div>
+                        <div className="text-sm font-semibold text-blue-900 dark:text-blue-100">
+                          출석 투표는 연습/경기 전날 21:00(KST)에 자동 마감됩니다.
+                        </div>
+                        {post.voteCloseAt && (
+                          <div className="text-xs text-blue-700 dark:text-blue-300 mt-0.5">
+                            마감 시각: {format(post.voteCloseAt, 'yyyy년 M월 d일(eee) 21:00', { locale: ko })}
+                          </div>
+                        )}
+                      </div>
+                    </div>
 
                     {/* μATOM-0504: 집계 표시 */}
                     {post.attendanceSummary && (
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-3 mb-4">
                         <div className="p-2 bg-white dark:bg-gray-800 rounded-lg">
                           <Users className="w-5 h-5 text-orange-600 dark:text-orange-400" />
                         </div>
@@ -347,50 +361,80 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
                       </div>
                     )}
 
-                    {/* μATOM-0502: 내 상태 표시 + μATOM-0503: YES/NO/MAYBE 투표 + μATOM-0505: voteClosed 비활성 */}
+                    {/* μATOM-0502: 내 상태 표시 + 투표 버튼 */}
                     {user && user.status === 'active' && (
                       <div className="pt-3 border-t border-gray-200 dark:border-gray-700">
                         <div className="text-xs text-gray-500 dark:text-gray-400 mb-2">
                           내 출석 상태: {myAttendanceStatus === 'attending' ? '참석' : myAttendanceStatus === 'absent' ? '불참' : myAttendanceStatus === 'maybe' ? '미정' : '미투표'}
                         </div>
-                        {post.voteClosed ? (
-                          <div className="p-3 bg-gray-100 dark:bg-gray-800 rounded-lg text-center text-sm text-gray-500 dark:text-gray-400">
-                            투표가 마감되었습니다
-                          </div>
-                        ) : (
-                          <div className="grid grid-cols-3 gap-2">
-                            <Button
-                              variant={myAttendanceStatus === 'attending' ? 'default' : 'outline'}
-                              size="sm"
-                              onClick={() => handleAttendanceChange('attending')}
-                              className={myAttendanceStatus === 'attending' ? 'bg-green-600 hover:bg-green-700' : ''}
-                              disabled={post.voteClosed}
-                            >
-                              <CheckCircle2 className="w-4 h-4 mr-1" />
-                              참석
-                            </Button>
-                            <Button
-                              variant={myAttendanceStatus === 'absent' ? 'default' : 'outline'}
-                              size="sm"
-                              onClick={() => handleAttendanceChange('absent')}
-                              className={myAttendanceStatus === 'absent' ? 'bg-red-600 hover:bg-red-700' : ''}
-                              disabled={post.voteClosed}
-                            >
-                              <XCircle className="w-4 h-4 mr-1" />
-                              불참
-                            </Button>
-                            <Button
-                              variant={myAttendanceStatus === 'maybe' ? 'default' : 'outline'}
-                              size="sm"
-                              onClick={() => handleAttendanceChange('maybe')}
-                              className={myAttendanceStatus === 'maybe' ? 'bg-yellow-600 hover:bg-yellow-700' : ''}
-                              disabled={post.voteClosed}
-                            >
-                              <HelpCircle className="w-4 h-4 mr-1" />
-                              미정
-                            </Button>
-                          </div>
-                        )}
+
+                        {(() => {
+                          // Determine if closed (Manual OR Time)
+                          const isClosedManual = post.voteClosed === true;
+                          const isClosedTime = post.voteCloseAt ? new Date() >= post.voteCloseAt : false;
+                          const isVoteClosed = isClosedManual || isClosedTime;
+
+                          if (isVoteClosed) {
+                            return (
+                              <div className="p-3 bg-gray-100 dark:bg-gray-800 rounded-lg text-center text-sm text-gray-500 dark:text-gray-400">
+                                {isClosedManual ? '투표가 마감되었습니다 (관리자 마감)' : '투표가 마감되었습니다 (자동 마감)'}
+                              </div>
+                            );
+                          }
+
+                          return (
+                            <div className="grid grid-cols-3 gap-2">
+                              <Button
+                                variant={myAttendanceStatus === 'attending' ? 'default' : 'outline'}
+                                size="sm"
+                                onClick={() => {
+                                  if (!canVote(user?.status, profileComplete)) {
+                                    toast.error(profileComplete ? '투표 권한이 없습니다.' : '프로필(실명/전화)을 완성해야 투표할 수 있습니다.');
+                                    return;
+                                  }
+                                  handleAttendanceChange('attending');
+                                }}
+                                className={myAttendanceStatus === 'attending' ? 'bg-green-600 hover:bg-green-700' : ''}
+                                disabled={!canVote(user?.status, profileComplete)}
+                              >
+                                <CheckCircle2 className="w-4 h-4 mr-1" />
+                                참석
+                              </Button>
+                              <Button
+                                variant={myAttendanceStatus === 'absent' ? 'default' : 'outline'}
+                                size="sm"
+                                onClick={() => {
+                                  if (!canVote(user?.status, profileComplete)) {
+                                    toast.error(profileComplete ? '투표 권한이 없습니다.' : '프로필(실명/전화)을 완성해야 투표할 수 있습니다.');
+                                    return;
+                                  }
+                                  handleAttendanceChange('absent');
+                                }}
+                                className={myAttendanceStatus === 'absent' ? 'bg-red-600 hover:bg-red-700' : ''}
+                                disabled={!canVote(user?.status, profileComplete)}
+                              >
+                                <XCircle className="w-4 h-4 mr-1" />
+                                불참
+                              </Button>
+                              <Button
+                                variant={myAttendanceStatus === 'maybe' ? 'default' : 'outline'}
+                                size="sm"
+                                onClick={() => {
+                                  if (!canVote(user?.status, profileComplete)) {
+                                    toast.error(profileComplete ? '투표 권한이 없습니다.' : '프로필(실명/전화)을 완성해야 투표할 수 있습니다.');
+                                    return;
+                                  }
+                                  handleAttendanceChange('maybe');
+                                }}
+                                className={myAttendanceStatus === 'maybe' ? 'bg-yellow-600 hover:bg-yellow-700' : ''}
+                                disabled={!canVote(user?.status, profileComplete)}
+                              >
+                                <HelpCircle className="w-4 h-4 mr-1" />
+                                미정
+                              </Button>
+                            </div>
+                          );
+                        })()}
                       </div>
                     )}
                   </div>
@@ -433,10 +477,10 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
                   <CommentList postId={post.id} />
 
                   {/* Comment Form (Restricted) */}
-                  {user && user.status !== 'pending' && <CommentForm postId={post.id} />}
-                  {user && user.status === 'pending' && (
+                  {user && canWriteComment && <CommentForm postId={post.id} />}
+                  {user && !canWriteComment && (
                     <div className="p-4 bg-gray-100 dark:bg-gray-800 rounded-xl text-center text-sm text-gray-500">
-                      승인 대기 중에는 댓글을 작성할 수 없습니다.
+                      {!profileComplete ? '프로필(실명/전화)을 완성해야 댓글을 작성할 수 있습니다.' : '댓글 작성 권한이 없습니다.'}
                     </div>
                   )}
                 </div>

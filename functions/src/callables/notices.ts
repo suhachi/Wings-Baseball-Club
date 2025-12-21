@@ -46,7 +46,7 @@ export const createNoticeWithPush = functions
     // Let's assume Err helper works or just catch generic.
     try {
       const role = await getMemberRole(clubId, uid);
-      if (!['PRESIDENT', 'DIRECTOR', 'ADMIN'].includes(role)) {
+      if (!['PRESIDENT', 'DIRECTOR', 'TREASURER', 'ADMIN'].includes(role)) {
         throw new functions.https.HttpsError('permission-denied', 'Insufficient role');
       }
     } catch (e: any) {

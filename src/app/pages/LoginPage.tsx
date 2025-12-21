@@ -1,23 +1,24 @@
 import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import {
-  Loader2
-} from 'lucide-react';
+import { motion } from 'motion/react';
+import { Loader2 } from 'lucide-react';
 import { Button } from '../components/ui/button';
+import { Input } from '../components/ui/input';
+import { Label } from '../components/ui/label';
 import { toast } from 'sonner';
-import {
-  checkUserExists
-} from '../../lib/firebase/auth.service';
-
 import {
   isInAppBrowser,
   getBreakoutUrl,
   isAndroid
 } from '../../lib/utils/userAgent';
+import { SignupPage } from './SignupPage';
 
-type LoginStep = 'method';
+type LoginStep = 'login' | 'signup';
 
-export const LoginPage: React.FC = () => {
+interface LoginPageProps {
+  initialStep?: LoginStep;
+}
+
+export const LoginPage: React.FC<LoginPageProps> = ({ initialStep = 'login' }) => {
   // WebView Detection
   if (isInAppBrowser()) {
     return (
@@ -59,38 +60,48 @@ export const LoginPage: React.FC = () => {
     );
   }
 
-  const [step] = useState<LoginStep>('method');
+  const [step, setStep] = useState<LoginStep>(initialStep);
+
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
 
-  // 1. Google Sign In
-  const handleGoogleLogin = async () => {
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email || !password) {
+      toast.error('이메일과 비밀번호를 입력해주세요.');
+      return;
+    }
+
     setLoading(true);
-    setError('');
-
     try {
-      const { loginWithGoogle } = await import('../../lib/firebase/auth.service');
-      // Google Auth Login (gets firebase user)
-      const firebaseUser = await loginWithGoogle();
-
-      // Check if user profile exists
-      const exists = await checkUserExists(firebaseUser.uid);
-
-      if (exists) {
-        toast.success(`환영합니다, ${firebaseUser.displayName}님!`);
-      } else {
-        // [NOTICE] 신규 유저 자동 가입 신청 (pending 생성)
-        const { createAccount } = await import('../../lib/firebase/auth.service');
-        await createAccount(firebaseUser, firebaseUser.displayName || '이름 없음');
-        toast.info('가입 신청 되었습니다. 관리자 승인 후 이용 가능합니다.');
-      }
+      const { signInWithEmailPassword } = await import('../../lib/firebase/auth.service');
+      await signInWithEmailPassword(email, password);
+      // Success is handled by AuthContext state change
     } catch (err: any) {
-      setError(err.message);
-      toast.error('로그인에 실패했습니다.');
+      console.error('Login Error:', err);
+      toast.error('로그인 실패: 이메일 또는 비밀번호를 확인해주세요.');
     } finally {
       setLoading(false);
     }
   };
+
+  const handleLoginWithGoogle = async () => {
+    setLoading(true);
+    try {
+      const { loginWithGoogle } = await import('../../lib/firebase/auth.service');
+      await loginWithGoogle();
+    } catch (err: any) {
+      console.error('Google Login Error:', err);
+      toast.error('구글 로그인 실패');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (step === 'signup') {
+    return <SignupPage onBack={() => setStep('login')} />;
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-600 via-blue-500 to-blue-400 dark:from-blue-900 dark:via-blue-800 dark:to-blue-700 flex items-center justify-center p-4">
@@ -110,60 +121,72 @@ export const LoginPage: React.FC = () => {
           </motion.div>
           <h1 className="text-2xl font-bold text-white mb-2">WINGS</h1>
           <p className="text-blue-100 text-sm">야구동호회 커뮤니티</p>
-          <p className="text-[10px] text-blue-200/60 mt-2">
-            * 로그인 오류 시 Chrome/Safari 브라우저를 이용해주세요.
-          </p>
         </div>
 
         <div className="p-8">
-          <AnimatePresence mode="wait">
-            {step === 'method' && (
-              <motion.div
-                key="step-method"
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -20 }}
-                className="space-y-4"
-              >
-                <div className="space-y-3">
-                  <Button
-                    variant="outline"
-                    onClick={handleGoogleLogin}
-                    disabled={loading}
-                    className="w-full h-12 bg-white text-gray-800 hover:bg-gray-50 border-0 flex items-center justify-center gap-2"
-                  >
-                    {loading ? <Loader2 className="animate-spin" /> : (
-                      <>
-                        <svg className="w-5 h-5" viewBox="0 0 24 24">
-                          <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
-                          <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
-                          <path d="M5.84 14.11c-.22-.66-.35-1.36-.35-2.11s.13-1.45.35-2.11V7.05H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.95l2.84-2.84z" fill="#FBBC05" />
-                          <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.05l3.66 2.84c.87-2.6 3.3-4.51 6.16-4.51z" fill="#EA4335" />
-                        </svg>
-                        Google로 계속하기
-                      </>
-                    )}
-                  </Button>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+          <form onSubmit={handleLogin} className="space-y-4">
+            <div className="space-y-2">
+              <Label className="text-blue-50">이메일</Label>
+              <Input
+                type="email"
+                placeholder="email@example.com"
+                className="bg-white/20 border-white/30 text-white placeholder:text-blue-100/50 focus:bg-white/30"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-blue-50">비밀번호</Label>
+              <Input
+                type="password"
+                placeholder="비밀번호 입력"
+                className="bg-white/20 border-white/30 text-white placeholder:text-blue-100/50 focus:bg-white/30"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            </div>
 
-          {/* Global Error */}
-          {error && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="mt-4 p-3 bg-red-500/20 border border-red-500/50 rounded-xl text-red-100 text-sm text-center"
+            <Button
+              type="submit"
+              disabled={loading}
+              className="w-full h-12 bg-white text-blue-600 hover:bg-blue-50 font-bold text-lg mt-4"
             >
-              {error}
-            </motion.div>
-          )}
+              {loading ? <Loader2 className="animate-spin" /> : '로그인'}
+            </Button>
+          </form>
+
+          <div className="mt-6 text-center space-y-4">
+            <button
+              onClick={() => setStep('signup')}
+              className="text-white/80 hover:text-white text-sm hover:underline underline-offset-4"
+            >
+              계정이 없으신가요? 회원가입하기
+            </button>
+
+            <div className="pt-2 border-t border-white/10 w-full"></div>
+
+            <button
+              onClick={handleLoginWithGoogle}
+              type="button"
+              disabled={loading}
+              className="text-blue-100/70 hover:text-white text-xs hover:underline underline-offset-4 flex items-center justify-center gap-2 w-full"
+            >
+              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12.545,10.239v3.821h5.445c-0.712,2.315-2.647,3.972-5.445,3.972c-3.332,0-6.033-2.701-6.033-6.032s2.701-6.032,6.033-6.032c1.498,0,2.866,0.549,3.921,1.453l2.814-2.814C17.503,2.988,15.139,2,12.545,2C7.021,2,2.543,6.477,2.543,12s4.478,10,10.002,10c8.396,0,10.249-7.85,9.426-11.748L12.545,10.239z" />
+              </svg>
+              기존 구글 계정으로 로그인 (유지보수용)
+            </button>
+
+            {/* Password Reset Link Placeholder */}
+            {/* <div className="text-xs text-blue-200/60">
+              비밀번호를 잊으셨나요?
+            </div> */}
+          </div>
         </div>
-        <div className="mt-8 text-center text-xs text-gray-400">
-          &copy; 2024 Wings Baseball Club (v1.1)
+        <div className="p-4 text-center text-xs text-gray-400 bg-black/10">
+          &copy; 2024 Wings Baseball Club (v2.0)
         </div>
-      </motion.div >
-    </div >
+      </motion.div>
+    </div>
   );
 };

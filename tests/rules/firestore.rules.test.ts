@@ -25,7 +25,7 @@ let testEnv: any;
 let adminDb: admin.firestore.Firestore;
 
 // 테스트 데이터
-const TEST_CLUB_ID = 'default-club';
+const TEST_CLUB_ID = 'WINGS';
 const TEST_USER_ACTIVE = 'test-user-active';
 const TEST_USER_INACTIVE = 'test-user-inactive';
 const TEST_USER_NON_MEMBER = 'test-user-non-member';
@@ -361,5 +361,72 @@ describe('Firestore Rules Tests', () => {
       })
     );
   });
+  /**
+   * μATOM-0610: Member document missing -> Read Fail
+   * 
+   * 케이스: 로그인했지만 멤버 문서가 없는 사용자가 posts를 읽으려고 시도
+   * 기대: 실패 (PERMISSION_DENIED)
+   */
+  test('μATOM-0610: Member doc missing -> Read Fail', async () => {
+    const db = getFirestoreForUser(TEST_USER_NON_MEMBER);
+    const postRef = doc(db, `clubs/${TEST_CLUB_ID}/posts/${TEST_POST_ID}`);
+
+    await assertFails(getDoc(postRef));
+  });
+
+  /**
+   * μATOM-0611: Member document exists (active) -> Read Success
+   * 
+   * 케이스: Active 멤버가 posts를 읽으려고 시도
+   * 기대: 성공
+   */
+  test('μATOM-0611: Member doc exists (active) -> Read Success', async () => {
+    const db = getFirestoreForUser(TEST_USER_ACTIVE);
+    const postRef = doc(db, `clubs/${TEST_CLUB_ID}/posts/${TEST_POST_ID}`);
+
+    await assertSucceeds(getDoc(postRef));
+  });
+
+  /**
+   * μATOM-0615: Member Creation Rule
+   * 
+   * 케이스 1: 본인의 멤버 문서를 생성 (role=MEMBER, status=active)
+   * 기대: 성공
+   * 
+   * 케이스 2: 본인의 멤버 문서를 생성하되 role=PRESIDENT
+   * 기대: 실패
+   */
+  test('μATOM-0615: Member Creation Rule', async () => {
+    const db = getFirestoreForUser('new-user');
+    const memberRef = doc(db, `clubs/${TEST_CLUB_ID}/members/new-user`);
+
+    // Case 1: Valid Creation
+    await assertSucceeds(
+      setDoc(memberRef, {
+        uid: 'new-user',
+        realName: 'New User',
+        role: 'MEMBER',
+        status: 'active',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+    );
+
+    // Case 2: Invalid Role
+    const dbHacker = getFirestoreForUser('hacker-user');
+    const memberRefHacker = doc(dbHacker, `clubs/${TEST_CLUB_ID}/members/hacker-user`);
+
+    await assertFails(
+      setDoc(memberRefHacker, {
+        uid: 'hacker-user',
+        realName: 'Hacker',
+        role: 'PRESIDENT', // Invalid
+        status: 'active',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+    );
+  });
 });
+
 

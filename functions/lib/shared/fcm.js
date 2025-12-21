@@ -1,5 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.__test__ = void 0;
 exports.upsertFcmToken = upsertFcmToken;
 exports.deleteUserTokens = deleteUserTokens;
 exports.deleteInvalidTokens = deleteInvalidTokens;
@@ -23,7 +24,7 @@ const paths_1 = require("./paths");
  * @returns 토큰 문서 ID (해시)
  *
  * @example
- * await upsertFcmToken('default-club', 'user123', 'fcm_token_string', 'web');
+ * await upsertFcmToken('WINGS', 'user123', 'fcm_token_string', 'web');
  */
 async function upsertFcmToken(clubId, uid, token, platform) {
     // 토큰을 해시하여 문서 ID로 사용
@@ -130,10 +131,11 @@ async function getAdminUids(clubId) {
     const db = (0, firestore_1.getFirestore)();
     const membersRef = db.collection('clubs').doc(clubId).collection('members');
     const membersSnap = await membersRef
-        .where('role', 'in', ['PRESIDENT', 'DIRECTOR', 'ADMIN'])
+        .where('role', 'in', ['PRESIDENT', 'DIRECTOR', 'TREASURER', 'ADMIN'])
         .get();
     return membersSnap.docs.map((doc) => doc.id);
 }
+exports.__test__ = { getAdminUids };
 /**
  * 배열을 청크로 분할
  */
@@ -200,7 +202,7 @@ async function sendToTokens(tokens, payload) {
  *
  * @example
  * // 전체 멤버에게 공지 푸시
- * await sendToClub('default-club', {
+ * await sendToClub('WINGS', {
  *   title: '새 공지사항',
  *   body: '중요한 공지가 등록되었습니다.',
  *   data: { postId: 'xyz', type: 'notice' },
@@ -208,14 +210,14 @@ async function sendToTokens(tokens, payload) {
  *
  * @example
  * // 관리자에게만 발송
- * await sendToClub('default-club', {
+ * await sendToClub('WINGS', {
  *   title: '출석 투표 마감',
  *   body: '오늘 일정의 출석 투표가 마감되었습니다.',
  * }, 'admins');
  *
  * @example
  * // 특정 사용자들에게만 발송
- * await sendToClub('default-club', {
+ * await sendToClub('WINGS', {
  *   title: '리마인더',
  *   body: '내일 일정을 확인하세요.',
  * }, ['user123', 'user456']);

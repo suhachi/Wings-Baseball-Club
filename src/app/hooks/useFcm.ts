@@ -61,14 +61,15 @@ export function useFcm() {
         if (result.reason === 'CONFIG_REQUIRED') {
           errorMessage = '푸시 알림 설정이 아직 완료되지 않았습니다. 관리자에게 문의하세요.';
         } else if (result.reason === 'PERMISSION_DENIED') {
-          errorMessage = '알림 권한이 거부되었습니다.';
+          errorMessage = '브라우저 알림 권한이 꺼져 있습니다. 권한을 허용한 뒤 다시 시도하세요.';
         } else if (result.reason === 'UNSUPPORTED_BROWSER') {
-          errorMessage = '이 브라우저는 푸시 알림을 지원하지 않습니다.';
+          errorMessage = '이 브라우저/환경에서는 푸시 알림을 지원하지 않습니다.';
+        } else {
+          errorMessage = '푸시 등록 중 오류가 발생했습니다. 잠시 후 다시 시도하세요.';
         }
 
         setTokenError(errorMessage);
         if (result.reason !== 'CONFIG_REQUIRED') {
-          // 설정 누락 권장 사항은 토스트 생략하거나 정보를 위해 유지
           toast.error(errorMessage);
         }
         return false;

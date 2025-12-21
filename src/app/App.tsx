@@ -20,30 +20,144 @@ import { AccessDeniedPage } from './pages/AccessDeniedPage';
 import { useFcm } from './hooks/useFcm';
 import { Loader2 } from 'lucide-react';
 
+// Types
 type PageType = 'home' | 'boards' | 'my' | 'settings' | 'notifications' | 'admin' | 'my-activity' | 'install';
+type BoardsTab = 'notice' | 'free' | 'event';
+type AdminTab = 'members' | 'stats' | 'notices';
 
 function AppContent() {
-  // [DEBUG] Version Check
-  console.log('%c Wings PWA v1.3-debug loaded ', 'background: #222; color: #ff00ff');
-
-  const { user, loading, memberStatus } = useAuth();
+  const { user, loading, memberStatus, isAdmin, profileComplete } = useAuth();
   const data = useData();
   useFcm();
+
+  // Debug Logging (Dev Only) [Task A.5]
+  React.useEffect(() => {
+    if (process.env.NODE_ENV === 'development' && user) {
+      console.log('[Security] Auth State:', {
+        uid: user.id,
+        status: memberStatus,
+        role: user.role,
+        profileComplete
+      });
+    }
+  }, [user, memberStatus, profileComplete]);
 
   // Navigation State
   const [activeTab, setActiveTab] = useState<'home' | 'boards' | 'my'>('home');
   const [currentPage, setCurrentPage] = useState<PageType>('home');
-  const [adminInitialTab, setAdminInitialTab] = useState<'members' | 'stats' | 'notices'>('members');
+  const [boardsTab, setBoardsTab] = useState<BoardsTab>('notice');
+  const [adminInitialTab, setAdminInitialTab] = useState<AdminTab>('members');
 
-  // Phase 1: History Stack
-  const [history, setHistory] = useState<PageType[]>([]);
+  // --- URL Routing Logic ---
 
-  // Simple URL routing for install page
-  React.useEffect(() => {
+  const buildUrlState = (page: PageType, bTab: BoardsTab, aTab: AdminTab): string => {
+    if (page === 'install') return '/install';
+    const params = new URLSearchParams();
+    if (page !== 'home') params.set('p', page);
+    if (page === 'boards' && bTab !== 'notice') params.set('bt', bTab);
+    if (page === 'admin' && aTab !== 'members') params.set('at', aTab);
+
+    // Minimal URL: / if home
+    const query = params.toString();
+    return query ? `/?${query}` : '/';
+  };
+
+  const parseUrlState = (): { page: PageType; boardsTab: BoardsTab; adminTab: AdminTab } => {
     if (window.location.pathname === '/install') {
-      setCurrentPage('install');
+      return { page: 'install', boardsTab: 'notice', adminTab: 'members' };
     }
+
+    const params = new URLSearchParams(window.location.search);
+    const p = params.get('p') as PageType | null;
+
+    // Validate Page
+    let page: PageType = 'home';
+    if (p && ['home', 'boards', 'my', 'settings', 'notifications', 'admin', 'my-activity', 'install'].includes(p)) {
+      page = p;
+    }
+
+    // Validate Boards Tab
+    const bt = params.get('bt') as BoardsTab | null;
+    let bTab: BoardsTab = 'notice';
+    if (bt && ['notice', 'free', 'event'].includes(bt)) {
+      bTab = bt;
+    }
+
+    // Validate Admin Tab
+    const at = params.get('at') as AdminTab | null;
+    let aTab: AdminTab = 'members';
+    if (at && ['members', 'stats', 'notices'].includes(at)) {
+      aTab = at;
+    }
+
+    return { page, boardsTab: bTab, adminTab: aTab };
+  };
+
+  const applyUrlState = (state: { page: PageType; boardsTab: BoardsTab; adminTab: AdminTab }) => {
+    setCurrentPage(state.page);
+    setBoardsTab(state.boardsTab);
+    setAdminInitialTab(state.adminTab);
+
+    // Sync BottomNav Active Tab
+    if (state.page === 'home' || state.page === 'boards' || state.page === 'my') {
+      setActiveTab(state.page);
+    }
+  };
+
+  // Initial Load & Popstate Listener
+  React.useEffect(() => {
+    // Initial
+    applyUrlState(parseUrlState());
+
+    // Listener
+    const handlePopState = () => {
+      applyUrlState(parseUrlState());
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
   }, []);
+
+  // Navigation Helpers
+
+  const navigatePage = (page: PageType) => {
+    const nextState = { page, boardsTab, adminTab: adminInitialTab };
+    // Reset tabs to defaults if entering page? 
+    // UX: If I click "Boards" from Home, I expect 'notice' or last state?
+    // Let's stick to simple: default 'notice' unless specialized.
+    // If navigating to Admin, default 'members'.
+    // If navigating to Boards, default 'notice'. 
+    // But if we are *already* there, we shouldn't reset?
+    // Let's trust 'boardsTab' state preservation if switching between main tabs?
+    // Actually, BottomNav usually resets or keeps.
+    // Let's KEEP current tab state when navigating away, but apply default if new?
+    // User request: "navigatePage(page): pushState(..., buildUrlState(nextState))"
+    // We utilize current state vars for bTab/aTab.
+
+    const url = buildUrlState(page, boardsTab, adminInitialTab);
+    window.history.pushState({}, '', url);
+    applyUrlState(nextState);
+  };
+
+  const replaceBoardsTab = (tab: BoardsTab) => {
+    const nextState = { page: currentPage, boardsTab: tab, adminTab: adminInitialTab };
+    const url = buildUrlState(currentPage, tab, adminInitialTab);
+    window.history.replaceState({}, '', url);
+
+    // Optimization: Direct state set to avoid lag, applyUrlState also works
+    applyUrlState(nextState);
+  };
+
+  const navigateToAdmin = (tab: AdminTab) => {
+    const nextState = { page: 'admin' as PageType, boardsTab, adminTab: tab };
+    const url = buildUrlState('admin', boardsTab, tab);
+    window.history.pushState({}, '', url);
+    applyUrlState(nextState);
+  };
+
+  const goBack = () => {
+    window.history.back();
+  };
 
   const unreadNotificationCount = data?.notifications ? data.notifications.filter((n) => !n.read).length : 0;
 
@@ -84,55 +198,23 @@ function AppContent() {
     return <AccessDeniedPage />;
   }
 
-  // --- Phase 1: History Logic ---
+  // Admin Route Gate (Role check)
+  // Status check is already handled above (non-active -> AccessDeniedPage)
+  if (currentPage === 'admin' && !isAdmin()) {
+    return <AccessDeniedPage />;
+  }
 
-  const addToHistory = (nextPage: PageType) => {
-    if (nextPage === currentPage) return; // Prevent duplicates
-    setHistory((prev) => [...prev, currentPage]);
-  };
-
-  const goBack = () => {
-    if (history.length === 0) return;
-
-    // Pop last page
-    const prevPage = history[history.length - 1];
-    setHistory((prev) => prev.slice(0, -1));
-
-    // Navigate
-    setCurrentPage(prevPage);
-
-    // Sync tab if needed
-    if (prevPage === 'home' || prevPage === 'boards' || prevPage === 'my') {
-      setActiveTab(prevPage);
-    }
-  };
-
-  const handleNavigate = (tab: 'home' | 'boards' | 'my') => {
-    if (tab === currentPage) return;
-    addToHistory(tab);
-    setActiveTab(tab);
-    setCurrentPage(tab);
-  };
-
-  const handlePageChange = (page: PageType) => {
-    if (page === currentPage) return;
-    addToHistory(page);
-    setCurrentPage(page);
-    if (page === 'home' || page === 'boards' || page === 'my') {
-      setActiveTab(page);
-    }
-  };
-
-  const handleNavigateToAdmin = (tab: 'members' | 'stats' | 'notices' = 'members') => {
-    setAdminInitialTab(tab);
-    handlePageChange('admin');
-  };
-
-  // --- Phase 2: Universal Back Config ---
+  // --- Page Config ---
 
   const getPageConfig = () => {
     const commonBackConfig = {
-      showBack: history.length > 0,
+      // Show back if NOT a root page OR if we want to allow going back to previous site?
+      // "TopBar onBack should call goBack when pageConfig.showBack is true"
+      // Roots: home, boards, my. Others are stack.
+      // With URL routing, "history.length" is browser history.
+      // We can't easily know if 'back' is internal app page or external.
+      // BUT, usually we show Back button for non-root pages.
+      showBack: !['home', 'boards', 'my'].includes(currentPage),
       onBack: goBack,
     };
 
@@ -144,7 +226,7 @@ function AppContent() {
           showNotification: false,
           showSettings: false
         };
-      case 'my-activity': // Added missing title
+      case 'my-activity':
         return {
           title: '내 활동',
           ...commonBackConfig,
@@ -165,10 +247,11 @@ function AppContent() {
           showNotification: false,
           showSettings: false
         };
-      default: // Roots: home, boards, my
+      default: // Roots
         return {
           title: 'WINGS BASEBALL CLUB',
-          ...commonBackConfig, // Roots now show back if history exists
+          showBack: false, // Roots don't show back
+          onBack: undefined,
           showNotification: true,
           showSettings: false
         };
@@ -189,20 +272,25 @@ function AppContent() {
         onBack={pageConfig.onBack}
         showNotification={pageConfig.showNotification}
         showSettings={pageConfig.showSettings}
-        onNotificationClick={() => handlePageChange('notifications')}
-        onLogoClick={() => handlePageChange('home')}
+        onNotificationClick={() => navigatePage('notifications')}
+        onLogoClick={() => navigatePage('home')}
         unreadNotificationCount={unreadNotificationCount}
       />
 
       <main className="min-h-screen">
-        {currentPage === 'home' && <HomePage onNavigate={handleNavigate} />}
-        {currentPage === 'boards' && <BoardsPage />}
+        {currentPage === 'home' && <HomePage onNavigate={(page) => navigatePage(page as PageType)} />}
+        {currentPage === 'boards' && (
+          <BoardsPage
+            initialTab={boardsTab}
+            onTabChange={(t) => replaceBoardsTab(t)}
+          />
+        )}
         {currentPage === 'my' && (
           <MyPage
-            onNavigateToSettings={() => handlePageChange('settings')}
-            onNavigateToAdmin={() => handleNavigateToAdmin('members')}
-            onNavigateToNoticeManage={() => handleNavigateToAdmin('notices')}
-            onNavigateToMyActivity={() => handlePageChange('my-activity')}
+            onNavigateToSettings={() => navigatePage('settings')}
+            onNavigateToAdmin={() => navigateToAdmin('members')}
+            onNavigateToNoticeManage={() => navigateToAdmin('notices')}
+            onNavigateToMyActivity={() => navigatePage('my-activity')}
           />
         )}
         {currentPage === 'my-activity' && <MyActivityPage />}
@@ -211,7 +299,7 @@ function AppContent() {
         {currentPage === 'admin' && <AdminPage initialTab={adminInitialTab} />}
       </main>
 
-      <BottomNav activeTab={activeTab} onTabChange={handleNavigate} />
+      <BottomNav activeTab={activeTab} onTabChange={(t) => navigatePage(t)} />
 
       <InstallPrompt />
 

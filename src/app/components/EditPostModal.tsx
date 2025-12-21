@@ -1,8 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useData, Post } from '../contexts/DataContext';
 import { toast } from 'sonner';
+
+// [C02] RHF & Zod Imports
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { UpdatePostSchema, UpdatePostInput } from '../lib/schemas/post.schema';
 
 interface EditPostModalProps {
   post: Post;
@@ -17,79 +22,88 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
 }) => {
   const { updatePost } = useData();
 
-  const [title, setTitle] = useState(post.title);
-  const [content, setContent] = useState(post.content);
-  const [loading, setLoading] = useState(false);
+  // [C02] RHF Setup
+  const {
+    register,
+    handleSubmit,
+    watch,
+    reset,
+    setValue,
+    formState: { errors, isSubmitting },
+  } = useForm<UpdatePostInput>({
+    resolver: zodResolver(UpdatePostSchema),
+    defaultValues: {
+      title: post.title,
+      content: post.content,
+      eventType: post.eventType,
+      startDate: post.startAt ? new Date(post.startAt).toISOString().split('T')[0] : '',
+      startTime: post.startAt ? new Date(post.startAt).toTimeString().slice(0, 5) : '',
+      place: post.place || '',
+      opponent: post.opponent || '',
+    },
+  });
 
-  // Event fields
-  const [eventType, setEventType] = useState<'PRACTICE' | 'GAME'>(post.eventType || 'PRACTICE');
-  const [startDate, setStartDate] = useState(
-    post.startAt ? new Date(post.startAt).toISOString().split('T')[0] : ''
-  );
-  const [startTime, setStartTime] = useState(
-    post.startAt ? new Date(post.startAt).toTimeString().slice(0, 5) : ''
-  );
-  const [place, setPlace] = useState(post.place || '');
-  const [opponent, setOpponent] = useState(post.opponent || '');
-
+  const eventType = watch('eventType');
 
   useEffect(() => {
-    if (isOpen) {
-      // Reset form when modal opens
-      setTitle(post.title);
-      setContent(post.content);
-      setEventType(post.eventType || 'PRACTICE');
-      setStartDate(post.startAt ? new Date(post.startAt).toISOString().split('T')[0] : '');
-      setStartTime(post.startAt ? new Date(post.startAt).toTimeString().slice(0, 5) : '');
-      setPlace(post.place || '');
-      setOpponent(post.opponent || '');
+    if (isOpen && post) {
+      reset({
+        title: post.title,
+        content: post.content,
+        eventType: post.eventType || 'PRACTICE',
+        startDate: post.startAt ? new Date(post.startAt).toISOString().split('T')[0] : '',
+        startTime: post.startAt ? new Date(post.startAt).toTimeString().slice(0, 5) : '',
+        place: post.place || '',
+        opponent: post.opponent || '',
+      });
     }
-  }, [isOpen, post]);
+  }, [isOpen, post, reset]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!title.trim()) {
-      toast.error('제목을 입력해주세요');
-      return;
-    }
-
-    if (!content.trim()) {
-      toast.error('내용을 입력해주세요');
-      return;
-    }
-
-    setLoading(true);
-
+  const onValidSubmit = async (data: UpdatePostInput) => {
     try {
       const updates: Partial<Post> = {
-        title: title.trim(),
-        content: content.trim(),
+        title: data.title?.trim(),
+        content: data.content?.trim(),
         updatedAt: new Date(),
       };
 
-      // Event specific fields
+      // Event specific logic
       if (post.type === 'event') {
+        const startDate = data.startDate;
+        const startTime = data.startTime;
+
         if (!startDate || !startTime) {
+          // Should be caught by schema or manual check if schema implies optional
           toast.error('일정 날짜와 시간을 입력해주세요');
-          setLoading(false);
           return;
         }
-        if (!place.trim()) {
+
+        if (!data.place?.trim()) {
           toast.error('장소를 입력해주세요');
-          setLoading(false);
           return;
         }
 
         const eventDateTime = new Date(`${startDate}T${startTime}`);
-        updates.eventType = eventType;
+        if (isNaN(eventDateTime.getTime())) {
+          toast.error('올바른 일시를 입력해주세요');
+          return;
+        }
+
+        updates.eventType = data.eventType;
         updates.startAt = eventDateTime;
-        updates.place = place.trim();
-        if (eventType === 'GAME' && opponent.trim()) {
-          updates.opponent = opponent.trim();
+        updates.place = data.place?.trim();
+
+        if (data.eventType === 'GAME' && data.opponent?.trim()) {
+          updates.opponent = data.opponent?.trim();
+        } else {
+          // If switched to PRACTICE or empty, clean up?
+          // Existing logic didn't explicitly clear it, but let's follow standard behavior.
+          // If PRACTICE, opponent is usually ignored or cleared.
+          if (data.eventType === 'PRACTICE') {
+            updates.opponent = null as any; // or delete field or set undefined
+          }
         }
       }
-
 
       await updatePost(post.id, updates);
       toast.success('게시글이 수정되었습니다');
@@ -97,11 +111,12 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
     } catch (error) {
       console.error('Error updating post:', error);
       toast.error('게시글 수정에 실패했습니다');
-    } finally {
-      setLoading(false);
     }
   };
 
+  const onError = (errors: any) => {
+    console.log("Edit Validation Errors", errors);
+  };
 
   if (!isOpen) return null;
 
@@ -137,19 +152,20 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
           </div>
 
           {/* Form */}
-          <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto">
+          <form onSubmit={handleSubmit(onValidSubmit, onError)} className="flex-1 overflow-y-auto">
             <div className="p-6 space-y-4 pb-64">
               {/* Title */}
               <div>
                 <label className="block text-sm font-medium mb-2">제목</label>
                 <input
                   type="text"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  className="w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  {...register('title')}
+                  className={`w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.title ? 'border-red-500' : ''}`}
                   placeholder="제목을 입력하세요"
-                  required
                 />
+                {errors.title && (
+                  <p className="mt-1 text-xs text-red-500">{errors.title.message}</p>
+                )}
               </div>
 
               {/* Event specific fields */}
@@ -158,26 +174,19 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
                   <div>
                     <label className="block text-sm font-medium mb-2">일정 유형</label>
                     <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setEventType('PRACTICE')}
-                        className={`flex-1 py-3 px-4 rounded-xl font-medium transition-colors ${eventType === 'PRACTICE'
-                          ? 'bg-blue-500 text-white'
-                          : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300'
-                          }`}
-                      >
-                        연습
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setEventType('GAME')}
-                        className={`flex-1 py-3 px-4 rounded-xl font-medium transition-colors ${eventType === 'GAME'
-                          ? 'bg-blue-500 text-white'
-                          : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300'
-                          }`}
-                      >
-                        경기
-                      </button>
+                      {(['PRACTICE', 'GAME'] as const).map((eType) => (
+                        <button
+                          key={eType}
+                          type="button"
+                          onClick={() => setValue('eventType', eType)}
+                          className={`flex-1 py-3 px-4 rounded-xl font-medium transition-colors ${eventType === eType
+                            ? 'bg-blue-500 text-white'
+                            : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300'
+                            }`}
+                        >
+                          {eType === 'PRACTICE' ? '연습' : '경기'}
+                        </button>
+                      ))}
                     </div>
                   </div>
 
@@ -186,21 +195,23 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
                       <label className="block text-sm font-medium mb-2">날짜</label>
                       <input
                         type="date"
-                        value={startDate}
-                        onChange={(e) => setStartDate(e.target.value)}
-                        className="w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        required
+                        {...register('startDate')}
+                        className={`w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.startDate ? 'border-red-500' : ''}`}
                       />
+                      {errors.startDate && (
+                        <p className="mt-1 text-xs text-red-500">{errors.startDate.message}</p>
+                      )}
                     </div>
                     <div>
                       <label className="block text-sm font-medium mb-2">시간</label>
                       <input
                         type="time"
-                        value={startTime}
-                        onChange={(e) => setStartTime(e.target.value)}
-                        className="w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        required
+                        {...register('startTime')}
+                        className={`w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.startTime ? 'border-red-500' : ''}`}
                       />
+                      {errors.startTime && (
+                        <p className="mt-1 text-xs text-red-500">{errors.startTime.message}</p>
+                      )}
                     </div>
                   </div>
 
@@ -208,12 +219,13 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
                     <label className="block text-sm font-medium mb-2">장소</label>
                     <input
                       type="text"
-                      value={place}
-                      onChange={(e) => setPlace(e.target.value)}
-                      className="w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      {...register('place')}
+                      className={`w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.place ? 'border-red-500' : ''}`}
                       placeholder="장소를 입력하세요"
-                      required
                     />
+                    {errors.place && (
+                      <p className="mt-1 text-xs text-red-500">{errors.place.message}</p>
+                    )}
                   </div>
 
                   {eventType === 'GAME' && (
@@ -221,8 +233,7 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
                       <label className="block text-sm font-medium mb-2">상대팀</label>
                       <input
                         type="text"
-                        value={opponent}
-                        onChange={(e) => setOpponent(e.target.value)}
+                        {...register('opponent')}
                         className="w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                         placeholder="상대팀을 입력하세요"
                       />
@@ -235,13 +246,14 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
               <div>
                 <label className="block text-sm font-medium mb-2">내용</label>
                 <textarea
-                  value={content}
-                  onChange={(e) => setContent(e.target.value)}
+                  {...register('content')}
                   rows={6}
-                  className="w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                  className={`w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none ${errors.content ? 'border-red-500' : ''}`}
                   placeholder="내용을 입력하세요"
-                  required
                 />
+                {errors.content && (
+                  <p className="mt-1 text-xs text-red-500">{errors.content.message}</p>
+                )}
               </div>
             </div>
 
@@ -252,16 +264,16 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
                   type="button"
                   onClick={onClose}
                   className="flex-1 py-3 px-4 border rounded-xl font-medium hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-                  disabled={loading}
+                  disabled={isSubmitting}
                 >
                   취소
                 </button>
                 <button
                   type="submit"
                   className="flex-1 py-3 px-4 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl font-medium hover:shadow-lg transition-all disabled:opacity-50"
-                  disabled={loading}
+                  disabled={isSubmitting}
                 >
-                  {loading ? '저장 중...' : '수정 완료'}
+                  {isSubmitting ? '저장 중...' : '수정 완료'}
                 </button>
               </div>
             </div>
@@ -271,3 +283,4 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
     </AnimatePresence>
   );
 };
+

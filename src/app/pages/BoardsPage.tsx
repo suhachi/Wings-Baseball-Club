@@ -15,16 +15,32 @@ import { ko } from 'date-fns/locale';
 
 import { toast } from 'sonner';
 
-import { useAuth } from '../contexts/AuthContext'; // Import Added
+import { useAuth } from '../contexts/AuthContext';
+import { canWritePost } from '../lib/permissions';
 
-export const BoardsPage: React.FC = () => {
-  const { user, isAdmin } = useAuth();
+export type BoardsTab = 'notice' | 'free' | 'event';
+
+export const BoardsPage: React.FC<{ initialTab?: BoardsTab; onTabChange?: (t: BoardsTab) => void }> = ({ initialTab = 'notice', onTabChange }) => {
+  const { user, profileComplete } = useAuth();
   const { posts, deletePost } = useData();
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [createPostType, setCreatePostType] = useState<PostType>('free');
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [editingPost, setEditingPost] = useState<Post | null>(null);
-  const [activeTab, setActiveTab] = useState<'notice' | 'free' | 'event'>('notice');
+
+  // Controlled Tab State
+  const [activeTab, setActiveTab] = useState<BoardsTab>(initialTab);
+
+  // Sync with initialTab prop (from URL)
+  React.useEffect(() => {
+    setActiveTab(initialTab);
+  }, [initialTab]);
+
+  const handleTabChange = (value: string) => {
+    const newTab = value as BoardsTab;
+    setActiveTab(newTab);
+    onTabChange?.(newTab);
+  };
 
   // Filter posts by type
   const notices = posts.filter(p => p.type === 'notice').sort((a, b) => {
@@ -45,19 +61,33 @@ export const BoardsPage: React.FC = () => {
     });
 
   const handleCreatePost = (type: PostType) => {
-    // If Admin and on Notice tab, default to Notice type
-    if (activeTab === 'notice' && isAdmin()) {
-      setCreatePostType('notice');
-    } else {
-      setCreatePostType(type);
+    // Permission check
+    const canWrite = canWritePost(type, user?.role, user?.status, profileComplete);
+
+    if (!user) {
+      toast.error('로그인이 필요합니다.');
+      return;
     }
+
+    // [M00-06] Explicit Toast for Incomplete Profile
+    if (!profileComplete) {
+      toast.error('프로필 입력이 필요합니다. (실명/전화번호) 내정보에서 입력해주세요.');
+      return;
+    }
+
+    if (!canWrite) {
+      toast.error('글 작성 권한이 없습니다.');
+      return;
+    }
+
+    setCreatePostType(type);
     setCreateModalOpen(true);
   };
 
   return (
     <div className="pb-20 pt-16">
       <div className="max-w-md mx-auto">
-        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'notice' | 'free' | 'event')} className="w-full">
+        <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
           <TabsList className="w-full sticky top-14 z-30 bg-white dark:bg-gray-900 border-b grid grid-cols-3 h-auto p-0">
             <TabsTrigger value="notice" className="flex-col py-3 gap-1 data-[state=active]:bg-blue-50 dark:data-[state=active]:bg-blue-900/20">
               <Bell className="w-4 h-4" />
@@ -99,10 +129,8 @@ export const BoardsPage: React.FC = () => {
         </Tabs>
 
         {/* FAB - Create Post (Tab-based visibility) */}
-        {/* 공지/연습·시합: adminLike만 버튼 노출 */}
-        {/* 자유: 멤버면 버튼 노출 */}
-        {((activeTab === 'notice' || activeTab === 'event') && isAdmin() && user?.status === 'active') ||
-          (activeTab === 'free' && user?.status === 'active') ? (
+        {/* Unified Permission Check via canWritePost */}
+        {canWritePost(activeTab, user?.role, user?.status, profileComplete) ? (
           <motion.button
             whileTap={{ scale: 0.95 }}
             className="fixed bottom-24 right-4 w-14 h-14 bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-full shadow-lg flex items-center justify-center z-40"
@@ -112,12 +140,7 @@ export const BoardsPage: React.FC = () => {
           </motion.button>
         ) : null}
 
-        {/* Pending User Notice */}
-        {user?.status === 'pending' && (
-          <div className="fixed bottom-24 right-4 bg-gray-800 text-white text-xs px-3 py-2 rounded-full shadow-lg opacity-80 z-40">
-            가입 승인 대기중 (글쓰기 제한)
-          </div>
-        )}
+        {/* Pending User Notice REMOVED as per C01-04 */}
 
         {/* Create Post Modal */}
         <CreatePostModal

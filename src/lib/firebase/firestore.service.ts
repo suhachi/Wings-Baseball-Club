@@ -36,6 +36,12 @@ const getClubDoc = (clubId: string, colName: string, docId: string) => doc(db, '
  * 게시글 생성
  */
 export async function createPost(clubId: string, postData: Omit<PostDoc, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
+  // [RBAC] Client-side create allowed ONLY for 'free' board.
+  // notice/event/poll must be created via Cloud Functions (callables).
+  if (postData.type !== 'free') {
+    throw new Error(`[RBAC] createPost() only supports type 'free'. Use Cloud Functions for type='${postData.type}'.`);
+  }
+
   try {
     const postsRef = getClubCol(clubId, 'posts');
     const docRef = await addDoc(postsRef, {
@@ -55,8 +61,8 @@ export async function createPost(clubId: string, postData: Omit<PostDoc, 'id' | 
  * μATOM-0302: 쿼리 규격 통일 (orderBy createdAt desc, limit N)
  */
 export async function getPosts(
-  clubId: string, 
-  postType?: 'notice' | 'free' | 'event', 
+  clubId: string,
+  postType?: 'notice' | 'free' | 'event',
   limitCount: number = 50,
   lastVisible?: QueryDocumentSnapshot<DocumentData>
 ): Promise<{ posts: PostDoc[]; lastDoc: QueryDocumentSnapshot<DocumentData> | null }> {

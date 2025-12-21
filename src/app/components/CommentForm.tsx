@@ -4,13 +4,14 @@ import { motion } from 'motion/react';
 import { useAuth } from '../contexts/AuthContext';
 import { useData } from '../contexts/DataContext';
 import { toast } from 'sonner';
+import { canWriteComment } from '../lib/permissions';
 
 interface CommentFormProps {
   postId: string;
 }
 
 export const CommentForm: React.FC<CommentFormProps> = ({ postId }) => {
-  const { user } = useAuth();
+  const { user, profileComplete } = useAuth();
   const { addComment } = useData();
   const [content, setContent] = useState('');
   const [loading, setLoading] = useState(false);
@@ -25,6 +26,11 @@ export const CommentForm: React.FC<CommentFormProps> = ({ postId }) => {
 
     if (!user) {
       toast.error('로그인이 필요합니다');
+      return;
+    }
+
+    if (!canWriteComment(user.status, profileComplete)) {
+      toast.error(profileComplete ? '댓글 작성 권한이 없습니다' : '프로필(실명/전화)을 완성해야 댓글을 작성할 수 있습니다');
       return;
     }
 

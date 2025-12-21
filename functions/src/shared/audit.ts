@@ -28,7 +28,9 @@ export type AuditAction =
   | 'NOTICE_DELETE'
   | 'EVENT_CLOSE'
   | 'FCM_TOKEN_REGISTER'
-  | 'FCM_TOKEN_DELETE';
+  | 'FCM_TOKEN_DELETE'
+  | 'COMMENT_EDIT'
+  | 'COMMENT_DELETE';
 
 export interface AuditParams {
   clubId: string;
@@ -80,7 +82,7 @@ function summarizeData(data: unknown, maxSize = 10000): unknown {
  * @example
  * // 멤버 상태 변경 (승인)
  * await writeAudit({
- *   clubId: 'default-club',
+ *   clubId: 'WINGS',
  *   actorUid: 'admin123',
  *   action: 'MEMBER_STATUS_CHANGE',
  *   targetType: 'member',
@@ -92,7 +94,7 @@ function summarizeData(data: unknown, maxSize = 10000): unknown {
  * @example
  * // 공지 생성
  * await writeAudit({
- *   clubId: 'default-club',
+ *   clubId: 'WINGS',
  *   actorUid: 'admin456',
  *   action: 'NOTICE_CREATE',
  *   targetType: 'post',
@@ -103,7 +105,7 @@ function summarizeData(data: unknown, maxSize = 10000): unknown {
  * @example
  * // 경기 기록 마감
  * await writeAudit({
- *   clubId: 'default-club',
+ *   clubId: 'WINGS',
  *   actorUid: 'admin789',
  *   action: 'GAME_LOCK_RECORDING',
  *   targetType: 'post',

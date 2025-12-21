@@ -10,13 +10,14 @@ export type NotificationType = 'notice' | 'comment' | 'like' | 'event' | 'mentio
 // User Document
 export interface UserDoc {
   uid: string;
-  realName: string;
+  email: string; // [v2.0] Essential
+  realName: string; // [v2.0] Essential
+  phone: string; // [v2.0] Essential
   nickname?: string | null;
-  phone?: string | null;
   photoURL?: string | null;
   role: UserRole;
   position?: string;
-  backNumber?: string;
+  backNumber?: number | null;
   status: 'pending' | 'active' | 'rejected' | 'withdrawn';
   createdAt: Date;
   updatedAt: Date;
@@ -36,6 +37,7 @@ export interface PostDoc {
   createdAt: Date;
   updatedAt: Date;
   pinned?: boolean;
+  commentCount?: number;
 
   // Event specific
   eventType?: EventType;

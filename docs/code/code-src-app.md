@@ -26,25 +26,109 @@ import { InstallPage } from './pages/InstallPage';
 import { AccessDeniedPage } from './pages/AccessDeniedPage';
 import { useFcm } from './hooks/useFcm';
 import { Loader2 } from 'lucide-react';
+// Types
 type PageType = 'home' | 'boards' | 'my' | 'settings' | 'notifications' | 'admin' | 'my-activity' | 'install';
+type BoardsTab = 'notice' | 'free' | 'event';
+type AdminTab = 'members' | 'stats' | 'notices';
 function AppContent() {
-  // [DEBUG] Version Check
-  console.log('%c Wings PWA v1.3-debug loaded ', 'background: #222; color: #ff00ff');
   const { user, loading, memberStatus } = useAuth();
   const data = useData();
   useFcm();
   // Navigation State
   const [activeTab, setActiveTab] = useState<'home' | 'boards' | 'my'>('home');
   const [currentPage, setCurrentPage] = useState<PageType>('home');
-  const [adminInitialTab, setAdminInitialTab] = useState<'members' | 'stats' | 'notices'>('members');
-  // Phase 1: History Stack
-  const [history, setHistory] = useState<PageType[]>([]);
-  // Simple URL routing for install page
-  React.useEffect(() => {
+  const [boardsTab, setBoardsTab] = useState<BoardsTab>('notice');
+  const [adminInitialTab, setAdminInitialTab] = useState<AdminTab>('members');
+  // --- URL Routing Logic ---
+  const buildUrlState = (page: PageType, bTab: BoardsTab, aTab: AdminTab): string => {
+    if (page === 'install') return '/install';
+    const params = new URLSearchParams();
+    if (page !== 'home') params.set('p', page);
+    if (page === 'boards' && bTab !== 'notice') params.set('bt', bTab);
+    if (page === 'admin' && aTab !== 'members') params.set('at', aTab);
+    // Minimal URL: / if home
+    const query = params.toString();
+    return query ? `/?${query}` : '/';
+  };
+  const parseUrlState = (): { page: PageType; boardsTab: BoardsTab; adminTab: AdminTab } => {
     if (window.location.pathname === '/install') {
-      setCurrentPage('install');
+      return { page: 'install', boardsTab: 'notice', adminTab: 'members' };
     }
+    const params = new URLSearchParams(window.location.search);
+    const p = params.get('p') as PageType | null;
+    // Validate Page
+    let page: PageType = 'home';
+    if (p && ['home', 'boards', 'my', 'settings', 'notifications', 'admin', 'my-activity', 'install'].includes(p)) {
+      page = p;
+    }
+    // Validate Boards Tab
+    const bt = params.get('bt') as BoardsTab | null;
+    let bTab: BoardsTab = 'notice';
+    if (bt && ['notice', 'free', 'event'].includes(bt)) {
+      bTab = bt;
+    }
+    // Validate Admin Tab
+    const at = params.get('at') as AdminTab | null;
+    let aTab: AdminTab = 'members';
+    if (at && ['members', 'stats', 'notices'].includes(at)) {
+      aTab = at;
+    }
+    return { page, boardsTab: bTab, adminTab: aTab };
+  };
+  const applyUrlState = (state: { page: PageType; boardsTab: BoardsTab; adminTab: AdminTab }) => {
+    setCurrentPage(state.page);
+    setBoardsTab(state.boardsTab);
+    setAdminInitialTab(state.adminTab);
+    // Sync BottomNav Active Tab
+    if (state.page === 'home' || state.page === 'boards' || state.page === 'my') {
+      setActiveTab(state.page);
+    }
+  };
+  // Initial Load & Popstate Listener
+  React.useEffect(() => {
+    // Initial
+    applyUrlState(parseUrlState());
+    // Listener
+    const handlePopState = () => {
+      applyUrlState(parseUrlState());
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
   }, []);
+  // Navigation Helpers
+  const navigatePage = (page: PageType) => {
+    const nextState = { page, boardsTab, adminTab: adminInitialTab };
+    // Reset tabs to defaults if entering page?
+    // UX: If I click "Boards" from Home, I expect 'notice' or last state?
+    // Let's stick to simple: default 'notice' unless specialized.
+    // If navigating to Admin, default 'members'.
+    // If navigating to Boards, default 'notice'.
+    // But if we are *already* there, we shouldn't reset?
+    // Let's trust 'boardsTab' state preservation if switching between main tabs?
+    // Actually, BottomNav usually resets or keeps.
+    // Let's KEEP current tab state when navigating away, but apply default if new?
+    // User request: "navigatePage(page): pushState(..., buildUrlState(nextState))"
+    // We utilize current state vars for bTab/aTab.
+    const url = buildUrlState(page, boardsTab, adminInitialTab);
+    window.history.pushState({}, '', url);
+    applyUrlState(nextState);
+  };
+  const replaceBoardsTab = (tab: BoardsTab) => {
+    const nextState = { page: currentPage, boardsTab: tab, adminTab: adminInitialTab };
+    const url = buildUrlState(currentPage, tab, adminInitialTab);
+    window.history.replaceState({}, '', url);
+    // Optimization: Direct state set to avoid lag, applyUrlState also works
+    applyUrlState(nextState);
+  };
+  const navigateToAdmin = (tab: AdminTab) => {
+    const nextState = { page: 'admin' as PageType, boardsTab, adminTab: tab };
+    const url = buildUrlState('admin', boardsTab, tab);
+    window.history.pushState({}, '', url);
+    applyUrlState(nextState);
+  };
+  const goBack = () => {
+    window.history.back();
+  };
   const unreadNotificationCount = data?.notifications ? data.notifications.filter((n) => !n.read).length : 0;
   // Loading state
   if (loading) {
@@ -78,45 +162,16 @@ function AppContent() {
   if (user && memberStatus !== 'active' && currentPage !== 'install') {
     return <AccessDeniedPage />;
   }
-  // --- Phase 1: History Logic ---
-  const addToHistory = (nextPage: PageType) => {
-    if (nextPage === currentPage) return; // Prevent duplicates
-    setHistory((prev) => [...prev, currentPage]);
-  };
-  const goBack = () => {
-    if (history.length === 0) return;
-    // Pop last page
-    const prevPage = history[history.length - 1];
-    setHistory((prev) => prev.slice(0, -1));
-    // Navigate
-    setCurrentPage(prevPage);
-    // Sync tab if needed
-    if (prevPage === 'home' || prevPage === 'boards' || prevPage === 'my') {
-      setActiveTab(prevPage);
-    }
-  };
-  const handleNavigate = (tab: 'home' | 'boards' | 'my') => {
-    if (tab === currentPage) return;
-    addToHistory(tab);
-    setActiveTab(tab);
-    setCurrentPage(tab);
-  };
-  const handlePageChange = (page: PageType) => {
-    if (page === currentPage) return;
-    addToHistory(page);
-    setCurrentPage(page);
-    if (page === 'home' || page === 'boards' || page === 'my') {
-      setActiveTab(page);
-    }
-  };
-  const handleNavigateToAdmin = (tab: 'members' | 'stats' | 'notices' = 'members') => {
-    setAdminInitialTab(tab);
-    handlePageChange('admin');
-  };
-  // --- Phase 2: Universal Back Config ---
+  // --- Page Config ---
   const getPageConfig = () => {
     const commonBackConfig = {
-      showBack: history.length > 0,
+      // Show back if NOT a root page OR if we want to allow going back to previous site?
+      // "TopBar onBack should call goBack when pageConfig.showBack is true"
+      // Roots: home, boards, my. Others are stack.
+      // With URL routing, "history.length" is browser history.
+      // We can't easily know if 'back' is internal app page or external.
+      // BUT, usually we show Back button for non-root pages.
+      showBack: !['home', 'boards', 'my'].includes(currentPage),
       onBack: goBack,
     };
     switch (currentPage) {
@@ -127,7 +182,7 @@ function AppContent() {
           showNotification: false,
           showSettings: false
         };
-      case 'my-activity': // Added missing title
+      case 'my-activity':
         return {
           title: '내 활동',
           ...commonBackConfig,
@@ -148,10 +203,11 @@ function AppContent() {
           showNotification: false,
           showSettings: false
         };
-      default: // Roots: home, boards, my
+      default: // Roots
         return {
           title: 'WINGS BASEBALL CLUB',
-          ...commonBackConfig, // Roots now show back if history exists
+          showBack: false, // Roots don't show back
+          onBack: undefined,
           showNotification: true,
           showSettings: false
         };
@@ -169,19 +225,24 @@ function AppContent() {
         onBack={pageConfig.onBack}
         showNotification={pageConfig.showNotification}
         showSettings={pageConfig.showSettings}
-        onNotificationClick={() => handlePageChange('notifications')}
-        onLogoClick={() => handlePageChange('home')}
+        onNotificationClick={() => navigatePage('notifications')}
+        onLogoClick={() => navigatePage('home')}
         unreadNotificationCount={unreadNotificationCount}
       />
       <main className="min-h-screen">
-        {currentPage === 'home' && <HomePage onNavigate={handleNavigate} />}
-        {currentPage === 'boards' && <BoardsPage />}
+        {currentPage === 'home' && <HomePage onNavigate={(page) => navigatePage(page as PageType)} />}
+        {currentPage === 'boards' && (
+          <BoardsPage
+            initialTab={boardsTab}
+            onTabChange={(t) => replaceBoardsTab(t)}
+          />
+        )}
         {currentPage === 'my' && (
           <MyPage
-            onNavigateToSettings={() => handlePageChange('settings')}
-            onNavigateToAdmin={() => handleNavigateToAdmin('members')}
-            onNavigateToNoticeManage={() => handleNavigateToAdmin('notices')}
-            onNavigateToMyActivity={() => handlePageChange('my-activity')}
+            onNavigateToSettings={() => navigatePage('settings')}
+            onNavigateToAdmin={() => navigateToAdmin('members')}
+            onNavigateToNoticeManage={() => navigateToAdmin('notices')}
+            onNavigateToMyActivity={() => navigatePage('my-activity')}
           />
         )}
         {currentPage === 'my-activity' && <MyActivityPage />}
@@ -189,7 +250,7 @@ function AppContent() {
         {currentPage === 'notifications' && <NotificationPage onBack={goBack} />}
         {currentPage === 'admin' && <AdminPage initialTab={adminInitialTab} />}
       </main>
-      <BottomNav activeTab={activeTab} onTabChange={handleNavigate} />
+      <BottomNav activeTab={activeTab} onTabChange={(t) => navigatePage(t)} />
       <InstallPrompt />
       <Toaster
         position="top-center"
@@ -299,11 +360,12 @@ import { motion } from 'motion/react';
 import { useAuth } from '../contexts/AuthContext';
 import { useData } from '../contexts/DataContext';
 import { toast } from 'sonner';
+import { canWriteComment } from '../lib/permissions';
 interface CommentFormProps {
   postId: string;
 }
 export const CommentForm: React.FC<CommentFormProps> = ({ postId }) => {
-  const { user } = useAuth();
+  const { user, profileComplete } = useAuth();
   const { addComment } = useData();
   const [content, setContent] = useState('');
   const [loading, setLoading] = useState(false);
@@ -315,6 +377,10 @@ export const CommentForm: React.FC<CommentFormProps> = ({ postId }) => {
     }
     if (!user) {
       toast.error('로그인이 필요합니다');
+      return;
+    }
+    if (!canWriteComment(user.status, profileComplete)) {
+      toast.error(profileComplete ? '댓글 작성 권한이 없습니다' : '프로필(실명/전화)을 완성해야 댓글을 작성할 수 있습니다');
       return;
     }
     setLoading(true);
@@ -370,6 +436,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { MoreVertical, Trash2, Edit2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { canEditComment, canDeleteComment } from '../lib/permissions';
 import { useData } from '../contexts/DataContext';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -414,13 +481,9 @@ const CommentItem: React.FC<CommentItemProps> = ({ comment, postId }) => {
   const [showMenu, setShowMenu] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState(comment.content);
-  // ATOM-15: 작성자 확인
-  const isAuthor = user?.id === comment.author.id;
-  // ATOM-15: adminLike 확인 (PRESIDENT | DIRECTOR | ADMIN | TREASURER)
-  const isAdminLike = user?.role && ['PRESIDENT', 'DIRECTOR', 'ADMIN', 'TREASURER'].includes(user.role);
-  // ATOM-15: 수정/삭제 버튼 노출 조건 - 작성자만, 삭제는 adminLike도 가능
-  const canEdit = isAuthor;
-  const canDelete = isAuthor || isAdminLike;
+  // ATOM-15: 수정/삭제 버튼 노출 조건 (Centralized)
+  const canEdit = canEditComment(user?.role, comment.author.id, user?.id);
+  const canDelete = canDeleteComment(user?.role, comment.author.id, user?.id);
   // Match author by ID from the nested author object
   const author = members.find(u => u.id === comment.author.id);
   const displayName = author?.realName || comment.author.name || '알 수 없음';
@@ -760,8 +823,8 @@ export const CreateNoticeModal: React.FC<CreateNoticeModalProps> = ({
 ## src/app/components/CreatePostModal.tsx
 
 ```tsx
-import React, { useState } from 'react';
-import { X, FileText, Users, Calendar, MapPin, Trophy } from 'lucide-react';
+import React, { useEffect } from 'react';
+import { X, FileText, Users, Calendar, MapPin, Trophy, Bell } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useData } from '../contexts/DataContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -770,7 +833,11 @@ import { toast } from 'sonner';
 import type { PostType } from '../contexts/DataContext';
 import { createEventPost } from '../../lib/firebase/events.service';
 import { createNoticeWithPush } from '../../lib/firebase/notices.service';
-import { Bell } from 'lucide-react'; // Icon for notice
+import { canManageNotices, canWritePost } from '../lib/permissions';
+// [C02] RHF & Zod Imports
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { CreatePostSchema, CreatePostInput } from '../lib/schemas/post.schema';
 interface CreatePostModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -782,125 +849,149 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
   defaultType = 'free',
 }) => {
   const { addPost, refreshPosts } = useData();
-  const { isAdmin } = useAuth();
+  const { user } = useAuth();
   const { currentClubId } = useClub();
-  const [postType, setPostType] = useState<PostType>(defaultType);
-  const [title, setTitle] = useState('');
-  const [content, setContent] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [pinned, setPinned] = useState(false); // For notice
-  // μATOM-0534: 이벤트 작성 화면 (최소 입력)
-  const [eventType, setEventType] = useState<'PRACTICE' | 'GAME'>('PRACTICE');
-  const [startDate, setStartDate] = useState('');
-  const [startTime, setStartTime] = useState('');
-  const [place, setPlace] = useState('');
-  const [opponent, setOpponent] = useState('');
+  // [C02] RHF Setup
+  const {
+    register,
+    handleSubmit,
+    watch,
+    reset,
+    setValue,
+    formState: { errors, isSubmitting },
+  } = useForm<CreatePostInput>({
+    resolver: zodResolver(CreatePostSchema),
+    defaultValues: {
+      type: defaultType,
+      title: '',
+      content: '',
+      pinned: false,
+      eventType: 'PRACTICE', // Default for event
+      startDate: '',
+      startTime: '',
+      place: '',
+      opponent: '',
+    } as any,
+    mode: 'onSubmit', // Validate on submit
+  });
+  // Watch fields for conditional rendering
+  const postType = watch('type');
+  const eventType = watch('eventType');
+  // const pinned = watch('pinned'); // Removed unused
+  // Sync defaultType when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      reset({
+        type: defaultType,
+        title: '',
+        content: '',
+        pinned: false,
+        eventType: 'PRACTICE',
+        startDate: '',
+        startTime: '',
+        place: '',
+        opponent: '',
+      } as any);
+    }
+  }, [isOpen, defaultType, reset]);
   // ATOM-14: free/event만 클라이언트에서 직접 생성 가능
   // notice 생성 UI는 이 ATOM에서 금지 -> v1.1.1: 관리자는 허용
   const basePostTypes: { id: PostType; label: string; icon: React.ElementType }[] = [
     { id: 'free', label: '자유게시판', icon: FileText },
     { id: 'event', label: '이벤트/정모', icon: Users },
   ];
-  const postTypes = isAdmin()
+  const postTypes = canManageNotices(user?.role)
     ? [{ id: 'notice' as PostType, label: '공지사항', icon: Bell }, ...basePostTypes]
     : basePostTypes;
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!title.trim() || !content.trim()) {
-      toast.error('제목과 내용을 입력해주세요');
+  const onValidSubmit = async (data: CreatePostInput) => {
+    // [M00-06] Re-validate permissions on submit
+    const canWrite = canWritePost(data.type, user?.role, user?.status, user ? !!(user.realName && user.phone) : false);
+    if (!user) {
+      toast.error('로그인이 필요합니다');
       return;
     }
-    // Notice creation (Admin only)
-    if (postType === 'notice') {
-      setLoading(true);
+    if (!canWrite) {
+      // Double check profile for specific message
+      if (!(user.realName && user.phone)) {
+        toast.error('프로필 입력이 필요합니다 (실명/전화번호)');
+        // Redirect logic could be here if needed, but Toast is enough as per Plan
+      } else {
+        toast.error('작성 권한이 없습니다');
+      }
+      return;
+    }
+    // 1. Notice creation (Admin only - Callable)
+    if (data.type === 'notice') {
       try {
         await createNoticeWithPush(
           currentClubId,
-          title.trim(),
-          content.trim(),
-          pinned
+          data.title.trim(),
+          data.content.trim(),
+          !!data.pinned
         );
         await refreshPosts();
         toast.success('공지사항이 작성되었습니다 (알림 발송)');
         onClose();
-        resetForm();
+        reset();
       } catch (error: any) {
         console.error('Error creating notice:', error);
         toast.error(error.message || '공지 작성 중 오류가 발생했습니다');
-      } finally {
-        setLoading(false);
       }
       return;
     }
-    // μATOM-0534: 이벤트 작성 화면(최소 입력) - 필수값 누락 방지
-    if (postType === 'event') {
-      if (!startDate || !startTime || !place.trim()) {
-        toast.error('일시, 장소는 필수 입력 항목입니다');
-        return;
-      }
-      // event는 callable로 생성
-      setLoading(true);
+    // 2. Event creation (Callable)
+    if (data.type === 'event') {
       try {
-        const eventDateTime = new Date(`${startDate}T${startTime}`);
+        const eventDateTime = new Date(`${data.startDate}T${data.startTime}`);
         if (isNaN(eventDateTime.getTime())) {
           toast.error('올바른 일시를 입력해주세요');
-          setLoading(false);
           return;
         }
         await createEventPost(
           currentClubId,
-          eventType,
-          title.trim(),
-          content.trim(),
+          data.eventType,
+          data.title.trim(),
+          data.content.trim(),
           eventDateTime,
-          place.trim(),
-          opponent.trim() || undefined
+          data.place.trim(),
+          data.opponent?.trim() || undefined
         );
         await refreshPosts();
         toast.success('이벤트가 작성되었습니다');
         onClose();
-        resetForm();
+        reset();
       } catch (error: any) {
         console.error('Error creating event:', error);
         toast.error(error.message || '이벤트 작성 중 오류가 발생했습니다');
-      } finally {
-        setLoading(false);
       }
       return;
     }
-    // free는 클라이언트에서 직접 생성
-    if (postType !== 'free') {
-      toast.error('이 게시글 타입은 클라이언트에서 직접 생성할 수 없습니다');
+    // 3. Free post (Client SDK)
+    if (data.type === 'free') {
+      try {
+        const postData: any = {
+          type: 'free',
+          title: data.title.trim(),
+          content: data.content.trim(),
+          pinned: false, // free/event는 고정 불가
+        };
+        await addPost(postData);
+        toast.success('게시글이 작성되었습니다');
+        onClose();
+        reset();
+      } catch (error) {
+        console.error('Error creating post:', error);
+        toast.error('게시글 작성 중 오류가 발생했습니다');
+      }
       return;
     }
-    setLoading(true);
-    try {
-      const postData: any = {
-        type: postType,
-        title: title.trim(),
-        content: content.trim(),
-        pinned: false, // free/event는 고정 불가
-      };
-      await addPost(postData);
-      toast.success('게시글이 작성되었습니다');
-      onClose();
-      resetForm();
-    } catch (error) {
-      console.error('Error creating post:', error);
-      toast.error('게시글 작성 중 오류가 발생했습니다');
-    } finally {
-      setLoading(false);
-    }
   };
-  const resetForm = () => {
-    setTitle('');
-    setContent('');
-    setEventType('PRACTICE');
-    setStartDate('');
-    setStartTime('');
-    setPlace('');
-    setOpponent('');
-    setPinned(false);
+  const onError = (errors: any) => {
+    console.log("Validation Errors", errors);
+    // Optional: Toast on error
+    // if (Object.keys(errors).length > 0) {
+    //   toast.error('입력 정보를 확인해주세요');
+    // }
   };
   return (
     <AnimatePresence>
@@ -933,7 +1024,7 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
             </div>
             {/* Content */}
             <div className="flex-1 overflow-y-auto px-6 py-4">
-              <form onSubmit={handleSubmit} className="space-y-4">
+              <form onSubmit={handleSubmit(onValidSubmit, onError)} className="space-y-4">
                 {/* Post Type Selection */}
                 <div>
                   <label className="block text-sm font-medium mb-2">게시글 유형</label>
@@ -945,7 +1036,8 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
                         <button
                           key={type.id}
                           type="button"
-                          onClick={() => setPostType(type.id)}
+                          // Use setValue for seamless type switching if fields overlap
+                          onClick={() => setValue('type', type.id as any)}
                           className={`flex flex-col items-center gap-2 p-3 rounded-lg border-2 transition-all ${isActive
                             ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/20'
                             : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'
@@ -962,41 +1054,46 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
                 </div>
                 {/* Pinned Checkbox (Notice Only) */}
                 {postType === 'notice' && (
-                  <div className="flex items-center gap-2 mb-4 p-3 bg-red-50 dark:bg-red-900/10 rounded-lg border border-red-100 dark:border-red-900/30">
-                    <Bell className="w-4 h-4 text-red-500" />
-                    <div className="flex-1">
-                      <span className="text-sm font-medium text-red-800 dark:text-red-300">중요 공지</span>
-                      <p className="text-xs text-red-600 dark:text-red-400">체크 시 상단에 고정되고 알림이 강조됩니다.</p>
+                  <>
+                    <div className="flex items-center gap-2 mb-4 p-3 bg-red-50 dark:bg-red-900/10 rounded-lg border border-red-100 dark:border-red-900/30">
+                      <Bell className="w-4 h-4 text-red-500" />
+                      <div className="flex-1">
+                        <span className="text-sm font-medium text-red-800 dark:text-red-300">중요 공지</span>
+                        <p className="text-xs text-red-600 dark:text-red-400">체크 시 상단에 고정되고 알림이 강조됩니다.</p>
+                      </div>
+                      <input
+                        type="checkbox"
+                        className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        {...register('pinned')}
+                      />
                     </div>
-                    <input
-                      type="checkbox"
-                      className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                      checked={pinned}
-                      onChange={(e) => setPinned(e.target.checked)}
-                    />
-                  </div>
+                  </>
                 )}
                 {/* Title */}
                 <div>
                   <label className="block text-sm font-medium mb-2">제목</label>
                   <input
                     type="text"
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-800"
+                    {...register('title')}
+                    className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-800 ${errors.title ? 'border-red-500' : 'border-gray-300 dark:border-gray-700'}`}
                     placeholder="제목을 입력하세요"
                   />
+                  {errors.title && (
+                    <p className="mt-1 text-xs text-red-500">{errors.title.message}</p>
+                  )}
                 </div>
                 {/* Content */}
                 <div>
                   <label className="block text-sm font-medium mb-2">내용</label>
                   <textarea
-                    value={content}
-                    onChange={(e) => setContent(e.target.value)}
                     rows={6}
-                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-800 resize-none"
+                    {...register('content')}
+                    className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-800 resize-none ${errors.content ? 'border-red-500' : 'border-gray-300 dark:border-gray-700'}`}
                     placeholder="내용을 입력하세요"
                   />
+                  {errors.content && (
+                    <p className="mt-1 text-xs text-red-500">{errors.content.message}</p>
+                  )}
                 </div>
                 {/* μATOM-0534: 이벤트 작성 화면(최소 입력) */}
                 {postType === 'event' && (
@@ -1005,28 +1102,20 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
                     <div>
                       <label className="block text-sm font-medium mb-2">이벤트 유형</label>
                       <div className="grid grid-cols-2 gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setEventType('PRACTICE')}
-                          className={`p-3 rounded-lg border-2 transition-all ${eventType === 'PRACTICE'
-                            ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/20'
-                            : 'border-gray-200 dark:border-gray-700'
-                            }`}
-                        >
-                          <Calendar className="w-5 h-5 mx-auto mb-1" />
-                          <span className="text-xs">연습</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setEventType('GAME')}
-                          className={`p-3 rounded-lg border-2 transition-all ${eventType === 'GAME'
-                            ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/20'
-                            : 'border-gray-200 dark:border-gray-700'
-                            }`}
-                        >
-                          <Trophy className="w-5 h-5 mx-auto mb-1" />
-                          <span className="text-xs">경기</span>
-                        </button>
+                        {(['PRACTICE', 'GAME'] as const).map((eType) => (
+                          <button
+                            key={eType}
+                            type="button"
+                            onClick={() => setValue('eventType', eType)}
+                            className={`p-3 rounded-lg border-2 transition-all ${eventType === eType
+                              ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/20'
+                              : 'border-gray-200 dark:border-gray-700'
+                              }`}
+                          >
+                            {eType === 'PRACTICE' ? <Calendar className="w-5 h-5 mx-auto mb-1" /> : <Trophy className="w-5 h-5 mx-auto mb-1" />}
+                            <span className="text-xs">{eType === 'PRACTICE' ? '연습' : '경기'}</span>
+                          </button>
+                        ))}
                       </div>
                     </div>
                     {/* Start Date & Time */}
@@ -1035,21 +1124,23 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
                         <label className="block text-sm font-medium mb-2">일시</label>
                         <input
                           type="date"
-                          value={startDate}
-                          onChange={(e) => setStartDate(e.target.value)}
-                          className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-800"
-                          required={postType === 'event'}
+                          {...register('startDate')}
+                          className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-800 ${postType === 'event' && (errors as any).startDate ? 'border-red-500' : 'border-gray-300 dark:border-gray-700'}`}
                         />
+                        {postType === 'event' && (errors as any).startDate && (
+                          <p className="mt-1 text-xs text-red-500">{(errors as any).startDate.message}</p>
+                        )}
                       </div>
                       <div>
                         <label className="block text-sm font-medium mb-2">시간</label>
                         <input
                           type="time"
-                          value={startTime}
-                          onChange={(e) => setStartTime(e.target.value)}
-                          className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-800"
-                          required={postType === 'event'}
+                          {...register('startTime')}
+                          className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-800 ${postType === 'event' && (errors as any).startTime ? 'border-red-500' : 'border-gray-300 dark:border-gray-700'}`}
                         />
+                        {postType === 'event' && (errors as any).startTime && (
+                          <p className="mt-1 text-xs text-red-500">{(errors as any).startTime.message}</p>
+                        )}
                       </div>
                     </div>
                     {/* Place */}
@@ -1060,12 +1151,13 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
                       </label>
                       <input
                         type="text"
-                        value={place}
-                        onChange={(e) => setPlace(e.target.value)}
-                        className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-800"
+                        {...register('place')}
+                        className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-800 ${postType === 'event' && (errors as any).place ? 'border-red-500' : 'border-gray-300 dark:border-gray-700'}`}
                         placeholder="장소를 입력하세요"
-                        required={postType === 'event'}
                       />
+                      {postType === 'event' && (errors as any).place && (
+                        <p className="mt-1 text-xs text-red-500">{(errors as any).place.message}</p>
+                      )}
                     </div>
                     {/* Opponent (경기일 때만) */}
                     {eventType === 'GAME' && (
@@ -1076,8 +1168,7 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
                         </label>
                         <input
                           type="text"
-                          value={opponent}
-                          onChange={(e) => setOpponent(e.target.value)}
+                          {...register('opponent')}
                           className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-800"
                           placeholder="상대팀을 입력하세요"
                         />
@@ -1092,15 +1183,17 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
               <button
                 onClick={onClose}
                 className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+                type="button"
               >
                 취소
               </button>
               <button
-                onClick={handleSubmit}
-                disabled={loading || !title.trim() || !content.trim()}
+                onClick={handleSubmit(onValidSubmit, onError)}
+                disabled={isSubmitting}
                 className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                type="button" // Use type button with onClick handler to trigger submit
               >
-                {loading ? '작성 중...' : '작성하기'}
+                {isSubmitting ? '작성 중...' : '작성하기'}
               </button>
             </div>
           </motion.div>
@@ -1191,11 +1284,15 @@ export const DeleteConfirmDialog: React.FC<DeleteConfirmDialogProps> = ({
 ## src/app/components/EditPostModal.tsx
 
 ```tsx
-import React, { useState, useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useData, Post } from '../contexts/DataContext';
 import { toast } from 'sonner';
+// [C02] RHF & Zod Imports
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { UpdatePostSchema, UpdatePostInput } from '../lib/schemas/post.schema';
 interface EditPostModalProps {
   post: Post;
   isOpen: boolean;
@@ -1207,66 +1304,77 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
   onClose,
 }) => {
   const { updatePost } = useData();
-  const [title, setTitle] = useState(post.title);
-  const [content, setContent] = useState(post.content);
-  const [loading, setLoading] = useState(false);
-  // Event fields
-  const [eventType, setEventType] = useState<'PRACTICE' | 'GAME'>(post.eventType || 'PRACTICE');
-  const [startDate, setStartDate] = useState(
-    post.startAt ? new Date(post.startAt).toISOString().split('T')[0] : ''
-  );
-  const [startTime, setStartTime] = useState(
-    post.startAt ? new Date(post.startAt).toTimeString().slice(0, 5) : ''
-  );
-  const [place, setPlace] = useState(post.place || '');
-  const [opponent, setOpponent] = useState(post.opponent || '');
+  // [C02] RHF Setup
+  const {
+    register,
+    handleSubmit,
+    watch,
+    reset,
+    setValue,
+    formState: { errors, isSubmitting },
+  } = useForm<UpdatePostInput>({
+    resolver: zodResolver(UpdatePostSchema),
+    defaultValues: {
+      title: post.title,
+      content: post.content,
+      eventType: post.eventType,
+      startDate: post.startAt ? new Date(post.startAt).toISOString().split('T')[0] : '',
+      startTime: post.startAt ? new Date(post.startAt).toTimeString().slice(0, 5) : '',
+      place: post.place || '',
+      opponent: post.opponent || '',
+    },
+  });
+  const eventType = watch('eventType');
   useEffect(() => {
-    if (isOpen) {
-      // Reset form when modal opens
-      setTitle(post.title);
-      setContent(post.content);
-      setEventType(post.eventType || 'PRACTICE');
-      setStartDate(post.startAt ? new Date(post.startAt).toISOString().split('T')[0] : '');
-      setStartTime(post.startAt ? new Date(post.startAt).toTimeString().slice(0, 5) : '');
-      setPlace(post.place || '');
-      setOpponent(post.opponent || '');
+    if (isOpen && post) {
+      reset({
+        title: post.title,
+        content: post.content,
+        eventType: post.eventType || 'PRACTICE',
+        startDate: post.startAt ? new Date(post.startAt).toISOString().split('T')[0] : '',
+        startTime: post.startAt ? new Date(post.startAt).toTimeString().slice(0, 5) : '',
+        place: post.place || '',
+        opponent: post.opponent || '',
+      });
     }
-  }, [isOpen, post]);
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!title.trim()) {
-      toast.error('제목을 입력해주세요');
-      return;
-    }
-    if (!content.trim()) {
-      toast.error('내용을 입력해주세요');
-      return;
-    }
-    setLoading(true);
+  }, [isOpen, post, reset]);
+  const onValidSubmit = async (data: UpdatePostInput) => {
     try {
       const updates: Partial<Post> = {
-        title: title.trim(),
-        content: content.trim(),
+        title: data.title?.trim(),
+        content: data.content?.trim(),
         updatedAt: new Date(),
       };
-      // Event specific fields
+      // Event specific logic
       if (post.type === 'event') {
+        const startDate = data.startDate;
+        const startTime = data.startTime;
         if (!startDate || !startTime) {
+          // Should be caught by schema or manual check if schema implies optional
           toast.error('일정 날짜와 시간을 입력해주세요');
-          setLoading(false);
           return;
         }
-        if (!place.trim()) {
+        if (!data.place?.trim()) {
           toast.error('장소를 입력해주세요');
-          setLoading(false);
           return;
         }
         const eventDateTime = new Date(`${startDate}T${startTime}`);
-        updates.eventType = eventType;
+        if (isNaN(eventDateTime.getTime())) {
+          toast.error('올바른 일시를 입력해주세요');
+          return;
+        }
+        updates.eventType = data.eventType;
         updates.startAt = eventDateTime;
-        updates.place = place.trim();
-        if (eventType === 'GAME' && opponent.trim()) {
-          updates.opponent = opponent.trim();
+        updates.place = data.place?.trim();
+        if (data.eventType === 'GAME' && data.opponent?.trim()) {
+          updates.opponent = data.opponent?.trim();
+        } else {
+          // If switched to PRACTICE or empty, clean up?
+          // Existing logic didn't explicitly clear it, but let's follow standard behavior.
+          // If PRACTICE, opponent is usually ignored or cleared.
+          if (data.eventType === 'PRACTICE') {
+            updates.opponent = null as any; // or delete field or set undefined
+          }
         }
       }
       await updatePost(post.id, updates);
@@ -1275,9 +1383,10 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
     } catch (error) {
       console.error('Error updating post:', error);
       toast.error('게시글 수정에 실패했습니다');
-    } finally {
-      setLoading(false);
     }
+  };
+  const onError = (errors: any) => {
+    console.log("Edit Validation Errors", errors);
   };
   if (!isOpen) return null;
   return (
@@ -1310,19 +1419,20 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
             </button>
           </div>
           {/* Form */}
-          <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto">
+          <form onSubmit={handleSubmit(onValidSubmit, onError)} className="flex-1 overflow-y-auto">
             <div className="p-6 space-y-4 pb-64">
               {/* Title */}
               <div>
                 <label className="block text-sm font-medium mb-2">제목</label>
                 <input
                   type="text"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  className="w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  {...register('title')}
+                  className={`w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.title ? 'border-red-500' : ''}`}
                   placeholder="제목을 입력하세요"
-                  required
                 />
+                {errors.title && (
+                  <p className="mt-1 text-xs text-red-500">{errors.title.message}</p>
+                )}
               </div>
               {/* Event specific fields */}
               {post.type === 'event' && (
@@ -1330,26 +1440,19 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
                   <div>
                     <label className="block text-sm font-medium mb-2">일정 유형</label>
                     <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setEventType('PRACTICE')}
-                        className={`flex-1 py-3 px-4 rounded-xl font-medium transition-colors ${eventType === 'PRACTICE'
-                          ? 'bg-blue-500 text-white'
-                          : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300'
-                          }`}
-                      >
-                        연습
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setEventType('GAME')}
-                        className={`flex-1 py-3 px-4 rounded-xl font-medium transition-colors ${eventType === 'GAME'
-                          ? 'bg-blue-500 text-white'
-                          : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300'
-                          }`}
-                      >
-                        경기
-                      </button>
+                      {(['PRACTICE', 'GAME'] as const).map((eType) => (
+                        <button
+                          key={eType}
+                          type="button"
+                          onClick={() => setValue('eventType', eType)}
+                          className={`flex-1 py-3 px-4 rounded-xl font-medium transition-colors ${eventType === eType
+                            ? 'bg-blue-500 text-white'
+                            : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300'
+                            }`}
+                        >
+                          {eType === 'PRACTICE' ? '연습' : '경기'}
+                        </button>
+                      ))}
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
@@ -1357,41 +1460,43 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
                       <label className="block text-sm font-medium mb-2">날짜</label>
                       <input
                         type="date"
-                        value={startDate}
-                        onChange={(e) => setStartDate(e.target.value)}
-                        className="w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        required
+                        {...register('startDate')}
+                        className={`w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.startDate ? 'border-red-500' : ''}`}
                       />
+                      {errors.startDate && (
+                        <p className="mt-1 text-xs text-red-500">{errors.startDate.message}</p>
+                      )}
                     </div>
                     <div>
                       <label className="block text-sm font-medium mb-2">시간</label>
                       <input
                         type="time"
-                        value={startTime}
-                        onChange={(e) => setStartTime(e.target.value)}
-                        className="w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        required
+                        {...register('startTime')}
+                        className={`w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.startTime ? 'border-red-500' : ''}`}
                       />
+                      {errors.startTime && (
+                        <p className="mt-1 text-xs text-red-500">{errors.startTime.message}</p>
+                      )}
                     </div>
                   </div>
                   <div>
                     <label className="block text-sm font-medium mb-2">장소</label>
                     <input
                       type="text"
-                      value={place}
-                      onChange={(e) => setPlace(e.target.value)}
-                      className="w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      {...register('place')}
+                      className={`w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 ${errors.place ? 'border-red-500' : ''}`}
                       placeholder="장소를 입력하세요"
-                      required
                     />
+                    {errors.place && (
+                      <p className="mt-1 text-xs text-red-500">{errors.place.message}</p>
+                    )}
                   </div>
                   {eventType === 'GAME' && (
                     <div>
                       <label className="block text-sm font-medium mb-2">상대팀</label>
                       <input
                         type="text"
-                        value={opponent}
-                        onChange={(e) => setOpponent(e.target.value)}
+                        {...register('opponent')}
                         className="w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                         placeholder="상대팀을 입력하세요"
                       />
@@ -1403,13 +1508,14 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
               <div>
                 <label className="block text-sm font-medium mb-2">내용</label>
                 <textarea
-                  value={content}
-                  onChange={(e) => setContent(e.target.value)}
+                  {...register('content')}
                   rows={6}
-                  className="w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                  className={`w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none ${errors.content ? 'border-red-500' : ''}`}
                   placeholder="내용을 입력하세요"
-                  required
                 />
+                {errors.content && (
+                  <p className="mt-1 text-xs text-red-500">{errors.content.message}</p>
+                )}
               </div>
             </div>
             {/* Footer */}
@@ -1419,16 +1525,16 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({
                   type="button"
                   onClick={onClose}
                   className="flex-1 py-3 px-4 border rounded-xl font-medium hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-                  disabled={loading}
+                  disabled={isSubmitting}
                 >
                   취소
                 </button>
                 <button
                   type="submit"
                   className="flex-1 py-3 px-4 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl font-medium hover:shadow-lg transition-all disabled:opacity-50"
-                  disabled={loading}
+                  disabled={isSubmitting}
                 >
-                  {loading ? '저장 중...' : '수정 완료'}
+                  {isSubmitting ? '저장 중...' : '수정 완료'}
                 </button>
               </div>
             </div>
@@ -1878,6 +1984,8 @@ interface PostDetailModalProps {
   onEdit?: (post: Post) => void;
   onDelete?: (postId: string) => void;
 }
+import { canEditPost, canDeletePost, canWriteComment as checkCanWriteComment, canVote } from '../lib/permissions';
+// ...
 export const PostDetailModal: React.FC<PostDetailModalProps> = ({
   post,
   isOpen,
@@ -1885,10 +1993,17 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
   onEdit,
   onDelete,
 }) => {
-  const { user, isAdmin } = useAuth();
+  const { user, profileComplete } = useAuth();
   const { members, deletePost, loadComments, updateAttendance, getMyAttendance, loadAttendances } = useData();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const canWriteComment = checkCanWriteComment(user?.status, profileComplete);
+  // Better use the helper:
+  // const canWriteComment = checkCanWriteComment(user?.status, profileComplete);
+  // But permission helper name is `canWriteComment`.
+  // Let's rename local var or use module import name properly.
+  // Import is `import { canEditPost, canDeletePost } from '../lib/permissions';` (line 23)
+  // I need to add `canWriteComment` to import.
   // μATOM-0304: 상세 공통 post fetch + comments fetch
   useEffect(() => {
     if (isOpen && post.id) {
@@ -1923,8 +2038,8 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
   };
   // Fix: use realName
   const author = members.find(u => u.id === post.author.id);
-  const canEdit = user?.id === post.author.id || isAdmin();
-  const canDelete = user?.id === post.author.id || isAdmin();
+  const canEdit = canEditPost(post.type, user?.role, post.author.id, user?.id);
+  const canDelete = canDeletePost(post.type, user?.role, post.author.id, user?.id);
   const handleShare = async () => {
     if (navigator.share) {
       try {
@@ -2079,7 +2194,7 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
               <div className="px-6 py-6 space-y-6">
                 {/* Header Admin Message for Push Failure */}
                 {/* μATOM-0525: 공지 상세 배지(SENT/FAILED) 표시 - 실패 시 안내 */}
-                {isAdmin() && post.type === 'notice' && post.pushStatus === 'FAILED' && (
+                {user?.role && ['PRESIDENT', 'DIRECTOR', 'TREASURER', 'ADMIN'].includes(user.role) && post.type === 'notice' && post.pushStatus === 'FAILED' && (
                   <div className="flex gap-2 p-3 bg-red-50 dark:bg-red-900/10 border border-red-100 dark:border-red-900/20 rounded-xl text-xs text-red-600 dark:text-red-400">
                     <AlertCircle className="w-4 h-4 flex-shrink-0" />
                     <div>
@@ -2144,23 +2259,25 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
                         </div>
                       </div>
                     )}
-                    {/* μATOM-0501: voteCloseAt 표시 */}
-                    {post.voteCloseAt && (
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 bg-white dark:bg-gray-800 rounded-lg">
-                          <Clock className="w-5 h-5 text-orange-600 dark:text-orange-400" />
-                        </div>
-                        <div>
-                          <div className="text-xs text-gray-500 dark:text-gray-400">투표 마감</div>
-                          <div className="font-medium">
-                            {format(post.voteCloseAt, 'M월 d일 23:00 (KST)', { locale: ko })}
-                          </div>
-                        </div>
+                    {/* μATOM-0501: 투표 마감 안내 */}
+                    <div className="flex items-center gap-3 mb-4 p-3 bg-blue-50 dark:bg-blue-900/10 rounded-lg border border-blue-100 dark:border-blue-900/20">
+                      <div className="p-2 bg-white dark:bg-gray-800 rounded-full shadow-sm">
+                        <Clock className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                       </div>
-                    )}
+                      <div>
+                        <div className="text-sm font-semibold text-blue-900 dark:text-blue-100">
+                          출석 투표는 연습/경기 전날 21:00(KST)에 자동 마감됩니다.
+                        </div>
+                        {post.voteCloseAt && (
+                          <div className="text-xs text-blue-700 dark:text-blue-300 mt-0.5">
+                            마감 시각: {format(post.voteCloseAt, 'yyyy년 M월 d일(eee) 21:00', { locale: ko })}
+                          </div>
+                        )}
+                      </div>
+                    </div>
                     {/* μATOM-0504: 집계 표시 */}
                     {post.attendanceSummary && (
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-3 mb-4">
                         <div className="p-2 bg-white dark:bg-gray-800 rounded-lg">
                           <Users className="w-5 h-5 text-orange-600 dark:text-orange-400" />
                         </div>
@@ -2180,50 +2297,77 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
                         </div>
                       </div>
                     )}
-                    {/* μATOM-0502: 내 상태 표시 + μATOM-0503: YES/NO/MAYBE 투표 + μATOM-0505: voteClosed 비활성 */}
+                    {/* μATOM-0502: 내 상태 표시 + 투표 버튼 */}
                     {user && user.status === 'active' && (
                       <div className="pt-3 border-t border-gray-200 dark:border-gray-700">
                         <div className="text-xs text-gray-500 dark:text-gray-400 mb-2">
                           내 출석 상태: {myAttendanceStatus === 'attending' ? '참석' : myAttendanceStatus === 'absent' ? '불참' : myAttendanceStatus === 'maybe' ? '미정' : '미투표'}
                         </div>
-                        {post.voteClosed ? (
-                          <div className="p-3 bg-gray-100 dark:bg-gray-800 rounded-lg text-center text-sm text-gray-500 dark:text-gray-400">
-                            투표가 마감되었습니다
-                          </div>
-                        ) : (
-                          <div className="grid grid-cols-3 gap-2">
-                            <Button
-                              variant={myAttendanceStatus === 'attending' ? 'default' : 'outline'}
-                              size="sm"
-                              onClick={() => handleAttendanceChange('attending')}
-                              className={myAttendanceStatus === 'attending' ? 'bg-green-600 hover:bg-green-700' : ''}
-                              disabled={post.voteClosed}
-                            >
-                              <CheckCircle2 className="w-4 h-4 mr-1" />
-                              참석
-                            </Button>
-                            <Button
-                              variant={myAttendanceStatus === 'absent' ? 'default' : 'outline'}
-                              size="sm"
-                              onClick={() => handleAttendanceChange('absent')}
-                              className={myAttendanceStatus === 'absent' ? 'bg-red-600 hover:bg-red-700' : ''}
-                              disabled={post.voteClosed}
-                            >
-                              <XCircle className="w-4 h-4 mr-1" />
-                              불참
-                            </Button>
-                            <Button
-                              variant={myAttendanceStatus === 'maybe' ? 'default' : 'outline'}
-                              size="sm"
-                              onClick={() => handleAttendanceChange('maybe')}
-                              className={myAttendanceStatus === 'maybe' ? 'bg-yellow-600 hover:bg-yellow-700' : ''}
-                              disabled={post.voteClosed}
-                            >
-                              <HelpCircle className="w-4 h-4 mr-1" />
-                              미정
-                            </Button>
-                          </div>
-                        )}
+                        {(() => {
+                          // Determine if closed (Manual OR Time)
+                          const isClosedManual = post.voteClosed === true;
+                          const isClosedTime = post.voteCloseAt ? new Date() >= post.voteCloseAt : false;
+                          const isVoteClosed = isClosedManual || isClosedTime;
+                          if (isVoteClosed) {
+                            return (
+                              <div className="p-3 bg-gray-100 dark:bg-gray-800 rounded-lg text-center text-sm text-gray-500 dark:text-gray-400">
+                                {isClosedManual ? '투표가 마감되었습니다 (관리자 마감)' : '투표가 마감되었습니다 (자동 마감)'}
+                              </div>
+                            );
+                          }
+                          return (
+                            <div className="grid grid-cols-3 gap-2">
+                              <Button
+                                variant={myAttendanceStatus === 'attending' ? 'default' : 'outline'}
+                                size="sm"
+                                onClick={() => {
+                                  if (!canVote(user?.status, profileComplete)) {
+                                    toast.error(profileComplete ? '투표 권한이 없습니다.' : '프로필(실명/전화)을 완성해야 투표할 수 있습니다.');
+                                    return;
+                                  }
+                                  handleAttendanceChange('attending');
+                                }}
+                                className={myAttendanceStatus === 'attending' ? 'bg-green-600 hover:bg-green-700' : ''}
+                                disabled={!canVote(user?.status, profileComplete)}
+                              >
+                                <CheckCircle2 className="w-4 h-4 mr-1" />
+                                참석
+                              </Button>
+                              <Button
+                                variant={myAttendanceStatus === 'absent' ? 'default' : 'outline'}
+                                size="sm"
+                                onClick={() => {
+                                  if (!canVote(user?.status, profileComplete)) {
+                                    toast.error(profileComplete ? '투표 권한이 없습니다.' : '프로필(실명/전화)을 완성해야 투표할 수 있습니다.');
+                                    return;
+                                  }
+                                  handleAttendanceChange('absent');
+                                }}
+                                className={myAttendanceStatus === 'absent' ? 'bg-red-600 hover:bg-red-700' : ''}
+                                disabled={!canVote(user?.status, profileComplete)}
+                              >
+                                <XCircle className="w-4 h-4 mr-1" />
+                                불참
+                              </Button>
+                              <Button
+                                variant={myAttendanceStatus === 'maybe' ? 'default' : 'outline'}
+                                size="sm"
+                                onClick={() => {
+                                  if (!canVote(user?.status, profileComplete)) {
+                                    toast.error(profileComplete ? '투표 권한이 없습니다.' : '프로필(실명/전화)을 완성해야 투표할 수 있습니다.');
+                                    return;
+                                  }
+                                  handleAttendanceChange('maybe');
+                                }}
+                                className={myAttendanceStatus === 'maybe' ? 'bg-yellow-600 hover:bg-yellow-700' : ''}
+                                disabled={!canVote(user?.status, profileComplete)}
+                              >
+                                <HelpCircle className="w-4 h-4 mr-1" />
+                                미정
+                              </Button>
+                            </div>
+                          );
+                        })()}
                       </div>
                     )}
                   </div>
@@ -2259,10 +2403,10 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
                   </h3>
                   <CommentList postId={post.id} />
                   {/* Comment Form (Restricted) */}
-                  {user && user.status !== 'pending' && <CommentForm postId={post.id} />}
-                  {user && user.status === 'pending' && (
+                  {user && canWriteComment && <CommentForm postId={post.id} />}
+                  {user && !canWriteComment && (
                     <div className="p-4 bg-gray-100 dark:bg-gray-800 rounded-xl text-center text-sm text-gray-500">
-                      승인 대기 중에는 댓글을 작성할 수 없습니다.
+                      {!profileComplete ? '프로필(실명/전화)을 완성해야 댓글을 작성할 수 있습니다.' : '댓글 작성 권한이 없습니다.'}
                     </div>
                   )}
                 </div>
@@ -2344,7 +2488,17 @@ export const ProfileEditModal: React.FC<ProfileEditModalProps> = ({
       const safeNickname = nickname.trim() || user.nickname || '';
       const safePhone = phone.trim() || user.phone || '';
       const safePosition = position || user.position || '';
-      const safeBackNumber = backNumber ? parseInt(backNumber) : (user.backNumber || null);
+      // [PHASE 3.3] BackNumber Normalization & Validation
+      let safeBackNumber: number | null = null;
+      if (backNumber && backNumber.trim() !== '') {
+        const parsed = parseInt(backNumber.trim(), 10);
+        if (isNaN(parsed) || parsed < 0 || parsed > 99) {
+          toast.error('등번호는 0~99 사이의 숫자여야 합니다');
+          setLoading(false); // Reset loading state
+          return;
+        }
+        safeBackNumber = parsed;
+      }
       const updates: any = {
         nickname: safeNickname,
         phone: safePhone,
@@ -2491,7 +2645,7 @@ export const ProfileEditModal: React.FC<ProfileEditModalProps> = ({
                   value={backNumber}
                   onChange={(e) => setBackNumber(e.target.value)}
                   className="w-full px-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="등번호"
+                  placeholder="등번호 (0-99)"
                   min="0"
                   max="99"
                 />
@@ -2501,10 +2655,17 @@ export const ProfileEditModal: React.FC<ProfileEditModalProps> = ({
                 <label className="block text-sm font-medium mb-2">역할</label>
                 <input
                   type="text"
-                  value={user.role === 'PRESIDENT' ? '회장' :
-                    user.role === 'DIRECTOR' ? '감독' :
-                      user.role === 'TREASURER' ? '총무' :
-                        user.role === 'ADMIN' ? '관리자' : '일반회원'}
+                  value={(() => {
+                    const labels: Record<string, string> = {
+                      PRESIDENT: '회장',
+                      VICE_PRESIDENT: '부회장',
+                      DIRECTOR: '감독',
+                      TREASURER: '총무',
+                      ADMIN: '관리자',
+                      MEMBER: '일반회원'
+                    };
+                    return labels[user.role] || '일반회원';
+                  })()}
                   disabled
                   className="w-full px-4 py-3 border rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-500 cursor-not-allowed"
                 />
@@ -7540,7 +7701,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User as FirebaseUser } from 'firebase/auth';
 import {
   getCurrentUserData,
-  updateUserData,
+  updateMemberData, // [New SSoT Update]
   logout as firebaseLogout,
   onAuthStateChange,
   isAdmin as checkIsAdmin,
@@ -7552,7 +7713,7 @@ import { getMember } from '../../lib/firebase/firestore.service';
 import type { UserRole } from '../../lib/firebase/types';
 // μATOM-0404: Gate 성공 시 clubId 컨텍스트 고정
 // 기본값은 ClubContext에서 전달받도록 변경 예정
-const DEFAULT_CLUB_ID = 'default-club';
+const DEFAULT_CLUB_ID = 'WINGS';
 // User roles and constraints re-export
 export type { UserRole };
 export interface User {
@@ -7563,15 +7724,17 @@ export interface User {
   photoURL?: string | null;
   role: UserRole;
   position?: string;
-  backNumber?: string;
+  backNumber?: number | null;
   status: 'pending' | 'active' | 'rejected' | 'withdrawn';
   createdAt: Date;
 }
 interface AuthContextType {
   user: User | null;
   loading: boolean;
-  memberStatus: 'checking' | 'active' | 'denied' | null; // μATOM-0401~0402: 멤버 상태 체크
-  currentClubId: string; // μATOM-0404: Gate 성공 시 clubId 컨텍스트 고정
+  memberStatus: 'checking' | 'active' | 'denied' | null;
+  currentClubId: string;
+  profileComplete: boolean;
+  canAct: boolean;
   // New Auth Methods
   loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
@@ -7613,31 +7776,57 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, clubId = D
   useEffect(() => {
     const unsubscribe = onAuthStateChange(async (firebaseUser: FirebaseUser | null) => {
       if (firebaseUser) {
-        const userData = await getCurrentUserData(firebaseUser.uid);
-        if (userData) {
-          const userObj = {
+        // μATOM-0610: Auto-provision member if missing (Access Gate)
+        const { ensureMemberExists } = await import('../../lib/firebase/auth.service');
+        await ensureMemberExists(currentClubId, firebaseUser);
+        let userObj: User | null = null;
+        let userData = await getCurrentUserData(firebaseUser.uid);
+        // [FIX-M01] SINGLE SOURCE OF TRUTH: Always fetch Club Member Doc
+        // Priority: memberDoc > userData > firebaseUser (legacy fallback)
+        const memberDoc = await getMember(currentClubId, firebaseUser.uid);
+        if (process.env.NODE_ENV === 'development') {
+          console.log('[AuthContext] Member Sync Debug:', {
+            uid: firebaseUser.uid,
+            memberExists: !!memberDoc,
+            memberRole: memberDoc?.role,
+            globalRole: userData?.role
+          });
+        }
+        if (memberDoc) {
+          // Case A: Member Doc Exists (Primary SSoT)
+          userObj = {
+            id: firebaseUser.uid,
+            realName: memberDoc.realName || userData?.realName || '',
+            nickname: memberDoc.nickname || userData?.nickname || firebaseUser.displayName,
+            phone: memberDoc.phone || (memberDoc as any).phoneNumber || userData?.phone || '',
+            photoURL: memberDoc.photoURL || userData?.photoURL || firebaseUser.photoURL,
+            role: memberDoc.role, // <--- CRITICAL: Use Club Role
+            position: memberDoc.position,
+            backNumber: memberDoc.backNumber,
+            status: memberDoc.status,
+            createdAt: memberDoc.createdAt,
+          };
+        } else if (userData) {
+          // Case B: Global User only (No Member Doc yet)
+          // [PHASE 1.1] Strict SSoT: Access Denied anyway, but ensure Role is safely degraded.
+          userObj = {
             id: userData.uid,
             realName: userData.realName,
             nickname: userData.nickname,
-            phone: userData.phone,
-            photoURL: userData.photoURL || firebaseUser.photoURL || undefined,
-            role: userData.role,
+            phone: userData.phone || (userData as any).phoneNumber,
+            photoURL: userData.photoURL || firebaseUser.photoURL,
+            role: 'MEMBER', // [SECURITY] Force MEMBER if no club membership exists. Do not trust global role.
             position: userData.position,
             backNumber: userData.backNumber,
-            status: userData.status,
+            status: 'pending', // Force pending/checking status effectively
             createdAt: userData.createdAt,
           };
-          setUser(userObj);
-          // μATOM-0401: 멤버 상태 체크 (members/{uid} 존재 확인)
-          // μATOM-0402: status==active 검증
-          setMemberStatus('checking');
-          const accessStatus = await checkMemberAccess(userData.uid, currentClubId);
-          setMemberStatus(accessStatus);
-        } else {
-          // Logged in but no UserDoc (e.g. fresh signup before createAccount called)
-          // Do NOT set user yet, let the UI handle the 'creating account' state flow
-          setMemberStatus('denied');
         }
+        setUser(userObj);
+        // μATOM-0401: 멤버 상태 체크
+        setMemberStatus('checking');
+        const accessStatus = await checkMemberAccess(firebaseUser.uid, currentClubId);
+        setMemberStatus(accessStatus);
       } else {
         setUser(null);
         setMemberStatus(null);
@@ -7710,7 +7899,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, clubId = D
   const updateUser = async (updates: Partial<User>) => {
     if (user) {
       try {
-        await updateUserData(user.id, updates as Partial<unknown>); // Cast to unknown then UserDoc properly if needed
+        // [FIX-M01] SSoT Update: Update Member Doc (and syncs to User doc via service)
+        await updateMemberData(currentClubId, user.id, updates as Partial<unknown>);
         setUser({ ...user, ...updates });
       } catch (error) {
         console.error('Update user error:', error);
@@ -7719,17 +7909,30 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, clubId = D
     }
   };
   const isAdmin = () => {
+    // [FIX-M01] Unified Admin Check
     return user ? checkIsAdmin(user.role) : false;
   };
   const isTreasury = () => {
     return user ? checkIsTreasury(user.role) : false;
   };
+  const profileComplete = React.useMemo(() => {
+    if (!user) return false;
+    // [M00-05] M00 Soft Gate: realName + phone required
+    // user.phone is already populated with fallback to phoneNumber if available
+    return !!(user.realName && user.phone);
+  }, [user]);
+  const canAct = React.useMemo(() => {
+    // GATE MODE SOFT: Active member AND Profile Complete
+    return memberStatus === 'active' && profileComplete;
+  }, [memberStatus, profileComplete]);
   return (
     <AuthContext.Provider value={{
       user,
       loading,
       memberStatus,
-      currentClubId, // μATOM-0404: clubId 컨텍스트 고정
+      currentClubId,
+      profileComplete,
+      canAct,
       loginWithGoogle: handleLoginWithGoogle,
       createMsgAccount,
       logout,
@@ -7762,7 +7965,7 @@ const ClubContext = createContext<ClubContextType | undefined>(undefined);
 export const ClubProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // Default to a hardcoded club ID for the prototype/v1.0
   // In a real multi-club app, this would be determined by URL or user selection
-  const [currentClubId, setCurrentClubId] = useState<string>('default-club');
+  const [currentClubId, setCurrentClubId] = useState<string>('WINGS');
   return (
     <ClubContext.Provider value={{ currentClubId, setCurrentClubId }}>
       {children}
@@ -7782,6 +7985,7 @@ export const useClub = () => {
 
 ```tsx
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { isAdminRole } from '../lib/auth/roles';
 import { useAuth } from './AuthContext';
 import { useClub } from './ClubContext';
 import {
@@ -7801,10 +8005,14 @@ import {
   markNotificationAsRead as markNotificationAsReadInDb,
   markAllNotificationsAsRead as markAllNotificationsAsReadInDb,
 } from '../../lib/firebase/firestore.service';
+import {
+  adminEditComment,
+  adminDeleteComment,
+} from '../../lib/firebase/comments.moderation.service';
 import { PostDoc, CommentDoc, AttendanceDoc, AttendanceStatus, PostType } from '../../lib/firebase/types';
 import type { UserRole } from '../../lib/firebase/types';
 // ATOM-08: Access Gate - default club ID (나중에 ClubContext와 통합 가능)
-// const DEFAULT_CLUB_ID = 'default-club';
+// const DEFAULT_CLUB_ID = 'WINGS';
 // Re-export types
 export type { PostType, AttendanceStatus, UserRole };
 export interface Post {
@@ -7909,7 +8117,7 @@ interface DataContextType {
 }
 const DataContext = createContext<DataContextType | undefined>(undefined);
 export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user } = useAuth();
+  const { user, memberStatus } = useAuth();
   const { currentClubId } = useClub();
   const [posts, setPosts] = useState<Post[]>([]);
   const [comments, setComments] = useState<Record<string, Comment[]>>({});
@@ -7976,7 +8184,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!user) return;
       let membersData;
       // ADMIN or MANAGER (DIRECTOR) or PRESIDENT can see all members
-      const isAdminLike = ['ADMIN', 'PRESIDENT', 'DIRECTOR', 'TREASURER'].includes(user.role);
+      const isAdminLike = isAdminRole(user.role);
       if (isAdminLike) {
         membersData = await getAllMembers(currentClubId);
       } else {
@@ -8010,13 +8218,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
   // 초기 로드
   useEffect(() => {
-    if (user) {
+    if (user && memberStatus === 'active') {
       refreshPosts();
       loadMembers();
       loadNotifications();
     } else {
-      // μATOM-0405: 로그아웃 시 상태 초기화
-      // user가 null이면 모든 데이터 초기화
+      // μATOM-0405: 로그아웃 시 상태 초기화 또는 승인 대기 중 데이터 접근 차단
+      // user가 null이거나 active가 아니면 모든 데이터 초기화
       setPosts([]);
       setComments({});
       setAttendances({});
@@ -8024,10 +8232,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setMembers([]);
       setNotifications([]);
     }
-  }, [user]);
+  }, [user, memberStatus]);
   // 게시글 추가
   const addPost = async (postData: Omit<Post, 'id' | 'createdAt' | 'updatedAt' | 'author'>) => {
     if (!user) return;
+    if (postData.type !== 'free') {
+      throw new Error(`[RBAC] addPost() only supports type 'free'. Use Cloud Functions for type='${postData.type}'.`);
+    }
     try {
       const newPostData: Omit<PostDoc, 'id' | 'createdAt' | 'updatedAt'> = {
         type: postData.type,
@@ -8107,10 +8318,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // 댓글 추가
   const addComment = async (postId: string, content: string) => {
     if (!user) return;
+    const trimmedContent = content.trim();
+    if (!trimmedContent) {
+      throw new Error('Content cannot be empty');
+    }
     try {
       // Note: addCommentInDb(clubId, postId, data)
       const commentDataForDb: Omit<CommentDoc, 'id' | 'createdAt' | 'updatedAt' | 'postId'> = {
-        content,
+        content: trimmedContent,
         authorId: user.id,
         authorName: user.realName,
         authorPhotoURL: user.photoURL ?? undefined,
@@ -8125,8 +8340,25 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // 댓글 업데이트
   const updateComment = async (postId: string, commentId: string, content: string) => {
     if (!user) return;
+    const trimmedContent = content.trim();
+    if (!trimmedContent) {
+      throw new Error('Content cannot be empty');
+    }
+    // Determine current comment author to decide path
+    const targetComment = comments[postId]?.find(c => c.id === commentId);
+    if (!targetComment) {
+      throw new Error('Comment not found');
+    }
+    const isAuthor = targetComment.author.id === user.id;
+    const isAdminLike = ['ADMIN', 'PRESIDENT', 'DIRECTOR', 'TREASURER'].includes(user.role);
     try {
-      await updateCommentInDb(currentClubId, postId, commentId, { content });
+      if (!isAuthor && isAdminLike) {
+        // Admin Moderation Path (via Callable for Audit)
+        await adminEditComment(currentClubId, postId, commentId, trimmedContent, "Admin Edit (Direct)");
+      } else {
+        // Author Path (Direct Firestore)
+        await updateCommentInDb(currentClubId, postId, commentId, { content: trimmedContent });
+      }
       await loadComments(postId);
     } catch (error) {
       console.error('Error updating comment:', error);
@@ -8135,8 +8367,24 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
   // 댓글 삭제
   const deleteComment = async (postId: string, commentId: string) => {
+    if (!user) return;
+    // Determine current comment author
+    const targetComment = comments[postId]?.find(c => c.id === commentId);
+    if (!targetComment) {
+      console.warn('Comment not found locally, refetching...');
+      await loadComments(postId);
+      return;
+    }
+    const isAuthor = targetComment.author.id === user.id;
+    const isAdminLike = ['ADMIN', 'PRESIDENT', 'DIRECTOR', 'TREASURER'].includes(user.role);
     try {
-      await deleteCommentInDb(currentClubId, postId, commentId);
+      if (!isAuthor && isAdminLike) {
+        // Admin Moderation Path (via Callable for Audit)
+        await adminDeleteComment(currentClubId, postId, commentId, "Admin Delete (Direct)");
+      } else {
+        // Author Path (Direct Firestore)
+        await deleteCommentInDb(currentClubId, postId, commentId);
+      }
       await loadComments(postId);
     } catch (error) {
       console.error('Error deleting comment:', error);
@@ -8371,19 +8619,27 @@ export function useFcm() {
     }
     try {
       setTokenError(null);
-      const token = await registerFcmToken(currentClubId);
-      if (token === 'CONFIG_REQUIRED') {
-        setTokenRegistered(false);
-        setTokenError('푸시 알림 설정이 아직 완료되지 않았습니다. 관리자에게 문의하세요.');
-        return false;
-      }
-      if (token) {
+      const result = await registerFcmToken(currentClubId);
+      if (result.ok && result.token) {
         setTokenRegistered(true);
         console.log('FCM 토큰 등록 완료');
         return true;
       } else {
         setTokenRegistered(false);
-        setTokenError('토큰 발급 실패');
+        let errorMessage = '토큰 발급 실패';
+        if (result.reason === 'CONFIG_REQUIRED') {
+          errorMessage = '푸시 알림 설정이 아직 완료되지 않았습니다. 관리자에게 문의하세요.';
+        } else if (result.reason === 'PERMISSION_DENIED') {
+          errorMessage = '브라우저 알림 권한이 꺼져 있습니다. 권한을 허용한 뒤 다시 시도하세요.';
+        } else if (result.reason === 'UNSUPPORTED_BROWSER') {
+          errorMessage = '이 브라우저/환경에서는 푸시 알림을 지원하지 않습니다.';
+        } else {
+          errorMessage = '푸시 등록 중 오류가 발생했습니다. 잠시 후 다시 시도하세요.';
+        }
+        setTokenError(errorMessage);
+        if (result.reason !== 'CONFIG_REQUIRED') {
+          toast.error(errorMessage);
+        }
         return false;
       }
     } catch (error: any) {
@@ -8511,6 +8767,201 @@ export const usePagination = (): UsePaginationReturn => {
 };
 ```
 
+## src/app/lib/auth/roles.ts
+
+```ts
+export const ADMIN_ROLES = [
+    'PRESIDENT',
+    'VICE_PRESIDENT',
+    'DIRECTOR', // Preserving backward compatibility
+    'TREASURER',
+    'ADMIN',
+] as const;
+export type AdminRole = typeof ADMIN_ROLES[number];
+export function isAdminRole(role?: string): boolean {
+    return ADMIN_ROLES.includes(role as AdminRole);
+}
+```
+
+## src/app/lib/permissions.ts
+
+```ts
+import type { UserRole } from '../../lib/firebase/types';
+import { isAdminRole } from './auth/roles';
+/**
+ * [ATOMIC] UI Permission Guard Unification
+ * Single Source of Truth for Role-Based Access Control in Client UI.
+ */
+// Helper to check profile completion (Sync with AuthContext logic if possible, or dry)
+export const hasRequiredProfile = (realName?: string, phone?: string): boolean => {
+    return !!(realName && phone);
+};
+export const canManageNotices = (role?: UserRole): boolean => {
+    if (!role) return false;
+    return isAdminRole(role);
+};
+export const canManageEvents = (role?: UserRole): boolean => {
+    if (!role) return false;
+    return isAdminRole(role);
+};
+export const canManageMembers = (role?: UserRole): boolean => {
+    if (!role) return false;
+    // Policy: TREASURER excluded from Member Management
+    return isAdminRole(role);
+};
+export const canManageFinance = (role?: UserRole): boolean => {
+    if (!role) return false;
+    return isAdminRole(role); // Or TREASURER only? Keeping consistent with Firestore Rules
+};
+export const canManageGameRecords = (role?: UserRole): boolean => {
+    if (!role) return false;
+    return isAdminRole(role); // TBD: Director main
+};
+// ==========================================
+// Granular Post Permissions (Step C00-01)
+// ==========================================
+export const canWritePost = (type: string, role?: UserRole, status?: string, isProfileComplete?: boolean): boolean => {
+    if (!role || status !== 'active') return false;
+    // [M00-06] Profile Completion Check (GateMode SOFT)
+    if (!isProfileComplete) return false;
+    // notice/event/poll: Admin-like only
+    if (['notice', 'event', 'poll'].includes(type)) {
+        return isAdminRole(role);
+    }
+    // free: Any active member
+    if (type === 'free') {
+        return true;
+    }
+    return false;
+};
+export const canEditPost = (type: string, role?: UserRole, postAuthorUid?: string, userUid?: string): boolean => {
+    // Edit allows if you are author, even if profile incomplete?
+    // Policy: "Post/Comment ... require hasRequiredProfile". M00-08 says write/update/delete.
+    // So update also requires profile.
+    // But self-profile update is exempt.
+    // Let's assume edit post requires profile too.
+    if (!role || !userUid) return false;
+    const isAuthor = postAuthorUid === userUid;
+    const isAdminLike = isAdminRole(role);
+    // notice/event/poll: Admin-like only
+    if (['notice', 'event', 'poll'].includes(type)) {
+        return isAdminLike;
+    }
+    // free: Author OR Admin-like
+    if (type === 'free') {
+        return isAuthor || isAdminLike;
+    }
+    return false;
+};
+export const canDeletePost = (type: string, role?: UserRole, postAuthorUid?: string, userUid?: string): boolean => {
+    return canEditPost(type, role, postAuthorUid, userUid);
+};
+// ==========================================
+// Granular Comment Permissions
+// ==========================================
+export const canWriteComment = (status?: string, isProfileComplete?: boolean): boolean => {
+    // Any authenticated active member with completed profile
+    return status === 'active' && !!isProfileComplete;
+};
+export const canEditComment = (role?: UserRole, commentAuthorUid?: string, userUid?: string): boolean => {
+    if (!role || !userUid || !commentAuthorUid) return false;
+    const isAuthor = commentAuthorUid === userUid;
+    const isAdminLike = isAdminRole(role);
+    return isAuthor || isAdminLike;
+};
+export const canDeleteComment = (role?: UserRole, commentAuthorUid?: string, userUid?: string): boolean => {
+    return canEditComment(role, commentAuthorUid, userUid);
+};
+export const canVote = (status?: string, isProfileComplete?: boolean): boolean => {
+    // [M00-06] Vote Gating
+    return status === 'active' && !!isProfileComplete;
+};
+```
+
+## src/app/lib/policy.ts
+
+```ts
+export type GateMode = 'HARD' | 'SOFT';
+export const GATE_MODE: GateMode = 'SOFT';
+// Required profile fields for actions (write/comment/vote/upload)
+export const REQUIRED_PROFILE_FIELDS = ['realName', 'phone'] as const;
+export type RequiredProfileField = typeof REQUIRED_PROFILE_FIELDS[number];
+```
+
+## src/app/lib/schemas/post.schema.ts
+
+```ts
+import { z } from 'zod';
+export const PostTypeEnum = z.enum(['notice', 'free', 'event']);
+export const EventTypeEnum = z.enum(['PRACTICE', 'GAME']);
+// ==========================================
+// Base Schemas
+// ==========================================
+const BasePostSchema = z.object({
+    title: z.string().min(1, '제목을 입력해주세요').max(100, '제목은 100자 이내여야 합니다'),
+    content: z.string().min(1, '내용을 입력해주세요').max(5000, '내용은 5000자 이내여야 합니다'),
+});
+// ==========================================
+// Create Schemas (Creation Time Rules)
+// ==========================================
+// 1. Free Post
+export const CreateFreePostSchema = BasePostSchema.extend({
+    type: z.literal('free'),
+});
+// 2. Notice Post (Admin only, but validated here)
+export const CreateNoticePostSchema = BasePostSchema.extend({
+    type: z.literal('notice'),
+    pinned: z.boolean().optional(),
+});
+// 3. Event Post
+export const CreateEventPostSchema = BasePostSchema.extend({
+    type: z.literal('event'),
+    eventType: EventTypeEnum,
+    // Event-specific fields are strings in the form (date, time) before conversion usually,
+    // but here we expect the form values.
+    // Let's assume we handle primitive inputs.
+    // Wait, RHF will adhere to this schema.
+    // The Modal uses `startDate` (string) and `startTime` (string).
+    startDate: z.string().min(1, '날짜를 선택해주세요'),
+    startTime: z.string().min(1, '시간을 선택해주세요'),
+    place: z.string().min(1, '장소를 입력해주세요'),
+    opponent: z.string().optional(), // Only for GAME
+}).refine((_data) => {
+    // Additional logical checks if needed.
+    // Currently individual field checks cover most requirements.
+    return true;
+}, {
+    message: "이벤트 정보를 확인해주세요",
+    path: ["root"],
+});
+// Discriminated Union for Create
+export const CreatePostSchema = z.discriminatedUnion('type', [
+    CreateFreePostSchema,
+    CreateNoticePostSchema,
+    CreateEventPostSchema,
+]);
+export type CreatePostInput = z.infer<typeof CreatePostSchema>;
+// ==========================================
+// Update Schemas (Partial Updates)
+// ==========================================
+// Update allows partial fields, but if a field is provided, it must strict valid.
+export const UpdatePostSchema = BasePostSchema.partial().extend({
+    // Additional updateable fields if any
+    pinned: z.boolean().optional(),
+    // Event fields (optional for update)
+    eventType: EventTypeEnum.optional(),
+    startAt: z.date().optional(), // Update might pass Date object directly or string?
+    // Usually UpdateModal might load existing Date object.
+    // Let's keep it flexible or align with EditPostModal needs.
+    // Edit logic usually sends existing data.
+    startDate: z.string().optional(),
+    startTime: z.string().optional(),
+    place: z.string().optional(),
+    opponent: z.string().optional(),
+});
+export type UpdatePostInput = z.infer<typeof UpdatePostSchema>;
+```
+
 ## src/app/pages/AccessDeniedPage.tsx
 
 ```tsx
@@ -8593,8 +9044,9 @@ import { useData, Member } from '../contexts/DataContext';
 import { useClub } from '../contexts/ClubContext';
 import {
   updateMember,
-  createPost,
 } from '../../lib/firebase/firestore.service';
+import { createNoticeWithPush } from '../../lib/firebase/notices.service';
+import { canManageNotices } from '../lib/permissions';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
@@ -8801,7 +9253,7 @@ function MembersTab({ members, editingMember, setEditingMember, onUpdateMember }
   setEditingMember: (id: string | null) => void;
   onUpdateMember: (id: string, updates: Partial<Member>) => void;
 }) {
-  const pendingMembers = members.filter(m => m.status === 'pending');
+  // Removed pending members logic as per B02-04 (Signup -> Active policy)
   const activeMembers = members.filter(m => m.status === 'active');
   const inactiveMembers = members.filter(m => m.status === 'rejected' || m.status === 'withdrawn');
   const renderMemberCard = (member: Member, index: number) => (
@@ -8842,7 +9294,6 @@ function MembersTab({ members, editingMember, setEditingMember, onUpdateMember }
                 onChange={(e) => onUpdateMember(member.id, { status: e.target.value as any })}
               >
                 <option value="active">활성</option>
-                <option value="pending">대기</option>
                 <option value="rejected">거절</option>
                 <option value="withdrawn">탈퇴</option>
               </select>
@@ -8881,27 +9332,14 @@ function MembersTab({ members, editingMember, setEditingMember, onUpdateMember }
                   {roleLabels[member.role]}
                 </span>
                 {member.backNumber && <span className="text-[10px] text-gray-500">#{member.backNumber}</span>}
-                <span className={`text-[10px] ${member.status === 'active' ? 'text-green-500' :
-                  member.status === 'pending' ? 'text-orange-500' : 'text-red-400'
-                  }`}>
+                <span className={`text-[10px] ${member.status === 'active' ? 'text-green-500' : 'text-red-400'}`}>
                   {member.status === 'active' ? '활성' :
-                    member.status === 'pending' ? '승인대기' :
-                      member.status === 'rejected' ? '거절됨' : '탈퇴'}
+                    member.status === 'rejected' ? '거절됨' : '탈퇴'}
                 </span>
               </div>
             </div>
           </div>
           <div className="flex items-center gap-1">
-            {member.status === 'pending' && (
-              <Button
-                size="sm"
-                variant="default"
-                className="h-8 px-2 bg-green-600 hover:bg-green-700 text-xs"
-                onClick={() => onUpdateMember(member.id, { status: 'active' })}
-              >
-                승인
-              </Button>
-            )}
             <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => setEditingMember(member.id)}>
               <Edit2 className="w-3.5 h-3.5" />
             </Button>
@@ -8912,18 +9350,6 @@ function MembersTab({ members, editingMember, setEditingMember, onUpdateMember }
   );
   return (
     <div className="space-y-8">
-      {/* Pending Members Section */}
-      {pendingMembers.length > 0 && (
-        <div className="space-y-3">
-          <h3 className="text-sm font-bold text-orange-600 flex items-center gap-2 px-1">
-            <Shield className="w-4 h-4" />
-            가입 승인 대기 ({pendingMembers.length})
-          </h3>
-          <div className="space-y-2">
-            {pendingMembers.map((member, i) => renderMemberCard(member, i))}
-          </div>
-        </div>
-      )}
       {/* Active Members Section */}
       <div className="space-y-3">
         <h3 className="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2 px-1">
@@ -9009,17 +9435,19 @@ function NoticesTab({
       return;
     }
     if (!currentClubId || !user) return;
+    if (!canManageNotices(user.role)) {
+      toast.error('공지 작성 권한이 없습니다.');
+      return;
+    }
     setIsSubmitting(true);
     try {
-      // Use createPost service
-      await createPost(currentClubId, {
-        authorId: user.id,
-        authorName: user.realName || user.nickname || 'Admin',
-        authorPhotoURL: user.photoURL ?? undefined,
-        content: content,
-        type: 'notice',
-        title: title,
-      });
+      // Use createNoticeWithPush callable
+      await createNoticeWithPush(
+        currentClubId,
+        title,
+        content,
+        false // pinned default false in this simple UI
+      );
       if (sendPush) {
         toast.success('공지사항이 등록되었습니다 (푸시 발송)');
       } else {
@@ -9256,15 +9684,27 @@ import { EmptyState } from '../components/EmptyState';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { toast } from 'sonner';
-import { useAuth } from '../contexts/AuthContext'; // Import Added
-export const BoardsPage: React.FC = () => {
-  const { user, isAdmin } = useAuth();
+import { useAuth } from '../contexts/AuthContext';
+import { canWritePost } from '../lib/permissions';
+export type BoardsTab = 'notice' | 'free' | 'event';
+export const BoardsPage: React.FC<{ initialTab?: BoardsTab; onTabChange?: (t: BoardsTab) => void }> = ({ initialTab = 'notice', onTabChange }) => {
+  const { user, profileComplete } = useAuth();
   const { posts, deletePost } = useData();
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [createPostType, setCreatePostType] = useState<PostType>('free');
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [editingPost, setEditingPost] = useState<Post | null>(null);
-  const [activeTab, setActiveTab] = useState<'notice' | 'free' | 'event'>('notice');
+  // Controlled Tab State
+  const [activeTab, setActiveTab] = useState<BoardsTab>(initialTab);
+  // Sync with initialTab prop (from URL)
+  React.useEffect(() => {
+    setActiveTab(initialTab);
+  }, [initialTab]);
+  const handleTabChange = (value: string) => {
+    const newTab = value as BoardsTab;
+    setActiveTab(newTab);
+    onTabChange?.(newTab);
+  };
   // Filter posts by type
   const notices = posts.filter(p => p.type === 'notice').sort((a, b) => {
     if (a.pinned && !b.pinned) return -1;
@@ -9282,18 +9722,28 @@ export const BoardsPage: React.FC = () => {
       return aTime - bTime;
     });
   const handleCreatePost = (type: PostType) => {
-    // If Admin and on Notice tab, default to Notice type
-    if (activeTab === 'notice' && isAdmin()) {
-      setCreatePostType('notice');
-    } else {
-      setCreatePostType(type);
+    // Permission check
+    const canWrite = canWritePost(type, user?.role, user?.status, profileComplete);
+    if (!user) {
+      toast.error('로그인이 필요합니다.');
+      return;
     }
+    // [M00-06] Explicit Toast for Incomplete Profile
+    if (!profileComplete) {
+      toast.error('프로필 입력이 필요합니다. (실명/전화번호) 내정보에서 입력해주세요.');
+      return;
+    }
+    if (!canWrite) {
+      toast.error('글 작성 권한이 없습니다.');
+      return;
+    }
+    setCreatePostType(type);
     setCreateModalOpen(true);
   };
   return (
     <div className="pb-20 pt-16">
       <div className="max-w-md mx-auto">
-        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'notice' | 'free' | 'event')} className="w-full">
+        <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
           <TabsList className="w-full sticky top-14 z-30 bg-white dark:bg-gray-900 border-b grid grid-cols-3 h-auto p-0">
             <TabsTrigger value="notice" className="flex-col py-3 gap-1 data-[state=active]:bg-blue-50 dark:data-[state=active]:bg-blue-900/20">
               <Bell className="w-4 h-4" />
@@ -9331,10 +9781,8 @@ export const BoardsPage: React.FC = () => {
           </TabsContent>
         </Tabs>
         {/* FAB - Create Post (Tab-based visibility) */}
-        {/* 공지/연습·시합: adminLike만 버튼 노출 */}
-        {/* 자유: 멤버면 버튼 노출 */}
-        {((activeTab === 'notice' || activeTab === 'event') && isAdmin() && user?.status === 'active') ||
-          (activeTab === 'free' && user?.status === 'active') ? (
+        {/* Unified Permission Check via canWritePost */}
+        {canWritePost(activeTab, user?.role, user?.status, profileComplete) ? (
           <motion.button
             whileTap={{ scale: 0.95 }}
             className="fixed bottom-24 right-4 w-14 h-14 bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-full shadow-lg flex items-center justify-center z-40"
@@ -9343,12 +9791,7 @@ export const BoardsPage: React.FC = () => {
             <Plus className="w-6 h-6" />
           </motion.button>
         ) : null}
-        {/* Pending User Notice */}
-        {user?.status === 'pending' && (
-          <div className="fixed bottom-24 right-4 bg-gray-800 text-white text-xs px-3 py-2 rounded-full shadow-lg opacity-80 z-40">
-            가입 승인 대기중 (글쓰기 제한)
-          </div>
-        )}
+        {/* Pending User Notice REMOVED as per C01-04 */}
         {/* Create Post Modal */}
         <CreatePostModal
           isOpen={createModalOpen}
@@ -9983,22 +10426,23 @@ export const InstallPage: React.FC = () => {
 
 ```tsx
 import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import {
-  Loader2
-} from 'lucide-react';
+import { motion } from 'motion/react';
+import { Loader2 } from 'lucide-react';
 import { Button } from '../components/ui/button';
+import { Input } from '../components/ui/input';
+import { Label } from '../components/ui/label';
 import { toast } from 'sonner';
-import {
-  checkUserExists
-} from '../../lib/firebase/auth.service';
 import {
   isInAppBrowser,
   getBreakoutUrl,
   isAndroid
 } from '../../lib/utils/userAgent';
-type LoginStep = 'method';
-export const LoginPage: React.FC = () => {
+import { SignupPage } from './SignupPage';
+type LoginStep = 'login' | 'signup';
+interface LoginPageProps {
+  initialStep?: LoginStep;
+}
+export const LoginPage: React.FC<LoginPageProps> = ({ initialStep = 'login' }) => {
   // WebView Detection
   if (isInAppBrowser()) {
     return (
@@ -10038,34 +10482,43 @@ export const LoginPage: React.FC = () => {
       </div>
     );
   }
-  const [step] = useState<LoginStep>('method');
+  const [step, setStep] = useState<LoginStep>(initialStep);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  // 1. Google Sign In
-  const handleGoogleLogin = async () => {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email || !password) {
+      toast.error('이메일과 비밀번호를 입력해주세요.');
+      return;
+    }
     setLoading(true);
-    setError('');
     try {
-      const { loginWithGoogle } = await import('../../lib/firebase/auth.service');
-      // Google Auth Login (gets firebase user)
-      const firebaseUser = await loginWithGoogle();
-      // Check if user profile exists
-      const exists = await checkUserExists(firebaseUser.uid);
-      if (exists) {
-        toast.success(`환영합니다, ${firebaseUser.displayName}님!`);
-      } else {
-        // [NOTICE] 신규 유저 자동 가입 신청 (pending 생성)
-        const { createAccount } = await import('../../lib/firebase/auth.service');
-        await createAccount(firebaseUser, firebaseUser.displayName || '이름 없음');
-        toast.info('가입 신청 되었습니다. 관리자 승인 후 이용 가능합니다.');
-      }
+      const { signInWithEmailPassword } = await import('../../lib/firebase/auth.service');
+      await signInWithEmailPassword(email, password);
+      // Success is handled by AuthContext state change
     } catch (err: any) {
-      setError(err.message);
-      toast.error('로그인에 실패했습니다.');
+      console.error('Login Error:', err);
+      toast.error('로그인 실패: 이메일 또는 비밀번호를 확인해주세요.');
     } finally {
       setLoading(false);
     }
   };
+  const handleLoginWithGoogle = async () => {
+    setLoading(true);
+    try {
+      const { loginWithGoogle } = await import('../../lib/firebase/auth.service');
+      await loginWithGoogle();
+    } catch (err: any) {
+      console.error('Google Login Error:', err);
+      toast.error('구글 로그인 실패');
+    } finally {
+      setLoading(false);
+    }
+  };
+  if (step === 'signup') {
+    return <SignupPage onBack={() => setStep('login')} />;
+  }
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-600 via-blue-500 to-blue-400 dark:from-blue-900 dark:via-blue-800 dark:to-blue-700 flex items-center justify-center p-4">
       <motion.div
@@ -10084,59 +10537,67 @@ export const LoginPage: React.FC = () => {
           </motion.div>
           <h1 className="text-2xl font-bold text-white mb-2">WINGS</h1>
           <p className="text-blue-100 text-sm">야구동호회 커뮤니티</p>
-          <p className="text-[10px] text-blue-200/60 mt-2">
-            * 로그인 오류 시 Chrome/Safari 브라우저를 이용해주세요.
-          </p>
         </div>
         <div className="p-8">
-          <AnimatePresence mode="wait">
-            {step === 'method' && (
-              <motion.div
-                key="step-method"
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -20 }}
-                className="space-y-4"
-              >
-                <div className="space-y-3">
-                  <Button
-                    variant="outline"
-                    onClick={handleGoogleLogin}
-                    disabled={loading}
-                    className="w-full h-12 bg-white text-gray-800 hover:bg-gray-50 border-0 flex items-center justify-center gap-2"
-                  >
-                    {loading ? <Loader2 className="animate-spin" /> : (
-                      <>
-                        <svg className="w-5 h-5" viewBox="0 0 24 24">
-                          <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
-                          <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
-                          <path d="M5.84 14.11c-.22-.66-.35-1.36-.35-2.11s.13-1.45.35-2.11V7.05H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.95l2.84-2.84z" fill="#FBBC05" />
-                          <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.05l3.66 2.84c.87-2.6 3.3-4.51 6.16-4.51z" fill="#EA4335" />
-                        </svg>
-                        Google로 계속하기
-                      </>
-                    )}
-                  </Button>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-          {/* Global Error */}
-          {error && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="mt-4 p-3 bg-red-500/20 border border-red-500/50 rounded-xl text-red-100 text-sm text-center"
+          <form onSubmit={handleLogin} className="space-y-4">
+            <div className="space-y-2">
+              <Label className="text-blue-50">이메일</Label>
+              <Input
+                type="email"
+                placeholder="email@example.com"
+                className="bg-white/20 border-white/30 text-white placeholder:text-blue-100/50 focus:bg-white/30"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-blue-50">비밀번호</Label>
+              <Input
+                type="password"
+                placeholder="비밀번호 입력"
+                className="bg-white/20 border-white/30 text-white placeholder:text-blue-100/50 focus:bg-white/30"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            </div>
+            <Button
+              type="submit"
+              disabled={loading}
+              className="w-full h-12 bg-white text-blue-600 hover:bg-blue-50 font-bold text-lg mt-4"
             >
-              {error}
-            </motion.div>
-          )}
+              {loading ? <Loader2 className="animate-spin" /> : '로그인'}
+            </Button>
+          </form>
+          <div className="mt-6 text-center space-y-4">
+            <button
+              onClick={() => setStep('signup')}
+              className="text-white/80 hover:text-white text-sm hover:underline underline-offset-4"
+            >
+              계정이 없으신가요? 회원가입하기
+            </button>
+            <div className="pt-2 border-t border-white/10 w-full"></div>
+            <button
+              onClick={handleLoginWithGoogle}
+              type="button"
+              disabled={loading}
+              className="text-blue-100/70 hover:text-white text-xs hover:underline underline-offset-4 flex items-center justify-center gap-2 w-full"
+            >
+              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12.545,10.239v3.821h5.445c-0.712,2.315-2.647,3.972-5.445,3.972c-3.332,0-6.033-2.701-6.033-6.032s2.701-6.032,6.033-6.032c1.498,0,2.866,0.549,3.921,1.453l2.814-2.814C17.503,2.988,15.139,2,12.545,2C7.021,2,2.543,6.477,2.543,12s4.478,10,10.002,10c8.396,0,10.249-7.85,9.426-11.748L12.545,10.239z" />
+              </svg>
+              기존 구글 계정으로 로그인 (유지보수용)
+            </button>
+            {/* Password Reset Link Placeholder */}
+            {/* <div className="text-xs text-blue-200/60">
+              비밀번호를 잊으셨나요?
+            </div> */}
+          </div>
         </div>
-        <div className="mt-8 text-center text-xs text-gray-400">
-          &copy; 2024 Wings Baseball Club (v1.1)
+        <div className="p-4 text-center text-xs text-gray-400 bg-black/10">
+          &copy; 2024 Wings Baseball Club (v2.0)
         </div>
-      </motion.div >
-    </div >
+      </motion.div>
+    </div>
   );
 };
 ```
@@ -10285,6 +10746,7 @@ import { motion } from 'motion/react';
 import { User, Settings, Bell, Shield, LogOut, ChevronRight, Crown, Star, Calendar, Trophy, MessageSquare, Edit, Camera, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { useAuth, UserRole } from '../contexts/AuthContext';
 import { useData } from '../contexts/DataContext';
+import { canManageMembers, canManageNotices } from '../lib/permissions';
 import { Card } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
@@ -10305,7 +10767,7 @@ export const MyPage: React.FC<MyPageProps> = ({
   onNavigateToNoticeManage,
   onNavigateToMyActivity
 }: MyPageProps) => {
-  const { user, logout, isAdmin, isTreasury } = useAuth();
+  const { user, logout, profileComplete } = useAuth();
   const { posts, comments, attendanceRecords } = useData();
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [stats, setStats] = useState({
@@ -10356,9 +10818,32 @@ export const MyPage: React.FC<MyPageProps> = ({
   if (!user) return null;
   const roleInfo = getRoleInfo(user.role);
   const RoleIcon = roleInfo.icon;
+  const canNotices = canManageNotices(user.role);
+  const canMembers = canManageMembers(user.role);
   return (
     <div className="pb-20 pt-16">
       <div className="max-w-md mx-auto">
+        {/* Profile Incomplete Banner (GateMode SOFT) */}
+        {!profileComplete && (
+          <div className="mx-4 mt-4 mb-4 p-4 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-xl flex items-center justify-between shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-orange-100 dark:bg-orange-800 rounded-lg">
+                <AlertCircle className="w-5 h-5 text-orange-600 dark:text-orange-400" />
+              </div>
+              <div>
+                <p className="font-bold text-sm text-gray-900 dark:text-white">프로필 미완성</p>
+                <p className="text-xs text-gray-600 dark:text-gray-400">실명과 전화번호를 입력해주세요.</p>
+              </div>
+            </div>
+            <Button
+              size="sm"
+              onClick={() => setEditModalOpen(true)}
+              className="bg-orange-500 hover:bg-orange-600 text-white border-0"
+            >
+              입력하기
+            </Button>
+          </div>
+        )}
         {/* Profile Header */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -10476,16 +10961,16 @@ export const MyPage: React.FC<MyPageProps> = ({
           className="px-4 mt-6 space-y-3"
         >
           {/* Admin Menu */}
-          {isAdmin() && (
+          {(canNotices || canMembers) && (
             <>
               <Card className="overflow-hidden">
-                  <div className="p-3 bg-gradient-to-r from-purple-500 to-purple-600 text-white">
+                <div className="p-3 bg-gradient-to-r from-purple-500 to-purple-600 text-white">
                   <div className="flex items-center gap-2">
                     <Shield className="w-4 h-4" />
                     <span className="font-semibold text-sm">관리자 메뉴</span>
                   </div>
                 </div>
-                {isAdmin() && (
+                {canMembers && (
                   <>
                     <MenuItem icon={Shield} label="관리자 페이지" onClick={() => onNavigateToAdmin?.()} />
                     <Separator />
@@ -10493,17 +10978,8 @@ export const MyPage: React.FC<MyPageProps> = ({
                     <Separator />
                   </>
                 )}
-                {isAdmin() && (
-                  <>
-                    <Separator />
-                    <MenuItem icon={Bell} label="공지 관리" onClick={() => onNavigateToNoticeManage?.()} />
-                    <Separator />
-                    {isTreasury() && (
-                      <>
-                        <Separator />
-                      </>
-                    )}
-                  </>
+                {canNotices && (
+                  <MenuItem icon={Bell} label="공지 관리" onClick={() => onNavigateToNoticeManage?.()} />
                 )}
               </Card>
               <div className="h-3"></div>
@@ -10525,12 +11001,12 @@ export const MyPage: React.FC<MyPageProps> = ({
                 ) : permission === 'granted' && !tokenRegistered ? (
                   <Badge className="bg-yellow-100 text-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-400">
                     <AlertCircle className="w-3 h-3 mr-1" />
-                    등록 실패
+                    {tokenError?.includes('설정') ? '설정 필요' : '등록 실패'}
                   </Badge>
                 ) : permission === 'denied' ? (
                   <Badge className="bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400">
                     <AlertCircle className="w-3 h-3 mr-1" />
-                    거부됨
+                    권한 필요
                   </Badge>
                 ) : (
                   <Badge variant="outline">대기중</Badge>
@@ -10546,14 +11022,16 @@ export const MyPage: React.FC<MyPageProps> = ({
                   <p className="text-xs text-red-600 dark:text-red-400 mb-2">
                     {tokenError || '토큰 등록에 실패했습니다'}
                   </p>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={retryRegister}
-                    className="w-full"
-                  >
-                    재시도
-                  </Button>
+                  {!tokenError?.includes('설정') && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={retryRegister}
+                      className="w-full"
+                    >
+                      재시도
+                    </Button>
+                  )}
                 </div>
               )}
               {permission !== 'granted' && (
@@ -10575,7 +11053,7 @@ export const MyPage: React.FC<MyPageProps> = ({
                 </div>
               )}
               {/* μATOM-0514: 토큰 재등록 버튼 */}
-              {permission === 'granted' && (
+              {permission === 'granted' && !tokenError?.includes('설정') && (
                 <Button
                   size="sm"
                   variant="outline"
@@ -10824,6 +11302,71 @@ export const NotificationPage: React.FC<NotificationPageProps> = ({ onBack }) =>
       </div>
     </div>
   );
+};
+```
+
+## src/app/pages/ProfileRequiredPage.tsx
+
+```tsx
+import React from 'react';
+import { motion } from 'motion/react';
+import { AlertCircle, ArrowLeft } from 'lucide-react';
+import { Button } from '../components/ui/button';
+import { useAuth } from '../contexts/AuthContext';
+import { ProfileEditModal } from '../components/ProfileEditModal';
+interface ProfileRequiredPageProps {
+    onNavigateHome: () => void;
+}
+export const ProfileRequiredPage: React.FC<ProfileRequiredPageProps> = ({ onNavigateHome }) => {
+    const { profileComplete } = useAuth();
+    const [isEditOpen, setIsEditOpen] = React.useState(false);
+    // Auto-close if completed (or user can navigate manually)
+    React.useEffect(() => {
+        if (profileComplete) {
+            // Allow user to celebrate or just stay
+        }
+    }, [profileComplete]);
+    return (
+        <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center p-4">
+            <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="w-full max-w-md bg-white dark:bg-gray-800 rounded-2xl shadow-xl overflow-hidden"
+            >
+                <div className="p-8 text-center">
+                    <div className="w-16 h-16 bg-orange-100 dark:bg-orange-900/30 rounded-full flex items-center justify-center mx-auto mb-6">
+                        <AlertCircle className="w-8 h-8 text-orange-600 dark:text-orange-400" />
+                    </div>
+                    <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+                        프로필 완성이 필요합니다
+                    </h1>
+                    <p className="text-gray-600 dark:text-gray-400 mb-8 whitespace-pre-wrap">
+                        {`원활한 커뮤니티 활동을 위해\n실명과 전화번호를 등록해주세요.`}
+                    </p>
+                    <div className="space-y-3">
+                        <Button
+                            className="w-full h-12 text-lg"
+                            onClick={() => setIsEditOpen(true)}
+                        >
+                            프로필 입력하기
+                        </Button>
+                        <Button
+                            variant="ghost"
+                            className="w-full"
+                            onClick={onNavigateHome}
+                        >
+                            <ArrowLeft className="w-4 h-4 mr-2" />
+                            홈으로 돌아가기
+                        </Button>
+                    </div>
+                </div>
+            </motion.div>
+            <ProfileEditModal
+                isOpen={isEditOpen}
+                onClose={() => setIsEditOpen(false)}
+            />
+        </div>
+    );
 };
 ```
 
@@ -11152,5 +11695,160 @@ export const SettingsPage: React.FC<SettingsPageProps> = () => {
       </div>
     </div>
   );
+};
+```
+
+## src/app/pages/SignupPage.tsx
+
+```tsx
+import React, { useState } from 'react';
+import { motion } from 'motion/react';
+import { Loader2, ArrowLeft } from 'lucide-react';
+import { Button } from '../components/ui/button';
+import { Input } from '../components/ui/input';
+import { Label } from '../components/ui/label';
+import { toast } from 'sonner';
+interface SignupPageProps {
+    onBack: () => void;
+}
+export const SignupPage: React.FC<SignupPageProps> = ({ onBack }) => {
+    const [loading, setLoading] = useState(false);
+    const [formData, setFormData] = useState({
+        email: '',
+        password: '',
+        confirmPassword: '',
+        realName: '',
+        phone: ''
+    });
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const { name, value } = e.target;
+        setFormData(prev => ({ ...prev, [name]: value }));
+    };
+    const handleSignup = async (e: React.FormEvent) => {
+        e.preventDefault();
+        // Basic validation
+        if (!formData.email || !formData.password || !formData.realName || !formData.phone) {
+            toast.error('모든 필드를 입력해주세요.');
+            return;
+        }
+        if (formData.password !== formData.confirmPassword) {
+            toast.error('비밀번호가 일치하지 않습니다.');
+            return;
+        }
+        if (formData.password.length < 6) {
+            toast.error('비밀번호는 6동 이상이어야 합니다.');
+            return;
+        }
+        setLoading(true);
+        try {
+            // Lazy load auth service to avoid circular dependencies if any
+            const { signUpWithEmailPassword } = await import('../../lib/firebase/auth.service');
+            await signUpWithEmailPassword({
+                email: formData.email,
+                password: formData.password,
+                name: formData.realName,
+                phone: formData.phone,
+                clubId: 'WINGS' // Default club ID
+            });
+            toast.success('회원가입이 완료되었습니다!');
+            // Navigation will be handled by AuthContext state change or parent
+            // But typically we might want to redirect to login or just let the auto-login filter through
+        } catch (error: any) {
+            console.error('Signup Error:', error);
+            toast.error(error.message || '회원가입 중 오류가 발생했습니다.');
+        } finally {
+            setLoading(false);
+        }
+    };
+    return (
+        <div className="min-h-screen bg-gradient-to-br from-blue-600 via-blue-500 to-blue-400 dark:from-blue-900 dark:via-blue-800 dark:to-blue-700 flex items-center justify-center p-4">
+            <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="w-full max-w-md bg-white/10 backdrop-blur-xl rounded-3xl shadow-2xl overflow-hidden border border-white/20"
+            >
+                <div className="p-8">
+                    <Button
+                        variant="ghost"
+                        onClick={onBack}
+                        className="mb-6 text-white hover:bg-white/20 -ml-2"
+                    >
+                        <ArrowLeft className="w-5 h-5 mr-2" />
+                        로그인으로 돌아가기
+                    </Button>
+                    <h1 className="text-2xl font-bold text-white mb-6">회원가입</h1>
+                    <form onSubmit={handleSignup} className="space-y-4">
+                        <div className="space-y-2">
+                            <Label className="text-blue-50">이메일</Label>
+                            <Input
+                                name="email"
+                                type="email"
+                                required
+                                className="bg-white/20 border-white/30 text-white placeholder:text-blue-100/50 focus:bg-white/30"
+                                placeholder="example@email.com"
+                                value={formData.email}
+                                onChange={handleChange}
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label className="text-blue-50">비밀번호</Label>
+                            <Input
+                                name="password"
+                                type="password"
+                                required
+                                className="bg-white/20 border-white/30 text-white placeholder:text-blue-100/50 focus:bg-white/30"
+                                placeholder="6자리 이상 입력"
+                                value={formData.password}
+                                onChange={handleChange}
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label className="text-blue-50">비밀번호 확인</Label>
+                            <Input
+                                name="confirmPassword"
+                                type="password"
+                                required
+                                className="bg-white/20 border-white/30 text-white placeholder:text-blue-100/50 focus:bg-white/30"
+                                placeholder="비밀번호 재입력"
+                                value={formData.confirmPassword}
+                                onChange={handleChange}
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label className="text-blue-50">실명</Label>
+                            <Input
+                                name="realName"
+                                type="text"
+                                required
+                                className="bg-white/20 border-white/30 text-white placeholder:text-blue-100/50 focus:bg-white/30"
+                                placeholder="홍길동"
+                                value={formData.realName}
+                                onChange={handleChange}
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label className="text-blue-50">전화번호</Label>
+                            <Input
+                                name="phone"
+                                type="tel"
+                                required
+                                className="bg-white/20 border-white/30 text-white placeholder:text-blue-100/50 focus:bg-white/30"
+                                placeholder="010-1234-5678"
+                                value={formData.phone}
+                                onChange={handleChange}
+                            />
+                        </div>
+                        <Button
+                            type="submit"
+                            disabled={loading}
+                            className="w-full h-12 bg-white text-blue-600 hover:bg-blue-50 font-bold text-lg mt-6"
+                        >
+                            {loading ? <Loader2 className="animate-spin" /> : '가입하기'}
+                        </Button>
+                    </form>
+                </div>
+            </motion.div>
+        </div>
+    );
 };
 ```

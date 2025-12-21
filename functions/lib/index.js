@@ -22,5 +22,8 @@ __exportStar(require("./callables/members"), exports);
 __exportStar(require("./callables/notices"), exports);
 __exportStar(require("./callables/tokens"), exports);
 __exportStar(require("./callables/events"), exports); // μATOM-0531: createEventPost
+__exportStar(require("./callables/comments.moderation"), exports); // C03-04: Comment Moderation
 // Export scheduled functions
-__exportStar(require("./scheduled/closeEventVotes"), exports); // μATOM-0541: closeEventVotes
+// Export scheduled functions
+// Export triggers
+__exportStar(require("./triggers/comments.commentCount"), exports); // C03-05: Comment Count Trigger
